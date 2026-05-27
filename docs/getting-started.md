@@ -183,7 +183,7 @@ In the Inspector:
 
 iOS screenshots can appear even when the UI tree is unavailable. Native iOS inspection requires the XCUITest agent to know the app bundle id. For your own app, pass `--app-id`, set `ASTUR_IOS_BUNDLE_ID`, or use `Controls` to launch and rebind by bundle id.
 
-See [Inspector And Codegen](inspector.md) for the full workflow.
+See [Inspector And Codegen](../inspector/) for the full workflow.
 
 ## 6. Optional Native-Agent Endpoint Mode
 
@@ -268,13 +268,13 @@ Use this checklist before scaling test count:
 5. Stabilize keyboard behavior with `keyboard.dismiss: 'auto'` unless keyboard UI is under test.
 6. Move from `agent.mode: 'auto'` to `agent.mode: 'required'` once native-agent path is validated.
 
-## 9. Where To Go Next
+## 10. Where To Go Next
 
-- Android-specific depth: [Android Setup](android.md)
-- iOS-specific depth: [iOS Setup](ios.md)
-- Full capability matrix: [Configuration](configuration.md)
-- Common failures and fixes: [Troubleshooting](troubleshooting.md)
-- High-level runtime model: [Architecture](architecture.md)
+- Android-specific depth: [Android Setup](../android/)
+- iOS-specific depth: [iOS Setup](../ios/)
+- Full capability matrix: [Configuration](../configuration/)
+- Common failures and fixes: [Troubleshooting](../troubleshooting/)
+- High-level runtime model: [Architecture](../architecture/)
 
 ## iOS Simulator
 
@@ -289,4 +289,4 @@ The iOS package currently supports simulator lifecycle:
 
 Native element locators require the Swift XCUITest agent.
 
-For details, see [iOS Setup](ios.md).
+For details, see [iOS Setup](../ios/).

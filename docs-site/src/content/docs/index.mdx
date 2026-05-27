@@ -7,31 +7,66 @@ hero:
   tagline: Fast, native Android and iOS automation without an Appium server.
   actions:
     - text: Get Started
-      link: /getting-started/
+      link: ./getting-started/
       icon: right-arrow
     - text: Open Inspector
-      link: /inspector/
+      link: ./inspector/
       variant: secondary
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+<section class="landing-shell" aria-label="Astur overview">
+  <div class="landing-shell-copy">
+    <p class="landing-eyebrow">Native mobile runtime</p>
+    <h2>Inspect, author, and ship mobile tests in one fast loop.</h2>
+    <div class="landing-copy-text">
+      Astur keeps the authoring surface tight: stream the device, inspect the semantic tree,
+      record the flow, and export reusable <span class="landing-inline-code">@astur/test</span> code without adding an Appium or WebDriver layer.
+    </div>
+    <div class="landing-chip-row">
+      <span>Android emulators + devices</span>
+      <span>iOS simulators</span>
+      <span>Live inspector + codegen</span>
+      <span>Playwright-style API</span>
+    </div>
+  </div>
 
-Astur keeps tests small while native platform agents handle locator lookup, waits, gestures, screenshots, and diagnostics.
+  <div class="landing-console" aria-label="Astur authoring preview">
+    <div class="landing-console-bar">
+      <span>runtime</span>
+      <span>authoring preview</span>
+    </div>
+    <pre><code>{`$ npx astur-mobile codegen --android --device emulator-5554
 
-<CardGrid>
-  <Card title="Playwright-style tests" icon="setting">
-    Use `@astur/test` fixtures, locators, expectations, retries, and reports with native mobile apps.
-  </Card>
-  <Card title="Native agent runtime" icon="rocket">
-    Android uses UIAutomator and iOS uses XCUITest, avoiding the extra WebDriver/Appium server layer.
-  </Card>
-  <Card title="Inspector and codegen" icon="pencil">
-    Stream the device screen, inspect semantic locators, record steps, and export reusable test code.
-  </Card>
-  <Card title="Open source workflow" icon="github">
-    Publish docs, tests, drivers, agents, and CLI flows from one npm-first repository.
-  </Card>
-</CardGrid>
+await device.getByLabel('Email').fill('qa@example.com');
+await device.getByRole('button', { name: 'Login' }).tap();
+await expect(device.getByText('Welcome')).toBeVisible();`}</code></pre>
+  </div>
+</section>
+
+<section class="landing-feature-grid" aria-label="Astur capabilities">
+  <article class="landing-feature-card">
+    <span class="landing-feature-index">01</span>
+    <h3>Playwright-style authoring</h3>
+    <p>Use fixtures, locators, assertions, retries, and reports that already feel natural to Playwright users.</p>
+  </article>
+  <article class="landing-feature-card">
+    <span class="landing-feature-index">02</span>
+    <h3>Native platform agents</h3>
+    <p>Android runs through UIAutomator and iOS through XCUITest, keeping control close to the platform UI stack.</p>
+  </article>
+  <article class="landing-feature-card">
+    <span class="landing-feature-index">03</span>
+    <h3>Live inspector and codegen</h3>
+    <p>Mirror the device, rank semantic locators, record actions, and export starter flows without leaving the docs workflow.</p>
+  </article>
+  <article class="landing-feature-card">
+    <span class="landing-feature-index">04</span>
+    <h3>One repository, one system</h3>
+    <p>Drivers, agents, test API, CLI, examples, and docs evolve together instead of splitting across disconnected tooling.</p>
+  </article>
+</section>
+
+Astur keeps tests small while the runtime and native agents absorb device selection, waits, gestures, screenshots, diagnostics, and inspector state.
 
 ## Why Astur
 
@@ -49,4 +84,4 @@ test('login', async ({ device }) => {
 });
 ```
 
-Start with [Getting Started](/getting-started/) or open [Inspector And Codegen](/inspector/) if you want to generate your first test from a running device.
+Start with [Getting Started](./getting-started/) or open [Inspector And Codegen](./inspector/) if you want to generate your first test from a running device.

@@ -66,10 +66,12 @@ test('recorded flow', async ({ device }) => {
 
 iOS screenshots can stream through `simctl`, but UI tree inspection and native interaction require the Swift XCUITest agent. If the right panel says the UI tree is unavailable:
 
-1. confirm the app is installed on the simulator
-2. launch/rebind from `Controls` with the app bundle id
-3. or restart codegen with `--ios --app-id <bundle-id>`
-4. check `npx astur-mobile doctor --verbose` if Xcode or the agent build fails
+<ol class="astur-steps">
+  <li>Confirm the app is installed on the simulator.</li>
+  <li>Launch or rebind from <code>Controls</code> with the app bundle id.</li>
+  <li>Or restart codegen with <code>--ios --app-id &lt;bundle-id&gt;</code>.</li>
+  <li>Check <code>npx astur-mobile doctor --verbose</code> if Xcode or the agent build fails.</li>
+</ol>
 
 This is an Apple XCTest requirement. It is not an Appium or WebDriver dependency.
 

@@ -61,26 +61,7 @@ npx astur-mobile test
 
 ## Documentation
 
-Start here:
-
-- [Getting Started](docs/getting-started.md)
-- [Documentation Index](docs/README.md)
-- [Prerequisites](docs/prerequisites.md)
-- [Inspector And Codegen](docs/inspector.md)
-- [Android Setup](docs/android.md)
-- [iOS Setup](docs/ios.md)
-- [Configuration](docs/configuration.md)
-- [CLI Reference](docs/cli.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Platform Limits](docs/platform-limits.md)
-- [Architecture](docs/architecture.md)
-- [Roadmap](docs/roadmap.md)
-
-The public documentation site is built with Astro Starlight from `docs-site/` and deployed to GitHub Pages. Run it locally with:
-
-```bash
-npm run docs:dev
-```
+https://astur-mobile.github.io/Astur/
 
 ## Example Test
 

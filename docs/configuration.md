@@ -103,10 +103,12 @@ type AsturConfig = {
 
 Use this progression for stable adoption:
 
-1. Start with no `automation` or `agent` section; Astur defaults to the native-agent engine.
-2. Validate native assertions and action reliability on your real app flows.
-3. Use `automation.engine: 'auto'` only while migrating from legacy ADB/XML behavior.
-4. Use `automation.engine: 'legacy-adb'` only when intentionally comparing or diagnosing the old path.
+<ol class="astur-steps">
+  <li>Start with no <code>automation</code> or <code>agent</code> section; Astur defaults to the native-agent engine.</li>
+  <li>Validate native assertions and action reliability on your real app flows.</li>
+  <li>Use <code>automation.engine: 'auto'</code> only while migrating from legacy ADB/XML behavior.</li>
+  <li>Use <code>automation.engine: 'legacy-adb'</code> only when intentionally comparing or diagnosing the old path.</li>
+</ol>
 
 `device.cloud` is currently a scaffolded placeholder for future cloud execution. Local Android emulators, local Android real devices, and local iOS simulators are runnable today. iOS real-device execution is planned behind the XCUITest agent/devicectl path.
 
