@@ -1,0 +1,112 @@
+---
+title: Architecture
+description: High-level Astur architecture and native-agent execution model.
+sidebar:
+  order: 9
+---
+
+Astur keeps the test authoring experience small while moving the expensive mobile work into native platform agents.
+
+<div class="astur-flow" aria-label="Astur high-level architecture">
+  <div class="flow-node primary">User test<br/><span>@astur/test</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node">Core runtime<br/><span>locators, waits, assertions</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node">Protocol<br/><span>selectors and commands</span></div>
+  <div class="flow-split">
+    <div class="flow-branch">
+      <div class="flow-arrow">→</div>
+      <div class="flow-node">Android driver</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node accent">UIAutomator agent</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node">Android app</div>
+    </div>
+    <div class="flow-branch">
+      <div class="flow-arrow">→</div>
+      <div class="flow-node">iOS driver</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node accent">XCUITest agent</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node">iOS app</div>
+    </div>
+  </div>
+</div>
+
+The public API remains Playwright-style:
+
+```ts
+await device.getByRole('button', { name: 'Sign in' }).tap();
+await expect(device.getByText('Welcome')).toBeVisible();
+```
+
+The runtime below that API handles device selection, app lifecycle, native locator lookup, actionability checks, gestures, screenshots, video, traces, and inspector/codegen support.
+
+## Why This Is Fast
+
+Traditional Appium-style stacks usually add a WebDriver server between the test and the native automation framework. Astur avoids that extra protocol translation layer.
+
+<div class="astur-sequence" aria-label="Astur action command flow">
+  <div class="sequence-step"><strong>1</strong><span>Test calls `getByLabel("Login").tap()`</span></div>
+  <div class="sequence-step"><strong>2</strong><span>Astur sends one native command: find, wait, tap</span></div>
+  <div class="sequence-step"><strong>3</strong><span>The platform agent resolves and acts locally</span></div>
+  <div class="sequence-step"><strong>4</strong><span>Astur receives compact result, timing, and diagnostics</span></div>
+</div>
+
+For common actions, Astur sends the intent once. The platform agent resolves and acts locally, so the host does not repeatedly pull large UI trees just to retry a locator.
+
+## Lifecycle Vs Interaction
+
+Astur still uses platform tools where they are the right tool:
+
+- Android lifecycle: `adb` installs apps, launches packages, captures screenshots, records video, and gathers logs.
+- iOS lifecycle: `simctl`, `devicectl`, and `xcodebuild` manage simulators, app install/launch, screenshots, and the XCUITest runner.
+- Element interaction: native Android and iOS agents perform lookup, waits, taps, fills, drags, swipes, and keyboard commands.
+
+<div class="astur-split">
+  <section>
+    <h3>Lifecycle tools</h3>
+    <p>Manage devices, apps, screenshots, video, and logs through ADB, simctl, devicectl, and xcodebuild.</p>
+  </section>
+  <section>
+    <h3>Persistent native agents</h3>
+    <p>Run locator polling, actionability checks, and gestures close to the platform UI framework.</p>
+  </section>
+</div>
+
+This split keeps lifecycle reliable without putting slow shell commands in the normal element-interaction path.
+
+## Inspector And Codegen
+
+Astur Inspector uses the same runtime and selector model as tests.
+
+<div class="astur-flow compact" aria-label="Astur inspector codegen flow">
+  <div class="flow-node">Live screen</div>
+  <div class="flow-arrow">+</div>
+  <div class="flow-node">Semantic tree</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node accent">Locator ranking</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node primary">@astur/test code</div>
+</div>
+
+The inspector does not invent a second locator system. When it suggests a locator, records a tap, or exports code, it uses the same platform-neutral locator contracts that execute during test runs.
+
+## Reliability Rules
+
+- Prefer semantic locators over coordinates.
+- Keep native polling inside the platform agent.
+- Use screenshots and UI snapshots for diagnostics, not as the default control path.
+- Keep one platform agent alive per Playwright worker when possible.
+- Restart or reset the app between specs only when isolation requires it.
+- Keep iOS XCTest requirements explicit instead of hiding them behind WebDriver.
+
+## Package Shape
+
+Most users install:
+
+```bash
+npm install -D @astur/test astur-mobile
+```
+
+`@astur/test` gives the Playwright fixture and assertions. `astur-mobile` gives the CLI, including `doctor`, `devices`, `init`, `test`, and `codegen`. Internal packages such as `@astur/core`, `@astur/android`, and `@astur/ios` stay published as normal npm packages so the project remains modular, but end users should not need to wire them manually.

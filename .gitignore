@@ -1,0 +1,27 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.tsbuildinfo/
+playwright-report/
+test-results/
+.playwright-cli/
+.DS_Store
+.env
+.env.*
+coverage/
+DerivedData/
+docs-site/.astro/
+docs-site/dist/
+docs-site/src/content/docs/*.md
+agents/android-uiautomator/build/
+agents/ios-xctest-agent/build/
+packages/android-agent/.gradle/
+packages/android-agent/build/
+
+# Internal/local architecture drafts. Keep docs/architecture.md public and user-facing.
+*.local.md
+ARCHITECTURE.*.md
+architecture*.local.md
+*.architecture.local.md
+docs/**/ARCHITECTURE.*.md
+!docs/architecture.md

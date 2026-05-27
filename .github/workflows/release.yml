@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: npm dist-tag
+        required: true
+        default: next
+        type: choice
+        options:
+          - next
+          - latest
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish npm packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Unit tests with coverage
+        run: npx vitest run --coverage
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Verify package contents
+        run: |
+          npm pack -w packages/protocol --dry-run
+          npm pack -w packages/core --dry-run
+          npm pack -w packages/android --dry-run
+          npm pack -w packages/ios --dry-run
+          npm pack -w packages/test --dry-run
+          npm pack -w packages/cli --dry-run
+          npm pack -w packages/astur-mobile --dry-run
+          npm pack -w packages/create-astur --dry-run
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish -w packages/protocol --access public --provenance --tag "${{ inputs.tag }}"
+          npm publish -w packages/core --access public --provenance --tag "${{ inputs.tag }}"
+          npm publish -w packages/android --access public --provenance --tag "${{ inputs.tag }}"
+          npm publish -w packages/ios --access public --provenance --tag "${{ inputs.tag }}"
+          npm publish -w packages/test --access public --provenance --tag "${{ inputs.tag }}"
+          npm publish -w packages/cli --access public --provenance --tag "${{ inputs.tag }}"
+          npm publish -w packages/astur-mobile --access public --provenance --tag "${{ inputs.tag }}"
+          npm publish -w packages/create-astur --access public --provenance --tag "${{ inputs.tag }}"

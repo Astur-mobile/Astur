@@ -1,0 +1,546 @@
+# Configuration
+
+Astur integrates with Playwright Test through `@astur/test`.
+
+The default setup is intentionally small: choose a platform, a device, and an app. Astur bootstraps the bundled native agents automatically, so npm users should not need to build, install, or start a separate agent process for normal local runs.
+
+## Basic Config
+
+```ts
+import { defineConfig } from '@astur/test';
+
+export default defineConfig({
+  testDir: './tests',
+  timeout: 120_000,
+  outputDir: 'test-results/mobile',
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: 'playwright-report/mobile', open: 'never' }],
+    ['junit', { outputFile: 'test-results/mobile/results.xml' }]
+  ],
+  use: {
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+    trace: 'retain-on-failure',
+    astur: {
+      platform: 'android',
+      timeout: 20_000,
+      artifacts: {
+        screenshot: 'only-on-failure',
+        video: 'retain-on-failure'
+      },
+      keyboard: {
+        dismiss: 'auto'
+      },
+      device: {
+        kind: 'emulator',
+        avd: 'Pixel_9_API_35',
+        autoBoot: true,
+        headless: true
+      },
+      app: {
+        path: './apps/demo.apk'
+      }
+    }
+  }
+});
+```
+
+## Configuration Shape
+
+```ts
+type AsturConfig = {
+  platform: 'android' | 'ios';
+  device?: {
+    id?: string;
+    name?: string | RegExp;
+    kind?: 'emulator' | 'simulator' | 'real';
+    avd?: string;
+    autoBoot?: boolean;
+    headless?: boolean;
+    wipeData?: boolean;
+    bootTimeout?: number;
+    emulatorArgs?: string[];
+    cloud?: {
+      provider: 'browserstack';
+      deviceName?: string;
+      osVersion?: string;
+      project?: string;
+      build?: string;
+      appId?: string;
+      usernameEnv?: string;
+      accessKeyEnv?: string;
+    };
+  };
+  app?: string | {
+    path?: string;
+    url?: string;
+    downloadPath?: string;
+    bundleId?: string;
+    packageName?: string;
+    activity?: string;
+  };
+  timeout?: number;
+  artifactsDir?: string;
+  artifacts?: {
+    screenshot?: 'off' | 'on' | 'only-on-failure';
+    video?: 'off' | 'on' | 'retain-on-failure';
+  };
+  keyboard?: {
+    dismiss?: 'auto' | 'preserve';
+  };
+  agent?: {
+    mode?: 'auto' | 'required' | 'off';
+    install?: boolean;
+    endpoint?: string;
+    launchTimeout?: number;
+    commandTimeout?: number;
+  };
+};
+```
+
+## Recommended Workflow
+
+Use this progression for stable adoption:
+
+1. Start with no `automation` or `agent` section; Astur defaults to the native-agent engine.
+2. Validate native assertions and action reliability on your real app flows.
+3. Use `automation.engine: 'auto'` only while migrating from legacy ADB/XML behavior.
+4. Use `automation.engine: 'legacy-adb'` only when intentionally comparing or diagnosing the old path.
+
+`device.cloud` is currently a scaffolded placeholder for future cloud execution. Local Android emulators, local Android real devices, and local iOS simulators are runnable today. iOS real-device execution is planned behind the XCUITest agent/devicectl path.
+
+`timeout` is the default wait budget for Astur locator actions and assertions. Override it only where a specific element needs a different budget:
+
+```ts
+await device.getByLabel('Login').tap();
+await device.getByLabel('Slow report').tap({ timeout: 60_000 });
+```
+
+Orientation control is platform-neutral when the selected driver supports it:
+
+```ts
+await device.setOrientation('landscape');
+await device.orientation.portrait();
+```
+
+Use per-test app terminate/launch for normal isolation. Keep native-agent install/start at the worker-session level unless you are deliberately testing agent installation or app data migration behavior.
+
+## Runtime Capability Reference
+
+Astur capabilities live under Playwright's `use.astur`. Playwright-owned settings such as `testDir`, `timeout`, `workers`, `reporter`, `outputDir`, `screenshot`, `video`, and `trace` still behave exactly like Playwright Test settings. Astur-owned settings describe the mobile platform, selected device, app under test, and native artifacts.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `platform` | Yes | none | Target platform: `'android'` or `'ios'`. |
+| `device` | No | `{}` | Selects an emulator, simulator, or real device. If omitted, Astur selects the first compatible online device. |
+| `app` | No | `undefined` | App under test. Can be a local path string, app object, download URL object, or installed app metadata. |
+| `timeout` | No | `10_000` | Default wait budget for Astur locator actions and native assertions. |
+| `artifactsDir` | No | Playwright output folder scoped to the Astur worker session | Advanced override for native Astur artifacts, downloaded apps, and temporary native outputs. Most projects should omit it. Per-test screenshots and videos are still attached through Playwright test output. |
+| `artifacts.screenshot` | No | `off` | Native screenshot attachment mode: `off`, `on`, or `only-on-failure`. |
+| `artifacts.video` | No | `off` | Native screen recording mode: `off`, `on`, or `retain-on-failure`. |
+| `keyboard.dismiss` | No | `auto` | Soft keyboard strategy. `auto` dismisses only when the keyboard blocks a pointer target; `preserve` leaves it open. |
+| `automation.engine` | No | `agent` | Automation engine. `agent` uses the v2 native-agent path, `auto` permits legacy fallback during migration, and `legacy-adb` forces the old Android shell/XML path. |
+| `automation.legacyFallback` | No | `never` for `agent`, `on-agent-failure` for `auto` | Controls whether Astur may fall back from the agent to legacy platform tooling. |
+| `agent.mode` | No | derived from `automation.engine` | Compatibility alias. `required` is equivalent to `automation.engine: 'agent'`, `auto` permits fallback, and `off` forces legacy tooling. |
+| `agent.install` | No | `true` | Lets the platform driver install/start its native agent when supported. The fixture starts one Astur session per Playwright worker, not once per spec. Use app terminate/launch for normal per-spec isolation, and reserve app-data reset/reinstall for tests that need it. |
+| `agent.endpoint` | No | `undefined` | Optional native-agent endpoint. Accepts `http://`, `https://`, `tcp:host:port`, or bare `host:port` formats. |
+| `agent.launchTimeout` | No | `15_000` | Timeout budget for native-agent handshake at session start. |
+| `agent.commandTimeout` | No | `10_000` | Timeout budget for each native-agent command. |
+
+## Native Agent Endpoint Overrides
+
+Astur keeps the test API simple and pushes complexity into the runtime layer. Most projects should omit `automation` and `agent` entirely. If you run a platform agent yourself, point Astur at it with either `use.astur.agent.endpoint` or a platform env var:
+
+```bash
+export ASTUR_ANDROID_AGENT_ENDPOINT=tcp:127.0.0.1:8787
+export ASTUR_IOS_AGENT_ENDPOINT=http://127.0.0.1:8788
+```
+
+```ts
+use: {
+  astur: {
+    platform: 'android',
+    agent: {
+      mode: 'auto',
+      endpoint: 'tcp:127.0.0.1:8787'
+    }
+  }
+}
+```
+
+Use the default `automation.engine: 'agent'` in CI when native interactions must not silently fall back.
+
+## Device Selection
+
+Use `npx astur-mobile devices` to see device IDs and names. Prefer `device.id` for deterministic CI and parallel runs. Use `device.name` when the exact simulator/emulator name is stable and only one matching device is expected.
+
+`platform` selects the driver. `device.kind` does not choose Android vs iOS; it only narrows device selection when `id` is not specific enough or when you intentionally want a loose selector such as "any emulator". If `device.id` is set, omit `kind` unless you want an extra validation filter.
+
+| Field | Android emulator | Android real device | iOS simulator | iOS real device |
+| --- | --- | --- | --- | --- |
+| `id` | ADB serial, for example `emulator-5554` | ADB serial, for example `R5CT...` | Simulator UDID from `simctl` | Not supported in current alpha |
+| `name` | ADB model name from `adb devices -l` | ADB model name from `adb devices -l` | Simulator name, for example `iPhone 16 Pro` | Not supported in current alpha |
+| `kind` | Optional filter: `emulator` | Optional filter: `real` | Optional filter: `simulator` | `real` is reserved for future devicectl/XCUITest work |
+| `avd` | Android Virtual Device name, for example `Pixel_9_API_35` | Not used | Not used | Not used |
+| `autoBoot` | Boots the configured `avd` when no matching emulator is online | Not used | Not used | Not used |
+| `headless` | Adds `-no-window` when Astur boots the emulator unless set to `false` | Not used | Not used | Not used |
+| `wipeData` | Adds `-wipe-data` when Astur boots the emulator | Not used | Not used | Not used |
+| `bootTimeout` | Max time to wait for emulator boot completion | Not used | Not used | Not used |
+| `emulatorArgs` | Extra Android emulator CLI args | Not used | Not used | Not used |
+| `cloud` | BrowserStack placeholder only | BrowserStack placeholder only | BrowserStack placeholder only | BrowserStack placeholder only |
+
+Android device IDs come from:
+
+```bash
+adb devices -l
+npx astur-mobile devices --android
+```
+
+iOS simulator IDs come from:
+
+```bash
+xcrun simctl list devices available
+npx astur-mobile devices --ios
+```
+
+In the current alpha, iOS execution is simulator-only. Real iOS device execution still needs signing, provisioning, and devicectl transport validation.
+
+## Device Config Recipes
+
+Android emulator by AVD name, with auto-boot:
+
+```ts
+astur: {
+  platform: 'android',
+  device: {
+    kind: 'emulator',
+    avd: 'Pixel_9_API_35',
+    autoBoot: true,
+    headless: true,
+    bootTimeout: 120_000
+  }
+}
+```
+
+Android emulator by live ADB serial:
+
+```ts
+astur: {
+  platform: 'android',
+  device: {
+    id: 'emulator-5554'
+  }
+}
+```
+
+Real Android device by ADB serial:
+
+```ts
+astur: {
+  platform: 'android',
+  device: {
+    id: 'R5CT123456A'
+  }
+}
+```
+
+iOS simulator by name:
+
+```ts
+astur: {
+  platform: 'ios',
+  device: {
+    name: 'iPhone 16 Pro'
+  }
+}
+```
+
+iOS simulator by UDID:
+
+```ts
+astur: {
+  platform: 'ios',
+  device: {
+    id: '4E2F2A1D-9B8A-4D41-8E5F-123456789ABC'
+  }
+}
+```
+
+Loose Android selector examples:
+
+```ts
+// Any online Android emulator.
+device: { kind: 'emulator' }
+
+// Any online Android real device.
+device: { kind: 'real' }
+```
+
+Parallel device runs should use Playwright projects with unique `device.id` values:
+
+```ts
+projects: [
+  {
+    name: 'android-phone',
+    use: { astur: { platform: 'android', device: { id: 'emulator-5554' } } }
+  },
+  {
+    name: 'android-tablet',
+    use: { astur: { platform: 'android', device: { id: 'emulator-5556' } } }
+  }
+]
+```
+
+Do not let two projects select the same device. Astur does not auto-reserve devices yet.
+
+## App Capability Reference
+
+| Field | Android | iOS simulator | Description |
+| --- | --- | --- | --- |
+| `app: './apps/demo.apk'` | Yes | No | Shorthand for a local app path. On Android this points to an APK. |
+| `path` | APK path | `.app` bundle path or simulator-compatible `.ipa` | Local app to install before the session starts. |
+| `url` | APK download URL | Planned | Downloads the app during capability materialization, then installs from `downloadPath`. |
+| `downloadPath` | Optional | Optional | Where Astur saves an app downloaded from `url`. Defaults under Astur's derived native artifact folder. |
+| `packageName` | Android package, for example `com.example` | Accepted as fallback only | Required for launching already-installed Android apps, uninstall, clear data/cache, and explicit lifecycle calls. Inferred from APK when `aapt` is available. |
+| `activity` | Android launch activity, for example `.MainActivity` | Not used | Optional. If omitted, Astur uses Android's launcher intent through `monkey`. |
+| `bundleId` | Accepted as fallback only | iOS bundle id, for example `com.example.demo` | Required for iOS launch, terminate, uninstall, and reset. |
+ 
+Common app configurations:
+
+```ts
+// Android: install local APK.
+app: {
+  path: './apps/demo.apk',
+  packageName: 'com.example',
+  activity: '.MainActivity'
+}
+
+// Android: download APK during the run.
+app: {
+  url: 'https://example.com/apps/demo.apk',
+  downloadPath: 'test-results/downloads/demo.apk',
+  packageName: 'com.example',
+  activity: '.MainActivity'
+}
+
+// Android: app already installed on device.
+app: {
+  packageName: 'com.example',
+  activity: '.MainActivity'
+}
+
+// iOS simulator: install local .app bundle.
+app: {
+  path: './apps/Demo.app',
+  bundleId: 'com.example.demo'
+}
+
+// iOS simulator: app already installed.
+app: {
+  bundleId: 'com.example.demo'
+}
+```
+
+## Reports And Native Artifacts
+
+Playwright reporters and artifacts:
+
+| Playwright field | Purpose |
+| --- | --- |
+| `reporter` | Configures HTML, list, JUnit, JSON, or other Playwright reporters. |
+| `outputDir` | Stores Playwright traces, screenshots, videos, and test output. |
+| `use.screenshot` | Playwright/browser screenshot policy. |
+| `use.video` | Playwright/browser video policy. |
+| `use.trace` | Playwright trace policy. |
+
+Astur native artifacts:
+
+| Astur field | Purpose |
+| --- | --- |
+| `use.astur.artifactsDir` | Advanced override for native artifact storage. Omit this in normal Playwright runs; Astur derives a worker-scoped native artifact folder while attaching screenshots and videos per test. |
+| `use.astur.artifacts.screenshot` | Captures native device screenshots through ADB/simctl and attaches them to the Playwright report. |
+| `use.astur.artifacts.video` | Records the native device screen through ADB/simctl and attaches or retains according to the configured mode. |
+
+Use both layers when a test mixes native mobile automation and WebView/browser automation.
+
+`use.astur.artifacts` controls native capture policy. It is intentionally separate from Playwright's `use.screenshot`, `use.video`, and `use.trace`, because those Playwright settings apply to browser/page artifacts. Do not set `use.astur.artifactsDir` unless you need a custom storage root; normal test runs inherit Playwright's per-test output structure automatically.
+
+## Native Assertions
+
+`expect` from `@astur/test` works with native Astur locators and Playwright DOM locators. Native locator assertions auto-wait with `use.astur.timeout` unless a matcher-level timeout is provided:
+
+```ts
+await expect(device.getByText('Welcome')).toBeVisible();
+await expect(device.getByLabel('Email')).toHaveValue('qa@example.com');
+await expect(device.getByRole('button', { name: 'Submit' })).toBeEnabled({ timeout: 5_000 });
+await expect.soft(device.getByText('Optional banner')).toBeHidden();
+```
+
+Native `MobileLocator` matchers:
+
+- `toBeVisible`, `toBeHidden`, `toExist`
+- `toBeEnabled`, `toBeDisabled`, `toBeSelected`, `toBeFocused`
+- `toHaveText`, `toContainText`, `toHaveValue`
+- `toHaveLabel`, `toHaveType`, `toHaveBounds`
+
+## Soft Keyboard Handling
+
+By default, Astur treats the mobile soft keyboard as a device overlay. Locator and coordinate pointer actions check whether the keyboard is visible and whether it blocks the target point. If it does, Astur dismisses the keyboard, waits briefly for the layout to settle, then resolves the locator again before tapping or long-pressing.
+
+```ts
+use: {
+  astur: {
+    keyboard: {
+      dismiss: 'auto'
+    }
+  }
+}
+```
+
+Use `preserve` when a test intentionally interacts with keyboard UI:
+
+```ts
+await device.getByLabel('Search').tap({ keyboard: 'preserve' });
+```
+
+For explicit control, use the device keyboard helper instead of sending a blind Back key:
+
+```ts
+await device.getByLabel('Password').fill('secret');
+await device.keyboard.dismiss();
+await device.getByRole('button', { name: 'Sign in' }).tap();
+```
+
+## Native And WebView Contexts
+
+Native screens use Astur locators backed by platform UI trees:
+
+```ts
+await device.getByLabel('Login').tap();
+await expect(device.getByText('Credentials')).toBeVisible();
+```
+
+WebView screens should use the browser DOM. In `@astur/test`, request a WebView handle after navigating the native app to a WebView screen:
+
+```ts
+import { expect, test } from '@astur/test';
+
+test('webview content', async ({ device, webview }) => {
+  await device.app.launch();
+  await device.getById('tab-web').tap();
+
+  const web = await webview({ timeout: 30_000 });
+  await expect(web.page.locator('body')).toContainText(/Astur Web Lab/);
+  await web.page.getByRole('button', { name: /Submit web form/i }).click();
+
+  await device.getById('tab-login').tap();
+});
+```
+
+`device.contexts()` lists native and WebView contexts. Android WebView DOM control uses Chrome DevTools Protocol, so the app must enable WebView debugging. Native mode remains available for navigation bars, system buttons, permissions, and other OS or app chrome outside the WebView.
+
+## App And Device Management
+
+Astur exposes app lifecycle, permissions, orientation, and device-state commands through the same fixture.
+
+| API | Android | iOS simulator | Notes |
+| --- | --- | --- | --- |
+| `await device.app.install()` | Yes | Yes | Installs the configured `use.astur.app.path`. Android expects APK. iOS expects `.app` or simulator-compatible IPA. |
+| `await device.app.launch()` | Yes | Yes | Launches the configured package name or bundle id. |
+| `await device.app.terminate()` | Yes | Yes | Stops the configured app without uninstalling it. |
+| `await device.app.reset({ reinstall: true, launch: true })` | Yes | Yes | Reinstalls from `app.path`, then optionally launches. Use this for clean iOS simulator app data. |
+| `await device.app.clearData()` | Yes | No | Android package-data clear. iOS uses reset-by-reinstall instead. |
+| `await device.app.clearCache()` | Yes | No | Android package-cache clear. iOS does not expose a direct equivalent. |
+| `await device.app.uninstall()` | Yes | Yes | Removes the configured app. |
+| `await device.permissions.grant('camera')` | Yes | Yes | Android uses package-manager permissions. iOS simulator uses `simctl privacy`. |
+| `await device.permissions.revoke('camera')` | Yes | Yes | Same platform mapping as grant. |
+| `await device.setOrientation('landscape')` | Yes | Yes | Sets orientation through the selected platform driver. |
+| `await device.orientation.portrait()` | Yes | Yes | Convenience helper for portrait orientation. |
+| `await device.lock()` | Yes | Yes | Locks the device or simulator where supported. |
+| `await device.unlock()` | Yes | Yes | Wakes/unlocks the target when supported. |
+| `await device.isLocked()` | Yes | Yes | Returns the observed lock state when the platform exposes it. |
+
+All app commands default to `use.astur.app`. Pass a package name or bundle id when managing a different installed app:
+
+```ts
+await device.app.clearData('com.example.other');
+await device.app.uninstall('com.example.other');
+await device.permissions.grant('photos', 'com.example.other');
+```
+
+Android implements app data/cache and permission management through ADB package manager commands. iOS simulator supports install, uninstall, launch, terminate, reset-by-reinstall, and `simctl privacy` permission grant/revoke; direct per-app data/cache clearing is not exposed by `simctl`.
+
+## Screenshots And Device Files
+
+Capture a native screenshot as a `Buffer`, or save it directly:
+
+```ts
+const image = await device.screenshot();
+await device.screenshot({ path: 'test-results/screens/home.png' });
+```
+
+Use `device.files` for test setup and diagnostics. On Android this uses ADB file transfer:
+
+```ts
+await device.files.push('./fixtures/avatar.png', '/sdcard/Download/avatar.png');
+
+const logs = await device.files.pull('/sdcard/Download/app.log');
+await device.files.save('/sdcard/Download/app.log', 'test-results/device/app.log');
+
+const downloads = await device.files.list('/sdcard/Download');
+await device.files.remove('/sdcard/Download/avatar.png');
+```
+
+This is useful for preparing upload-picker scenarios, collecting generated files, and saving app logs or exports after a test. iOS file transfer is intentionally not exposed yet because it needs app-container-aware handling.
+
+## Cross-Platform Projects
+
+Use Playwright projects:
+
+```ts
+import { defineConfig } from '@astur/test';
+
+export default defineConfig({
+  testDir: './tests',
+  workers: 2,
+  projects: [
+    {
+      name: 'android-pixel',
+      use: {
+        astur: {
+          platform: 'android',
+          device: { id: 'emulator-5554' },
+          app: {
+            path: './apps/demo.apk',
+            packageName: 'com.example'
+          }
+        }
+      }
+    },
+    {
+      name: 'ios-sim',
+      use: {
+        astur: {
+          platform: 'ios',
+          device: { name: 'iPhone 16 Pro' },
+          app: {
+            path: './apps/Demo.app',
+            bundleId: 'com.example.demo'
+          }
+        }
+      }
+    }
+  ]
+});
+```
+
+For parallel runs, specify unique device selectors per project:
+
+- Android emulator + Android emulator: use different `device.id` values such as `emulator-5554` and `emulator-5556`.
+- Android emulator + real Android device: prefer exact IDs such as `{ id: 'emulator-5554' }` and `{ id: 'R5CT123456A' }`.
+- Android + iOS: use separate platform projects.
+
+The example `examples/android-native/playwright.parallel.config.ts` runs one Android project and one iOS simulator project in parallel. It uses `ASTUR_ANDROID_DEVICE_ID`, `ASTUR_IOS_DEVICE_ID`, `ASTUR_IOS_DEVICE_NAME`, and `ASTUR_IOS_BUNDLE_ID` as optional overrides.
+
+Device reservation is planned but not implemented yet. If two workers select the same physical device, they can interfere with each other. Set `workers` to the number of available devices and keep project selectors unique.

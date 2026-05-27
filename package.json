@@ -1,0 +1,36 @@
+{
+  "name": "astur-monorepo",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "description": "Astur monorepo for device-native mobile automation.",
+  "license": "Apache-2.0",
+  "author": "Amr Salem",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "docs-site"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "check": "tsc -b --pretty false",
+    "docs:dev": "npm run dev -w docs-site",
+    "docs:build": "npm run build -w docs-site",
+    "docs:preview": "npm run preview -w docs-site",
+    "docs:sync": "npm run sync -w docs-site",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:build": "npm run build && vitest run"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1",
+    "@vitest/coverage-v8": "^4.1.7",
+    "astur-mobile": "0.1.0-alpha.0",
+    "create-astur": "0.1.0-alpha.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "overrides": {
+    "vite": "^7.3.3"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@astur/android-agent",
+  "version": "0.1.0-alpha.0",
+  "description": "Android instrumentation agent for Astur native UI automation.",
+  "license": "Apache-2.0",
+  "author": "Amr Salem",
+  "private": true,
+  "files": [
+    "README.md",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "src",
+    "build/outputs/apk/debug/*.apk",
+    "build/outputs/apk/androidTest/debug/*.apk"
+  ],
+  "scripts": {
+    "build": "gradle assembleDebug assembleAndroidTest"
+  }
+}

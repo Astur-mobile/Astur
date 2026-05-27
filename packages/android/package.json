@@ -1,0 +1,30 @@
+{
+  "name": "@astur/android",
+  "version": "0.1.0-alpha.0",
+  "description": "Android driver for Astur using ADB and UIAutomator.",
+  "license": "Apache-2.0",
+  "author": "Amr Salem",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "assets"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@astur/core": "0.1.0-alpha.0",
+    "@astur/protocol": "0.1.0-alpha.0"
+  }
+}

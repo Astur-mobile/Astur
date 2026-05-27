@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/protocol" },
+    { "path": "./packages/core" },
+    { "path": "./packages/android" },
+    { "path": "./packages/ios" },
+    { "path": "./packages/test" },
+    { "path": "./packages/cli" },
+    { "path": "./packages/astur-mobile" },
+    { "path": "./packages/create-astur" }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@astur/cli",
+  "version": "0.1.0-alpha.0",
+  "description": "Astur command line interface.",
+  "license": "Apache-2.0",
+  "author": "Amr Salem",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "astur": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "assets"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@astur/android": "0.1.0-alpha.0",
+    "@astur/core": "0.1.0-alpha.0",
+    "@astur/ios": "0.1.0-alpha.0",
+    "@astur/protocol": "0.1.0-alpha.0",
+    "@types/ws": "^8.18.1",
+    "ws": "^8.21.0"
+  }
+}

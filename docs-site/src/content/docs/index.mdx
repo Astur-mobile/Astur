@@ -1,0 +1,52 @@
+---
+title: Astur Docs
+description: Device-native mobile automation with Playwright ergonomics.
+template: splash
+hero:
+  title: Astur Docs
+  tagline: Fast, native Android and iOS automation without an Appium server.
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+    - text: Open Inspector
+      link: /inspector/
+      variant: secondary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Astur keeps tests small while native platform agents handle locator lookup, waits, gestures, screenshots, and diagnostics.
+
+<CardGrid>
+  <Card title="Playwright-style tests" icon="setting">
+    Use `@astur/test` fixtures, locators, expectations, retries, and reports with native mobile apps.
+  </Card>
+  <Card title="Native agent runtime" icon="rocket">
+    Android uses UIAutomator and iOS uses XCUITest, avoiding the extra WebDriver/Appium server layer.
+  </Card>
+  <Card title="Inspector and codegen" icon="pencil">
+    Stream the device screen, inspect semantic locators, record steps, and export reusable test code.
+  </Card>
+  <Card title="Open source workflow" icon="github">
+    Publish docs, tests, drivers, agents, and CLI flows from one npm-first repository.
+  </Card>
+</CardGrid>
+
+## Why Astur
+
+Astur is named after the astrolabe: a portable instrument that compressed complex observation and calculation into something small enough to hold. Astur brings that same idea to handheld-device automation: a compact test API backed by a fast native runtime.
+
+```ts
+import { expect, test } from '@astur/test';
+
+test('login', async ({ device }) => {
+  await device.getByLabel('Email').fill('qa@example.com');
+  await device.getByLabel('Password').fill('secret');
+  await device.getByRole('button', { name: 'Login' }).tap();
+
+  await expect(device.getByText('Welcome')).toBeVisible();
+});
+```
+
+Start with [Getting Started](/getting-started/) or open [Inspector And Codegen](/inspector/) if you want to generate your first test from a running device.
