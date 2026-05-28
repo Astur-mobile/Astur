@@ -54,14 +54,6 @@ template: splash
     </p>
     
     <div class="tech-specs-grid">
-      <div class="tech-spec-item">
-        <span class="spec-label">Connection latency</span>
-        <span class="spec-value neon-emerald">1.2ms</span>
-      </div>
-      <div class="tech-spec-item">
-        <span class="spec-label">Frame rate</span>
-        <span class="spec-value">60 FPS</span>
-      </div>
       <div class="spec-platforms">
         <span>Android emulators & devices</span>
         <span>iOS simulators</span>
@@ -70,62 +62,24 @@ template: splash
   </div>
 
   <div class="control-deck-wrapper">
-    {/* The Futuristic Live-Codegen Simulator Deck */}
-    <div class="cyber-control-deck">
-      
-      {/* Left side: Pure CSS Mobile Phone Mockup */}
-      <div class="cyber-phone-mock">
-        <div class="phone-notch"></div>
-        <div class="phone-screen">
-          <div class="phone-app-header">
-            <span class="app-logo">Astur Demo</span>
-            <span class="app-status-dot animate-pulse"></span>
-          </div>
-          <div class="phone-app-body">
-            <div class="form-container">
-              <div class="form-group">
-                <label class="mock-label">Email Address</label>
-                <div class="mock-input active-highlight">
-                  <span>qa@example.com</span>
-                  <div class="scanning-crosshair"></div>
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="mock-label">Password</label>
-                <div class="mock-input">
-                  <span>••••••••••••</span>
-                </div>
-              </div>
-              <button class="mock-btn select-highlight">
-                <span>Login</span>
-                <span class="click-pulse"></span>
-              </button>
-            </div>
-          </div>
-          <div class="phone-home-pill"></div>
+    {/* Right side: Sleek Glassmorphic Terminal/Console */}
+    <div class="cyber-terminal-mock">
+      <div class="terminal-header">
+        <div class="terminal-controls">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+        <div class="terminal-tab">astur-inspector</div>
+        <div class="terminal-status">
+          <span class="status-pulse"></span>
+          <span class="status-text">LIVE</span>
         </div>
       </div>
-
-      {/* Right side: Sleek Glassmorphic Terminal/Console */}
-      <div class="cyber-terminal-mock">
-        <div class="terminal-header">
-          <div class="terminal-controls">
-            <span class="dot red"></span>
-            <span class="dot yellow"></span>
-            <span class="dot green"></span>
-          </div>
-          <div class="terminal-tab">astur-inspector</div>
-          <div class="terminal-status">
-            <span class="status-pulse"></span>
-            <span class="status-text">LIVE</span>
-          </div>
-        </div>
-        <div class="terminal-body">
-          <pre><code><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">codegen</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// ✦ Stream connected. Listening for semantic locators...</span><span class="t-line t-highlight"><span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Email'</span>).<span class="t-method">fill</span>(<span class="t-str">'qa@example.com'</span>);</span><span class="t-line t-highlight"><span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByRole</span>(<span class="t-str">'button'</span>, {'{'} <span class="t-prop">name</span>: <span class="t-str">'Login'</span> {'}'}).<span class="t-method">tap</span>();</span>
+      <div class="terminal-body">
+        <pre><code><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">codegen</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// ✦ Stream connected. Listening for semantic locators...</span><span class="t-line t-highlight"><span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Email'</span>).<span class="t-method">fill</span>(<span class="t-str">'qa@example.com'</span>);</span><span class="t-line t-highlight"><span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByRole</span>(<span class="t-str">'button'</span>, {'{'} <span class="t-prop">name</span>: <span class="t-str">'Login'</span> {'}'}).<span class="t-method">tap</span>();</span>
 <span class="t-line"><span class="t-keyword">await</span> <span class="t-call">expect</span>(<span class="t-obj">device</span>.<span class="t-method">getByText</span>(<span class="t-str">'Welcome'</span>)).<span class="t-method">toBeVisible</span>();</span><span class="t-line"><span class="t-cursor"></span></span></code></pre>
-        </div>
       </div>
-      
     </div>
   </div>
 </section>
