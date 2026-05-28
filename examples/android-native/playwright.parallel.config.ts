@@ -6,6 +6,49 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const appPath = resolve(repoRoot, 'assets/astur.demo.android.apk');
 const androidDeviceId = process.env.ASTUR_ANDROID_DEVICE_ID ?? 'emulator-5554';
 const iosDeviceId = process.env.ASTUR_IOS_DEVICE_ID;
+const configuredWorkers = resolveWorkersFromCli();
+
+function resolveWorkersFromCli(): number {
+  const requestedProjects = getRequestedProjects(process.argv);
+
+  // If no project is specified, run one worker per configured platform project.
+  if (requestedProjects.size === 0) {
+    return 2;
+  }
+
+  // One selected project means one physical device target: keep execution serial.
+  if (requestedProjects.size === 1) {
+    return 1;
+  }
+
+  return 2;
+}
+
+function getRequestedProjects(argv: readonly string[]): Set<string> {
+  const projects = new Set<string>();
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === '--project') {
+      const next = argv[index + 1];
+      if (next) {
+        for (const name of next.split(',').map((value) => value.trim()).filter(Boolean)) {
+          projects.add(name);
+        }
+      }
+      continue;
+    }
+
+    if (token.startsWith('--project=')) {
+      const raw = token.slice('--project='.length);
+      for (const name of raw.split(',').map((value) => value.trim()).filter(Boolean)) {
+        projects.add(name);
+      }
+    }
+  }
+
+  return projects;
+}
 
 export default defineConfig({
   testDir: '.',
@@ -20,9 +63,13 @@ export default defineConfig({
   ],
   timeout: 240_000,
   fullyParallel: false,
-  // Parallelism here is device-level: one worker for Android and one for iOS.
-  // Do not point two projects at the same physical device.
-  workers: 2,
+  // Parallelism here is device-level, not spec-file-level.
+  // Playwright can schedule multiple files from the same project at once unless the
+  // project itself is capped. Keep each mobile project at one worker so no two
+  // workers ever control the same emulator/simulator at the same time.
+  // - both projects selected: Android and iOS can run concurrently (2 total workers)
+  // - single project selected: serial execution against that one physical device
+  workers: configuredWorkers,
   outputDir: resolve(repoRoot, 'test-results/mobile-parallel'),
   reporter: [
     ['list'],
@@ -36,9 +83,16 @@ export default defineConfig({
   projects: [
     {
       name: 'android-emulator',
+      workers: 1,
       use: {
         astur: {
           platform: 'android',
+          automation: {
+            engine: 'auto',
+            legacyFallback: 'on-agent-failure',
+            startupTimeoutMs: 30_000,
+            commandTimeoutMs: 20_000
+          },
           timeout: 20_000,
           artifacts: {
             screenshot: 'only-on-failure',
@@ -58,10 +112,22 @@ export default defineConfig({
     },
     {
       name: 'ios-simulator',
+      workers: 1,
       use: {
         astur: {
           platform: 'ios',
-          timeout: 20_000,
+          // iOS native UI interaction requires the XCTest agent.
+          // Keep this project strict so we fail fast at startup instead of falling back and
+          // later crashing on native element actions.
+          agent: {
+            mode: 'required',
+            install: true,
+            legacyFallback: 'never',
+            launchTimeout: 120_000,
+            commandTimeout: 30_000
+          },
+          // iOS simulator boot + app shell hydration can be slower under mixed-platform parallel load.
+          timeout: 35_000,
           artifacts: {
             screenshot: 'only-on-failure',
             video: 'off'

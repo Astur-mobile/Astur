@@ -70,15 +70,17 @@ template: splash
           <span class="dot yellow"></span>
           <span class="dot green"></span>
         </div>
-        <div class="terminal-tab">astur-inspector</div>
+        <div class="terminal-tab">astur-fast-loop</div>
         <div class="terminal-status">
           <span class="status-pulse"></span>
-          <span class="status-text">LIVE</span>
+          <span class="status-text">READY</span>
         </div>
       </div>
-      <div class="terminal-body">
-        <pre><code><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">codegen</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// ✦ Stream connected. Listening for semantic locators...</span><span class="t-line t-highlight"><span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Email'</span>).<span class="t-method">fill</span>(<span class="t-str">'qa@example.com'</span>);</span><span class="t-line t-highlight"><span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByRole</span>(<span class="t-str">'button'</span>, {'{'} <span class="t-prop">name</span>: <span class="t-str">'Login'</span> {'}'}).<span class="t-method">tap</span>();</span>
-<span class="t-line"><span class="t-keyword">await</span> <span class="t-call">expect</span>(<span class="t-obj">device</span>.<span class="t-method">getByText</span>(<span class="t-str">'Welcome'</span>)).<span class="t-method">toBeVisible</span>();</span><span class="t-line"><span class="t-cursor"></span></span></code></pre>
+      <div class="terminal-body workflow-terminal-body">
+        <pre><code><span class="t-line t-stage-row"><span class="t-stage">01 INSTALL</span></span><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npm</span> <span class="t-method">install</span> <span class="t-flag">-D</span> <span class="t-pkg">@astur/test</span> <span class="t-pkg">astur-mobile</span></span>
+<span class="t-line t-stage-row"><span class="t-stage">02 INSPECT</span></span><span class="t-line t-highlight"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">inspector</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// semantic tree mirrored, gestures visible, locators ranked</span>
+<span class="t-line t-stage-row"><span class="t-stage">03 AUTHOR</span></span><span class="t-line t-highlight"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">codegen</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// export Playwright-style flows you can keep and refine</span>
+<span class="t-line t-stage-row"><span class="t-stage">04 SHIP</span></span><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npm</span> <span class="t-method">test</span></span><span class="t-line"><span class="t-cursor"></span></span></code></pre>
       </div>
     </div>
   </div>
@@ -151,17 +153,36 @@ template: splash
   </div>
 </section>
 
-```ts
-import { expect, test } from '@astur/test';
+<section class="quantum-code-section" aria-label="Generated Test Example">
+  <div class="quantum-code-intro">
+    <div class="section-badge">GENERATED STARTER</div>
+    <h2 class="section-headline">Take the recorded flow and keep the real spec.</h2>
+    <p class="section-description">
+      Codegen gets you to a working test quickly. After that, keep the exported Playwright-style spec in source control and extend it with fixtures, helpers, and stronger assertions.
+    </p>
+  </div>
 
-test('login', async ({ device }) => {
-  await device.getByLabel('Email').fill('qa@example.com');
-  await device.getByLabel('Password').fill('secret');
-  await device.getByRole('button', { name: 'Login' }).tap();
-
-  await expect(device.getByText('Welcome')).toBeVisible();
-});
-```
+  <div class="generated-code-card">
+    <div class="generated-code-header">
+      <div class="terminal-controls">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+      </div>
+      <div class="generated-code-meta">
+        <span class="generated-code-filename">tests/login.spec.ts</span>
+        <span class="generated-code-badge">generated spec</span>
+      </div>
+    </div>
+    <pre class="generated-code-body"><code><span class="t-line"><span class="t-keyword">import</span> &#123; <span class="t-obj">expect</span>, <span class="t-obj">test</span> &#125; <span class="t-keyword">from</span> <span class="t-str">'@astur/test'</span>;</span>
+<span class="t-line"><span class="t-call">test</span>(<span class="t-str">'login'</span>, <span class="t-keyword">async</span> (&#123; <span class="t-obj">device</span> &#125;) =&gt; &#123;</span>
+<span class="t-line">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Email'</span>).<span class="t-method">fill</span>(<span class="t-str">'qa@example.com'</span>);</span>
+<span class="t-line">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Password'</span>).<span class="t-method">fill</span>(<span class="t-str">'secret'</span>);</span>
+<span class="t-line t-highlight">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByRole</span>(<span class="t-str">'button'</span>, &#123; <span class="t-prop">name</span>: <span class="t-str">'Login'</span> &#125;).<span class="t-method">tap</span>();</span>
+<span class="t-line t-highlight">  <span class="t-keyword">await</span> <span class="t-call">expect</span>(<span class="t-obj">device</span>.<span class="t-method">getByText</span>(<span class="t-str">'Welcome'</span>)).<span class="t-method">toBeVisible</span>();</span>
+<span class="t-line">&#125;);</span></code></pre>
+  </div>
+</section>
 
 <footer class="quantum-footer">
   Start with <a href="./getting-started/" class="text-glow-link">Getting Started</a> or open <a href="./inspector/" class="text-glow-link">Inspector And Codegen</a> to generate your first test from a running device.

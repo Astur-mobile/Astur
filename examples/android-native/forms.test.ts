@@ -10,6 +10,7 @@ test('forms update text input, switch, checkbox, and button state', async ({ app
 
   await app.forms.toggle.tap();
   await app.forms.checkbox.tap();
+  await app.forms.revealActionButtons();
   await expect(app.forms.activeButton).toBeEnabled();
 
   await app.forms.activeButton.tap();

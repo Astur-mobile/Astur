@@ -1,22 +1,23 @@
 {
   "name": "astur-mobile-examples",
   "private": true,
+  "type": "module",
   "description": "Convenience commands for Astur example test suites and inspector sessions.",
   "scripts": {
     "help": "node -e \"console.log(['Available example commands:', '  npm run doctor', '  npm run devices', '  npm run devices:android', '  npm run devices:ios', '  npm run test:android', '  npm run test:ios', '  npm run test:parallel', '  npm run test:android:spec -- android-native/login.test.ts', '  npm run test:ios:spec -- android-native/login.test.ts', '  npm run test:parallel:spec -- android-native/login.test.ts', '  npm run test:parallel:android', '  npm run test:parallel:ios', '  npm run codegen:android:emulator', '  npm run codegen:ios:simulator'].join('\\n'))\"",
-    "doctor": "npx astur-mobile doctor",
-    "devices": "npx astur-mobile devices",
-    "devices:android": "npx astur-mobile devices --android",
-    "devices:ios": "npx astur-mobile devices --ios",
-    "test:android": "npx astur-mobile test --config ./android-native/playwright.config.ts",
-    "test:android:spec": "npx astur-mobile test --config ./android-native/playwright.config.ts",
-    "test:ios": "npx astur-mobile test --config ./ios-native/playwright.config.ts",
-    "test:ios:spec": "npx astur-mobile test --config ./ios-native/playwright.config.ts",
-    "test:parallel": "npx astur-mobile test --config ./android-native/playwright.parallel.config.ts",
-    "test:parallel:spec": "npx astur-mobile test --config ./android-native/playwright.parallel.config.ts",
-    "test:parallel:android": "npx astur-mobile test --config ./android-native/playwright.parallel.config.ts --project android-emulator",
-    "test:parallel:ios": "npx astur-mobile test --config ./android-native/playwright.parallel.config.ts --project ios-simulator",
-    "codegen:android:emulator": "npx astur-mobile codegen --android --device emulator-5554 --app ../assets/astur.demo.android.apk --app-id com.astur.demo",
-    "codegen:ios:simulator": "npx astur-mobile codegen --ios --app-id com.astur.demo"
+    "doctor": "npm --prefix .. exec astur-mobile -- doctor",
+    "devices": "npm --prefix .. exec astur-mobile -- devices",
+    "devices:android": "npm --prefix .. exec astur-mobile -- devices --android",
+    "devices:ios": "npm --prefix .. exec astur-mobile -- devices --ios",
+    "test:android": "npm --prefix .. exec astur-mobile -- test --config ./android-native/playwright.config.ts",
+    "test:android:spec": "npm --prefix .. exec astur-mobile -- test --config ./android-native/playwright.config.ts",
+    "test:ios": "npm --prefix .. exec astur-mobile -- test --config ./ios-native/playwright.config.ts",
+    "test:ios:spec": "npm --prefix .. exec astur-mobile -- test --config ./ios-native/playwright.config.ts",
+    "test:parallel": "npm --prefix .. exec astur-mobile -- test --config ./android-native/playwright.parallel.config.ts",
+    "test:parallel:spec": "npm --prefix .. exec astur-mobile -- test --config ./android-native/playwright.parallel.config.ts",
+    "test:parallel:android": "npm --prefix .. exec astur-mobile -- test --config ./android-native/playwright.parallel.config.ts --project android-emulator",
+    "test:parallel:ios": "npm --prefix .. exec astur-mobile -- test --config ./android-native/playwright.parallel.config.ts --project ios-simulator",
+    "codegen:android:emulator": "npm --prefix .. exec astur-mobile -- codegen --android --device emulator-5554 --app ../assets/astur.demo.android.apk --app-id com.astur.demo",
+    "codegen:ios:simulator": "npm --prefix .. exec astur-mobile -- codegen --ios --app-id com.astur.demo"
   }
 }

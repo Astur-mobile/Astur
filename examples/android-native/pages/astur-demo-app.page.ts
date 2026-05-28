@@ -465,6 +465,23 @@ export class FormsPage {
     });
   }
 
+  async revealActionButtons(): Promise<void> {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (await this.activeButton.isVisible({ timeout: 300 })) {
+        return;
+      }
+
+      const screen = await this.screen.snapshot({ timeout: 1_000 });
+      await this.device.swipe({
+        start: pointIn(screen.bounds, 0.5, 0.82),
+        end: pointIn(screen.bounds, 0.5, 0.35),
+        durationMs: 450
+      });
+    }
+
+    await this.activeButton.waitForVisible({ timeout: 4_000 });
+  }
+
   private async sliderTrackBounds(): Promise<Bounds> {
     const roleSnapshot = await this.slider.snapshot({ timeout: 500 }).catch(() => undefined);
     if (roleSnapshot?.visible && roleSnapshot.bounds.width > 40) {

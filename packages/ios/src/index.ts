@@ -290,13 +290,13 @@ export class IosDriver implements PlatformDriver {
           'Failed to build or start the iOS XCUITest native agent.',
           {
             device,
-          endpoint,
-          projectPath: config.projectPath,
-          scheme: config.scheme,
-          launchTimeout,
-          cause: error
-        }
-      );
+            endpoint,
+            projectPath: config.projectPath,
+            scheme: config.scheme,
+            launchTimeout,
+            cause: error
+          }
+        );
       }
 
       return undefined;
@@ -711,6 +711,20 @@ class IosSession implements PlatformSession {
     params?: NativeAgentCommandParams<M>
   ): Promise<{ ok: true; result: NativeAgentCommandResponse<M> } | { ok: false }> {
     if (!this.nativeAgent) {
+      if (this.capabilities.agent.mode === 'off') {
+        return { ok: false };
+      }
+
+      if (this.capabilities.agent.mode === 'required' || !allowsLegacyFallback(this.capabilities, 'failure')) {
+        throw new AsturError(
+          'IOS_XCTEST_AGENT_UNAVAILABLE',
+          `iOS native agent is unavailable while running ${method}.`,
+          {
+            method
+          }
+        );
+      }
+
       return { ok: false };
     }
 

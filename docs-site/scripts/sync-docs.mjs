@@ -75,13 +75,6 @@ const pages = [
     title: 'Roadmap',
     description: 'Planned work for native agents, diagnostics, CI, and release readiness.',
     order: 11
-  },
-  {
-    source: 'docs/publishing.md',
-    target: 'publishing.md',
-    title: 'Publishing',
-    description: 'Npm package strategy, release workflow, and GitHub Actions plan.',
-    order: 12
   }
 ];
 

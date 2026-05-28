@@ -69,6 +69,8 @@ npx astur-mobile devices --android
 
 If you see multiple devices, prefer exact IDs in config for deterministic runs.
 
+For cross-platform parallel runs, treat each phone, emulator, or simulator as a single-worker resource. Use one Playwright project per device, set `workers: 1` inside each project, then set the top-level `workers` value to the number of devices you want to run at the same time.
+
 ## 3. Initialize Project Files
 
 The setup wizard creates starter config, sample tests, and a setup note:

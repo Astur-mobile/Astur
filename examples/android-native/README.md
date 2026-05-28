@@ -74,7 +74,7 @@ Keep these ids aligned with `adb devices -l` and `xcrun simctl list devices`. As
 
 Each project gets an isolated Astur session and its own native artifact directory. The two device workers run at the same time; when one device finishes, its session closes without waiting for the other device's test steps. The Playwright command itself still exits only after all project results are collected so it can produce one combined report.
 
-Keep device-level parallel runs project-based. Do not point two projects at the same emulator id, and do not enable unrestricted file-level parallelism for multiple specs targeting the same physical device.
+Keep device-level parallel runs project-based. Do not point two projects at the same emulator id, and do not enable unrestricted file-level parallelism for multiple specs targeting the same physical device. In the parallel config, each mobile project sets `workers: 1` while the top-level config uses `workers: 2`; that allows Android and iOS to run at the same time without allowing two Android specs or two iOS specs to fight over the same device.
 
 The default single-device config uses `workers: 1` for this reason. Use `playwright.parallel.config.ts` when each worker targets a different Android or iOS device.
 

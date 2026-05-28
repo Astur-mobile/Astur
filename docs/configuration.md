@@ -285,16 +285,18 @@ Parallel device runs should use Playwright projects with unique `device.id` valu
 projects: [
   {
     name: 'android-phone',
+    workers: 1,
     use: { astur: { platform: 'android', device: { id: 'emulator-5554' } } }
   },
   {
     name: 'android-tablet',
+    workers: 1,
     use: { astur: { platform: 'android', device: { id: 'emulator-5556' } } }
   }
 ]
 ```
 
-Do not let two projects select the same device. Astur does not auto-reserve devices yet.
+Do not let two projects select the same device. Also cap every physical-device project with `workers: 1`. Playwright's top-level `workers` controls the global worker pool, but without a per-project cap it can still schedule two spec files from the same mobile project at the same time.
 
 ## App Capability Reference
 
@@ -545,4 +547,4 @@ For parallel runs, specify unique device selectors per project:
 
 The example `examples/android-native/playwright.parallel.config.ts` runs one Android project and one iOS simulator project in parallel. It uses `ASTUR_ANDROID_DEVICE_ID`, `ASTUR_IOS_DEVICE_ID`, `ASTUR_IOS_DEVICE_NAME`, and `ASTUR_IOS_BUNDLE_ID` as optional overrides.
 
-Device reservation is planned but not implemented yet. If two workers select the same physical device, they can interfere with each other. Set `workers` to the number of available devices and keep project selectors unique.
+Device reservation is planned but not implemented yet. If two workers select the same physical device, they can interfere with each other. Set the top-level `workers` value to the number of available devices, keep project selectors unique, and set `workers: 1` inside each project that maps to one physical device.
