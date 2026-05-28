@@ -2,75 +2,202 @@
 title: Astur Docs
 description: Device-native mobile automation with Playwright ergonomics.
 template: splash
-hero:
-  title: Astur Docs
-  tagline: Fast, native Android and iOS automation without an Appium server.
-  actions:
-    - text: Get Started
-      link: ./getting-started/
-      icon: right-arrow
-    - text: Open Inspector
-      link: ./inspector/
-      variant: secondary
 ---
 
-<section class="landing-shell" aria-label="Astur overview">
-  <div class="landing-shell-copy">
-    <p class="landing-eyebrow">Native mobile runtime</p>
-    <h2>Inspect, author, and ship mobile tests in one fast loop.</h2>
-    <div class="landing-copy-text">
-      Astur keeps the authoring surface tight: stream the device, inspect the semantic tree,
-      record the flow, and export reusable <span class="landing-inline-code">@astur/test</span> code without adding an Appium or WebDriver layer.
+<header class="futuristic-hero">
+  {/* Glowing astrolabe background effect */}
+  <div class="astrolabe-orbits" aria-hidden="true">
+    <div class="orbit-ring orbit-outer">
+      <div class="orbit-marker"></div>
     </div>
-    <div class="landing-chip-row">
-      <span>Android emulators + devices</span>
-      <span>iOS simulators</span>
-      <span>Live inspector + codegen</span>
-      <span>Playwright-style API</span>
+    <div class="orbit-ring orbit-middle">
+      <div class="orbit-marker"></div>
+    </div>
+    <div class="orbit-ring orbit-inner">
+      <div class="orbit-marker"></div>
     </div>
   </div>
 
-  <div class="landing-console" aria-label="Astur authoring preview">
-    <div class="landing-console-bar">
-      <span>runtime</span>
-      <span>authoring preview</span>
+  <div class="futuristic-hero-content">
+    <div class="badge-row">
+      <span class="cyber-badge">✦ NATIVE RUNTIME</span>
+      <span class="cyber-badge">✦ 0% APPIUM OVERHEAD</span>
+      <span class="cyber-badge">✦ PLAYWRIGHT ERGONOMICS</span>
     </div>
-    <pre><code>{`$ npx astur-mobile codegen --android --device emulator-5554
+    
+    <h1 class="gradient-headline">Fast, native mobile automation without the Appium server.</h1>
+    
+    <div class="futuristic-tagline">
+      Astur bypasses the WebDriver proxy layer using high-speed native agents on Android and iOS. 
+      Inspect layout trees in real-time, record gestures instantly, and author tests with clean Playwright ergonomics.
+    </div>
+    
+    <div class="hero-cta-buttons">
+      <a href="./getting-started/" class="cta-button primary">
+        Get Started
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="arrow-icon"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+      </a>
+      <a href="./inspector/" class="cta-button secondary">
+        Open Inspector
+      </a>
+    </div>
+  </div>
+</header>
 
-await device.getByLabel('Email').fill('qa@example.com');
-await device.getByRole('button', { name: 'Login' }).tap();
-await expect(device.getByText('Welcome')).toBeVisible();`}</code></pre>
+<section class="control-deck-section" aria-label="Control Deck Overview">
+  <div class="control-deck-intro">
+    <div class="section-badge">NATIVE MOBILE RUNTIME</div>
+    <h2 class="section-headline">Inspect, author, and ship mobile tests in one fast loop.</h2>
+    <p class="section-description">
+      Astur keeps the authoring surface tight: stream the device, inspect the semantic tree,
+      record the flow, and export reusable <span class="cyber-inline-code">@astur/test</span> code without adding an Appium or WebDriver layer.
+    </p>
+    
+    <div class="tech-specs-grid">
+      <div class="tech-spec-item">
+        <span class="spec-label">Connection latency</span>
+        <span class="spec-value neon-emerald">1.2ms</span>
+      </div>
+      <div class="tech-spec-item">
+        <span class="spec-label">Frame rate</span>
+        <span class="spec-value">60 FPS</span>
+      </div>
+      <div class="spec-platforms">
+        <span>Android emulators & devices</span>
+        <span>iOS simulators</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="control-deck-wrapper">
+    {/* The Futuristic Live-Codegen Simulator Deck */}
+    <div class="cyber-control-deck">
+      
+      {/* Left side: Pure CSS Mobile Phone Mockup */}
+      <div class="cyber-phone-mock">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="phone-app-header">
+            <span class="app-logo">Astur Demo</span>
+            <span class="app-status-dot animate-pulse"></span>
+          </div>
+          <div class="phone-app-body">
+            <div class="form-container">
+              <div class="form-group">
+                <label class="mock-label">Email Address</label>
+                <div class="mock-input active-highlight">
+                  <span>qa@example.com</span>
+                  <div class="scanning-crosshair"></div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="mock-label">Password</label>
+                <div class="mock-input">
+                  <span>••••••••••••</span>
+                </div>
+              </div>
+              <button class="mock-btn select-highlight">
+                <span>Login</span>
+                <span class="click-pulse"></span>
+              </button>
+            </div>
+          </div>
+          <div class="phone-home-pill"></div>
+        </div>
+      </div>
+
+      {/* Right side: Sleek Glassmorphic Terminal/Console */}
+      <div class="cyber-terminal-mock">
+        <div class="terminal-header">
+          <div class="terminal-controls">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <div class="terminal-tab">astur-inspector</div>
+          <div class="terminal-status">
+            <span class="status-pulse"></span>
+            <span class="status-text">LIVE</span>
+          </div>
+        </div>
+        <div class="terminal-body">
+          <pre><code><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">codegen</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// ✦ Stream connected. Listening for semantic locators...</span><span class="t-line t-highlight"><span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Email'</span>).<span class="t-method">fill</span>(<span class="t-str">'qa@example.com'</span>);</span><span class="t-line t-highlight"><span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByRole</span>(<span class="t-str">'button'</span>, {'{'} <span class="t-prop">name</span>: <span class="t-str">'Login'</span> {'}'}).<span class="t-method">tap</span>();</span>
+<span class="t-line"><span class="t-keyword">await</span> <span class="t-call">expect</span>(<span class="t-obj">device</span>.<span class="t-method">getByText</span>(<span class="t-str">'Welcome'</span>)).<span class="t-method">toBeVisible</span>();</span><span class="t-line"><span class="t-cursor"></span></span></code></pre>
+        </div>
+      </div>
+      
+    </div>
   </div>
 </section>
 
-<section class="landing-feature-grid" aria-label="Astur capabilities">
-  <article class="landing-feature-card">
-    <span class="landing-feature-index">01</span>
+<section class="quantum-feature-grid" aria-label="Astur Key Features">
+  <article class="quantum-feature-card">
+    <div class="card-glow-bg"></div>
+    <div class="card-header">
+      <div class="quantum-index-badge">
+        <span>01</span>
+        <div class="badge-ring animate-pulse"></div>
+      </div>
+    </div>
     <h3>Playwright-style authoring</h3>
-    <p>Use fixtures, locators, assertions, retries, and reports that already feel natural to Playwright users.</p>
+    <p>Use fixtures, locators, assertions, retries, and reports that already feel completely natural to Playwright users.</p>
   </article>
-  <article class="landing-feature-card">
-    <span class="landing-feature-index">02</span>
+
+  <article class="quantum-feature-card">
+    <div class="card-glow-bg"></div>
+    <div class="card-header">
+      <div class="quantum-index-badge">
+        <span>02</span>
+        <div class="badge-ring animate-pulse"></div>
+      </div>
+    </div>
     <h3>Native platform agents</h3>
     <p>Android runs through UIAutomator and iOS through XCUITest, keeping control close to the platform UI stack.</p>
   </article>
-  <article class="landing-feature-card">
-    <span class="landing-feature-index">03</span>
+
+  <article class="quantum-feature-card">
+    <div class="card-glow-bg"></div>
+    <div class="card-header">
+      <div class="quantum-index-badge">
+        <span>03</span>
+        <div class="badge-ring animate-pulse"></div>
+      </div>
+    </div>
     <h3>Live inspector and codegen</h3>
-    <p>Mirror the device, rank semantic locators, record actions, and export starter flows without leaving the docs workflow.</p>
+    <p>Mirror the physical device, rank semantic locators, record actions, and export starter flows without leaving the docs workflow.</p>
   </article>
-  <article class="landing-feature-card">
-    <span class="landing-feature-index">04</span>
+
+  <article class="quantum-feature-card">
+    <div class="card-glow-bg"></div>
+    <div class="card-header">
+      <div class="quantum-index-badge">
+        <span>04</span>
+        <div class="badge-ring animate-pulse"></div>
+      </div>
+    </div>
     <h3>One repository, one system</h3>
-    <p>Drivers, agents, test API, CLI, examples, and docs evolve together instead of splitting across disconnected tooling.</p>
+    <p>Drivers, agents, test API, CLI, examples, and docs evolve together inside a single monorepo instead of splitting across disconnected tooling.</p>
   </article>
 </section>
 
-Astur keeps tests small while the runtime and native agents absorb device selection, waits, gestures, screenshots, diagnostics, and inspector state.
+<section class="quantum-summary-paragraph">
+  Astur keeps tests small while the runtime and native agents absorb device selection, waits, gestures, screenshots, diagnostics, and inspector state.
+</section>
 
-## Why Astur
+<section class="quantum-why-section">
+  <div class="why-accent-line"></div>
+  <div class="why-content">
+    <h2 class="section-headline">Why Astur?</h2>
+    <p>
+      Astur is named after the <strong>astrolabe</strong>: a portable, historic astronomical instrument that compressed complex calculations and sky observations into something small enough to hold.
+    </p>
+    <p>
+      Astur brings that same philosophy to handheld-device automation: a compact, high-performance test API backed by a lightning-fast native runtime that handles device lifecycle, network orchestration, and screenshot-diagnostics under the hood.
+    </p>
+  </div>
+</section>
 
-Astur is named after the astrolabe: a portable instrument that compressed complex observation and calculation into something small enough to hold. Astur brings that same idea to handheld-device automation: a compact test API backed by a fast native runtime.
+<div class="glass-code-wrapper">
 
 ```ts
 import { expect, test } from '@astur/test';
@@ -84,4 +211,8 @@ test('login', async ({ device }) => {
 });
 ```
 
-Start with [Getting Started](./getting-started/) or open [Inspector And Codegen](./inspector/) if you want to generate your first test from a running device.
+</div>
+
+<footer class="quantum-footer">
+  Start with <a href="./getting-started/" class="text-glow-link">Getting Started</a> or open <a href="./inspector/" class="text-glow-link">Inspector And Codegen</a> to generate your first test from a running device.
+</footer>

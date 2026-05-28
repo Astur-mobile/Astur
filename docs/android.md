@@ -220,6 +220,8 @@ await device.drag({
   durationMs: 800
 });
 ```
+
+```ts
 await device.setOrientation('landscape');
 await device.orientation.portrait();
 

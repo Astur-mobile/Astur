@@ -73,9 +73,13 @@ iOS screenshots can stream through `simctl`, but UI tree inspection and native i
   <li>Check <code>npx astur-mobile doctor --verbose</code> if Xcode or the agent build fails.</li>
 </ol>
 
+:::note[Apple XCTest]
 This is an Apple XCTest requirement. It is not an Appium or WebDriver dependency.
+:::
 
+:::tip[Refresh Delayed]
 If the tree is visible but the header briefly says `UI tree refresh delayed`, Astur is keeping the last good tree while the next XCUITest snapshot is still running. The mirror remains usable; the warning should clear after the next successful tree refresh.
+:::
 
 ## Platform Limits
 

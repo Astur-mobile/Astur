@@ -257,7 +257,9 @@ To run only one file:
 npx astur-mobile test tests/login.test.ts
 ```
 
-## 9. Reliability Baseline Checklist
+## 9. Next Steps & Practices
+
+:::tip[Reliability Baseline Checklist]
 
 Use this checklist before scaling test count:
 
@@ -267,6 +269,7 @@ Use this checklist before scaling test count:
 4. Enable native artifacts for failures (`screenshot: 'only-on-failure'`, `video: 'retain-on-failure'`).
 5. Stabilize keyboard behavior with `keyboard.dismiss: 'auto'` unless keyboard UI is under test.
 6. Move from `agent.mode: 'auto'` to `agent.mode: 'required'` once native-agent path is validated.
+:::
 
 ## 10. Where To Go Next
 
