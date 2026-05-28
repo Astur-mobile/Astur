@@ -504,6 +504,29 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
     linear-gradient(rgba(15, 23, 42, 0.02) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.02) 1px, transparent 1px);
 }
+:root[data-theme="light"] .astrolabe-orbits {
+  opacity: 0.72;
+}
+:root[data-theme="light"] .orbit-ring {
+  border-color: rgba(13, 148, 136, 0.14);
+  box-shadow: inset 0 0 24px rgba(13, 148, 136, 0.04);
+}
+:root[data-theme="light"] .orbit-middle {
+  border-color: rgba(79, 70, 229, 0.14);
+}
+:root[data-theme="light"] .orbit-inner {
+  border-color: rgba(13, 148, 136, 0.18);
+}
+:root[data-theme="light"] .orbit-marker {
+  box-shadow:
+    0 0 0 2px rgba(248, 250, 252, 0.95),
+    0 0 14px rgba(13, 148, 136, 0.18);
+}
+:root[data-theme="light"] .orbit-outer .orbit-marker {
+  box-shadow:
+    0 0 0 2px rgba(248, 250, 252, 0.95),
+    0 0 14px rgba(79, 70, 229, 0.2);
+}
 
 /* Highly specific class chain to override Starlight's global light-mode heading overrides */
 :root[data-theme="light"] .sl-markdown-content h1.gradient-headline {
