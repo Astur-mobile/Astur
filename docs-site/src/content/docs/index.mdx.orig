@@ -197,6 +197,8 @@ template: splash
   </div>
 </section>
 
+<div class="glass-code-wrapper">
+
 ```ts
 import { expect, test } from '@astur/test';
 
@@ -208,6 +210,8 @@ test('login', async ({ device }) => {
   await expect(device.getByText('Welcome')).toBeVisible();
 });
 ```
+
+</div>
 
 <footer class="quantum-footer">
   Start with <a href="./getting-started/" class="text-glow-link">Getting Started</a> or open <a href="./inspector/" class="text-glow-link">Inspector And Codegen</a> to generate your first test from a running device.

@@ -354,7 +354,7 @@
 .futuristic-hero {
   position: relative;
   overflow: hidden;
-  margin-top: -1.5rem;
+  margin-top: 0;
   margin-bottom: 4rem;
   padding: clamp(3.5rem, 8vw, 6.5rem) clamp(1.5rem, 4vw, 3.5rem);
   
