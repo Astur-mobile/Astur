@@ -1,6 +1,6 @@
 {
   "name": "@astur/android",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-beta.0",
   "description": "Android driver for Astur using ADB and UIAutomator.",
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -24,7 +24,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur/core": "0.1.0-alpha.0",
-    "@astur/protocol": "0.1.0-alpha.0"
+    "@astur/core": "0.1.0-beta.0",
+    "@astur/protocol": "0.1.0-beta.0"
   }
 }

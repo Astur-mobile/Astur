@@ -1,6 +1,6 @@
 {
   "name": "@astur/cli",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-beta.0",
   "description": "Astur command line interface.",
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -27,10 +27,10 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur/android": "0.1.0-alpha.0",
-    "@astur/core": "0.1.0-alpha.0",
-    "@astur/ios": "0.1.0-alpha.0",
-    "@astur/protocol": "0.1.0-alpha.0",
+    "@astur/android": "0.1.0-beta.0",
+    "@astur/core": "0.1.0-beta.0",
+    "@astur/ios": "0.1.0-beta.0",
+    "@astur/protocol": "0.1.0-beta.0",
     "@types/ws": "^8.18.1",
     "ws": "^8.21.0"
   }

@@ -1,6 +1,6 @@
 {
   "name": "astur-mobile",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-beta.0",
   "description": "Astur CLI for device-native mobile automation.",
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -21,6 +21,6 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur/cli": "0.1.0-alpha.0"
+    "@astur/cli": "0.1.0-beta.0"
   }
 }

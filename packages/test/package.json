@@ -1,6 +1,6 @@
 {
   "name": "@astur/test",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-beta.0",
   "description": "Playwright Test integration for Astur.",
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -22,9 +22,9 @@
   },
   "dependencies": {
     "@playwright/test": "^1.60.0",
-    "@astur/android": "0.1.0-alpha.0",
-    "@astur/core": "0.1.0-alpha.0",
-    "@astur/ios": "0.1.0-alpha.0",
-    "@astur/protocol": "0.1.0-alpha.0"
+    "@astur/android": "0.1.0-beta.0",
+    "@astur/core": "0.1.0-beta.0",
+    "@astur/ios": "0.1.0-beta.0",
+    "@astur/protocol": "0.1.0-beta.0"
   }
 }
