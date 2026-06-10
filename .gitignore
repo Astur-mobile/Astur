@@ -27,6 +27,9 @@ packages/android-agent/build/
 # Local Claude Code state
 .claude/
 
+# Local-only agent context map (not tracked)
+AGENTS.md
+
 # Org profile staging file (the real copy lives in the Astur-mobile/.github repo)
 /ORG-PROFILE-README.md
 

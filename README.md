@@ -1,5 +1,11 @@
 # Astur
 
+[![npm: astur-mobile](https://img.shields.io/npm/v/astur-mobile?logo=npm&label=astur-mobile&color=cb3837)](https://www.npmjs.com/package/astur-mobile)
+[![npm: @astur/test](https://img.shields.io/npm/v/@astur/test?logo=npm&label=%40astur%2Ftest&color=cb3837)](https://www.npmjs.com/package/@astur/test)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Android](https://img.shields.io/badge/Android-supported-3DDC84?logo=android&logoColor=white)](docs/android.md)
+[![iOS](https://img.shields.io/badge/iOS-supported-black?logo=apple&logoColor=white)](docs/ios.md)
+
 Astur is a device-native mobile automation toolkit that brings the speed and ergonomics of Playwright Test directly to mobile pipelines.
 
 Astur is named after the astrolabe: an ancient portable instrument used to calculate position, direction, and paths with precision. The name is also inspired by the legacy associated with Mariam al-Asturlabiya, whose work represents compact, practical computation long before modern devices.
@@ -189,6 +195,12 @@ packages/
 - Semantic locators before coordinates.
 - Failure artifacts by default.
 - Honest platform boundaries, especially on iOS.
+
+## Contributing & Security
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). To report a
+vulnerability, follow [SECURITY.md](SECURITY.md) (please don't open a public
+issue for security problems).
 
 ## License
 
