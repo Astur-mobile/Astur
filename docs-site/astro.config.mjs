@@ -38,6 +38,12 @@ export default defineConfig({
         {
           tag: 'script',
           content: "try{if(!localStorage.getItem('starlight-theme'))localStorage.setItem('starlight-theme','light')}catch{}"
+        },
+        {
+          // On the homepage the site title links to itself, which is a no-op.
+          // Repoint it to Getting Started so the header "Docs" enters the docs.
+          tag: 'script',
+          content: "addEventListener('DOMContentLoaded',function(){var a=document.querySelector('a.site-title');if(!a)return;var home=a.getAttribute('href')||'/';if(home.slice(-1)!=='/')home+='/';var here=location.pathname;if(here.slice(-1)!=='/')here+='/';if(here===home){a.setAttribute('href',home+'getting-started/');a.removeAttribute('aria-current');}});"
         }
       ],
       customCss: ['./src/styles/astur.css'],
