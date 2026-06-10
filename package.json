@@ -23,12 +23,12 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
-    "@types/node": "^25.9.1",
-    "@vitest/coverage-v8": "^4.1.7",
+    "@types/node": "^25.9.2",
+    "@vitest/coverage-v8": "^4.1.8",
     "astur-mobile": "0.1.0-beta.0",
     "create-astur": "0.1.0-beta.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.8"
   },
   "overrides": {
     "vite": "^7.3.3"
