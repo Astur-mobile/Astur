@@ -161,7 +161,7 @@ the monorepo checkout:
 | --- | --- | --- |
 | `Astur-mobile/Astur` | Library monorepo (packages + release pipeline) | npm (the only publishing repo) |
 | `Astur-mobile/astur-demoApp` | Expo/React Native demo app | the demo `.app` / `.apk` / `.ipa` artifacts the docs reference |
-| `Astur-mobile/examples` | Example Playwright projects | nothing; depends on published `astur-mobile` + `@astur/test` |
+| `Astur-mobile/astur-boilerplate` | Starter Playwright projects | nothing; depends on published `astur-mobile` + `@astur/test` |
 | `Astur-mobile/astur-docs` | Astro/Starlight docs site | the docs site (own deploy + sponsorship CTA) |
 
 `docs/*.md` in this repo stays the source of truth; the docs repo syncs them with
