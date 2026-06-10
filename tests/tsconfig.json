@@ -10,12 +10,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "paths": {
-      "@astur/android": ["../packages/android/src/index.ts"],
-      "@astur/cli": ["../packages/cli/src/index.ts"],
-      "@astur/core": ["../packages/core/src/index.ts"],
-      "@astur/ios": ["../packages/ios/src/index.ts"],
-      "@astur/protocol": ["../packages/protocol/src/index.ts"],
-      "@astur/test": ["../packages/test/src/index.ts"]
+      "@astur-mobile/android": ["../packages/android/src/index.ts"],
+      "@astur-mobile/cli": ["../packages/cli/src/index.ts"],
+      "@astur-mobile/core": ["../packages/core/src/index.ts"],
+      "@astur-mobile/ios": ["../packages/ios/src/index.ts"],
+      "@astur-mobile/protocol": ["../packages/protocol/src/index.ts"],
+      "@astur-mobile/test": ["../packages/test/src/index.ts"]
     }
   },
   "include": ["*.test.ts"]

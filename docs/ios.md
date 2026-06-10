@@ -83,7 +83,7 @@ For test runs, add Astur to your Playwright config and run `npx astur-mobile tes
 
 ```ts
 // playwright.config.ts
-import { defineConfig } from '@astur/test';
+import { defineConfig } from '@astur-mobile/test';
 
 export default defineConfig({
   testDir: './tests',
@@ -155,7 +155,7 @@ npx astur-mobile doctor --verbose
 Real-device config:
 
 ```ts
-import { defineConfig } from '@astur/test';
+import { defineConfig } from '@astur-mobile/test';
 
 export default defineConfig({
   testDir: './tests',

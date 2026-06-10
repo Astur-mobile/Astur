@@ -10,12 +10,12 @@ Project attribution:
 
 ## Package Strategy
 
-Astur should use a Playwright-style split: one primary test package and one CLI package, with internal runtime packages published under the `@astur` scope.
+Astur should use a Playwright-style split: one primary test package and one CLI package, with internal runtime packages published under the `@astur-mobile` scope.
 
 Recommended user install:
 
 ```bash
-npm install -D @astur/test astur-mobile
+npm install -D @astur-mobile/test astur-mobile
 ```
 
 Why not one large package:
@@ -29,29 +29,29 @@ Why not a separate inspector package yet:
 
 - users expect `npx astur-mobile codegen` to work from the same CLI that runs `doctor`, `devices`, and `test`
 - the inspector depends on the same runtime and platform drivers as the CLI
-- a separate `@astur/inspector` package should wait until there is an embeddable web server or Electron app API that external tools need directly
+- a separate `@astur-mobile/inspector` package should wait until there is an embeddable web server or Electron app API that external tools need directly
 
 Initial public packages:
 
 | Package | Public role |
 | --- | --- |
-| `@astur/test` | Main user-facing Playwright Test integration: `test`, `expect`, `defineConfig`, locators, fixtures |
+| `@astur-mobile/test` | Main user-facing Playwright Test integration: `test`, `expect`, `defineConfig`, locators, fixtures |
 | `astur-mobile` | CLI wrapper: `doctor`, `devices`, `init`, `test`, `codegen`, `inspect` |
 | `create-astur` | Project scaffolding entry point |
-| `@astur/core` | Runtime contracts and platform-neutral session/locator implementation |
-| `@astur/protocol` | Shared selectors, command types, snapshots, and capabilities |
-| `@astur/android` | Android driver and lifecycle integration |
-| `@astur/ios` | iOS driver and lifecycle integration |
-| `@astur/cli` | CLI implementation consumed by `astur-mobile` |
+| `@astur-mobile/core` | Runtime contracts and platform-neutral session/locator implementation |
+| `@astur-mobile/protocol` | Shared selectors, command types, snapshots, and capabilities |
+| `@astur-mobile/android` | Android driver and lifecycle integration |
+| `@astur-mobile/ios` | iOS driver and lifecycle integration |
+| `@astur-mobile/cli` | CLI implementation consumed by `astur-mobile` |
 
 Native agent packaging decision:
 
-- keep `@astur/test` and `astur-mobile` as the only packages users normally install
-- publish native agent assets inside the platform packages for the alpha: Android APKs under `@astur/android/assets/agent` and the simulator XCUITest project under `@astur/ios/assets/ios-xctest-agent`
+- keep `@astur-mobile/test` and `astur-mobile` as the only packages users normally install
+- publish native agent assets inside the platform packages for the alpha: Android APKs under `@astur-mobile/android/assets/agent` and the simulator XCUITest project under `@astur-mobile/ios/assets/ios-xctest-agent`
 - make platform drivers resolve packaged agent assets first, then fall back to monorepo source paths for local development
-- keep separate `@astur/android-agent` or `@astur/ios-agent` packages as a future option only if agent assets need independent release cadence
+- keep separate `@astur-mobile/android-agent` or `@astur-mobile/ios-agent` packages as a future option only if agent assets need independent release cadence
 
-Before the first public release, verify that a clean external project can install `@astur/test astur-mobile` and bootstrap both bundled agents without referencing this repository checkout.
+Before the first public release, verify that a clean external project can install `@astur-mobile/test astur-mobile` and bootstrap both bundled agents without referencing this repository checkout.
 
 ## Release Plan
 
@@ -90,7 +90,7 @@ Phase 4, post-release validation:
 
 ```bash
 npm create astur@latest
-npm install -D @astur/test astur-mobile
+npm install -D @astur-mobile/test astur-mobile
 npx astur-mobile doctor
 npx astur-mobile codegen --help
 npx astur-mobile test --help
@@ -143,8 +143,8 @@ Before publishing, verify:
 - package names are available on npm
 - GitHub repository name is available
 - license and NOTICE text are final
-- npm organization `astur` is owned by the project
-- unscoped `astur` is currently occupied on npm, so publish the CLI wrapper as `astur-mobile` unless the name is transferred
+- npm organization `astur-mobile` is owned by the project (the `@astur-mobile` scope)
+- unscoped `astur` is occupied on npm and blocks an `astur` org, so the scope is `@astur-mobile` and the CLI wrapper is the unscoped `astur-mobile`
 - package READMEs are expanded for each package
 - bundled Android and iOS agent assets resolve from installed npm packages, not only from the source monorepo
 - unit tests and branch coverage for changed driver/agent paths are updated
@@ -161,7 +161,7 @@ the monorepo checkout:
 | --- | --- | --- |
 | `Astur-mobile/Astur` | Library monorepo (packages + release pipeline) | npm (the only publishing repo) |
 | `Astur-mobile/astur-demoApp` | Expo/React Native demo app | the demo `.app` / `.apk` / `.ipa` artifacts the docs reference |
-| `Astur-mobile/astur-boilerplate` | Starter Playwright projects | nothing; depends on published `astur-mobile` + `@astur/test` |
+| `Astur-mobile/astur-boilerplate` | Starter Playwright projects | nothing; depends on published `astur-mobile` + `@astur-mobile/test` |
 | `Astur-mobile/astur-docs` | Astro/Starlight docs site | the docs site (own deploy + sponsorship CTA) |
 
 `docs/*.md` in this repo stays the source of truth; the docs repo syncs them with

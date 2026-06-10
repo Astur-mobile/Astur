@@ -37,7 +37,7 @@ import type {
   NormalizedCapabilities,
   RecordingStopOptions,
   SwipeGesture
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 import {
   AsturError,
   connectNativeAgentClient,
@@ -45,7 +45,7 @@ import {
   type NativeAgentClient,
   type PlatformDriver,
   type PlatformSession
-} from '@astur/core';
+} from '@astur-mobile/core';
 import { run, runText, spawnCommand } from './command.js';
 
 export interface IosDriverOptions {
@@ -361,7 +361,7 @@ export class IosDriver implements PlatformDriver {
         : 'Native iOS element automation requires the bundled Swift XCUITest agent project.',
       fix: agentProjectAvailable
         ? undefined
-        : 'Keep agents/ios-xctest-agent available when running from source or install the published @astur/ios package assets.'
+        : 'Keep agents/ios-xctest-agent available when running from source or install the published @astur-mobile/ios package assets.'
     });
 
     return checks;

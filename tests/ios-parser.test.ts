@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDevicectlDevices, parseSimctlDevices, parseXcdeviceDevices } from '@astur/ios';
+import { parseDevicectlDevices, parseSimctlDevices, parseXcdeviceDevices } from '@astur-mobile/ios';
 
 describe('iOS parser utilities', () => {
   it('normalizes available simulator devices from simctl JSON', () => {

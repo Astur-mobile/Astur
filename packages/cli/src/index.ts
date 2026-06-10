@@ -5,9 +5,9 @@ import { realpathSync } from 'node:fs';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createAndroidDriver } from '@astur/android';
-import { AsturError, AsturRuntime, AsturDevice } from '@astur/core';
-import { createIosDriver } from '@astur/ios';
+import { createAndroidDriver } from '@astur-mobile/android';
+import { AsturError, AsturRuntime, AsturDevice } from '@astur-mobile/core';
+import { createIosDriver } from '@astur-mobile/ios';
 import type {
   AsturConfig,
   DeviceInfo,
@@ -18,7 +18,7 @@ import type {
   MobileElementSnapshot,
   PlatformName,
   SwipeGesture
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 import {
   __testing as inspectorServerTesting,
   startInspectorServer,

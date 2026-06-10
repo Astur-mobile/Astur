@@ -1,13 +1,13 @@
 # Configuration
 
-Astur integrates with Playwright Test through `@astur/test`.
+Astur integrates with Playwright Test through `@astur-mobile/test`.
 
 The default setup is intentionally small: choose a platform, a device, and an app. Astur bootstraps the bundled native agents automatically, so npm users should not need to build, install, or start a separate agent process for normal local runs.
 
 ## Basic Config
 
 ```ts
-import { defineConfig } from '@astur/test';
+import { defineConfig } from '@astur-mobile/test';
 
 export default defineConfig({
   testDir: './tests',
@@ -429,7 +429,7 @@ Use both layers when a test mixes native mobile automation and WebView/browser a
 
 ## Native Assertions
 
-`expect` from `@astur/test` works with native Astur locators and Playwright DOM locators. Native locator assertions auto-wait with `use.astur.timeout` unless a matcher-level timeout is provided:
+`expect` from `@astur-mobile/test` works with native Astur locators and Playwright DOM locators. Native locator assertions auto-wait with `use.astur.timeout` unless a matcher-level timeout is provided:
 
 ```ts
 await expect(device.getByText('Welcome')).toBeVisible();
@@ -490,10 +490,10 @@ await device.getByLabel('Login').tap();
 await expect(device.getByText('Credentials')).toBeVisible();
 ```
 
-WebView screens should use the browser DOM. In `@astur/test`, request a WebView handle after navigating the native app to a WebView screen:
+WebView screens should use the browser DOM. In `@astur-mobile/test`, request a WebView handle after navigating the native app to a WebView screen:
 
 ```ts
-import { expect, test } from '@astur/test';
+import { expect, test } from '@astur-mobile/test';
 
 test('webview content', async ({ device, webview }) => {
   await device.app.launch();
@@ -581,7 +581,7 @@ This is useful for preparing upload-picker scenarios, collecting generated files
 Use Playwright projects:
 
 ```ts
-import { defineConfig } from '@astur/test';
+import { defineConfig } from '@astur-mobile/test';
 
 export default defineConfig({
   testDir: './tests',

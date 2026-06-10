@@ -15,13 +15,13 @@ The runtime path is:
 
 ```text
 Astur locator/action API
-  -> @astur/core session element methods
-  -> @astur/ios agent transport
+  -> @astur-mobile/core session element methods
+  -> @astur-mobile/ios agent transport
   -> Swift XCUITest agent
   -> XCUIApplication / XCUIElement
 ```
 
-This directory is the code that makes iOS inspection and native interaction possible. The host-side `@astur/ios` package can install, launch, and screenshot simulator apps through Xcode tools, but only this XCTest runner can read the iOS accessibility tree and perform native element actions inside Apple's supported automation boundary.
+This directory is the code that makes iOS inspection and native interaction possible. The host-side `@astur-mobile/ios` package can install, launch, and screenshot simulator apps through Xcode tools, but only this XCTest runner can read the iOS accessibility tree and perform native element actions inside Apple's supported automation boundary.
 
 Current command surface:
 

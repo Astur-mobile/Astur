@@ -1,4 +1,4 @@
-export * from '@astur/protocol';
+export * from '@astur-mobile/protocol';
 export * from './agent.js';
 export * from './config.js';
 export * from './errors.js';

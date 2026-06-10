@@ -9,7 +9,7 @@ Astur keeps the test authoring experience small while moving the expensive mobil
 
 <div class="architecture-map" aria-label="Astur high-level architecture">
   <div class="architecture-stage">
-    <div class="flow-node primary">User test<span>@astur/test</span></div>
+    <div class="flow-node primary">User test<span>@astur-mobile/test</span></div>
     <div class="flow-node">Core runtime<span>locators, waits, assertions</span></div>
     <div class="flow-node">Protocol<span>selectors and commands</span></div>
   </div>
@@ -87,7 +87,7 @@ Astur Inspector uses the same runtime and selector model as tests.
   <div class="flow-arrow">→</div>
   <div class="flow-node accent">Locator ranking</div>
   <div class="flow-arrow">→</div>
-  <div class="flow-node primary">@astur/test code</div>
+  <div class="flow-node primary">@astur-mobile/test code</div>
 </div>
 
 The inspector does not invent a second locator system. When it suggests a locator, records a tap, or exports code, it uses the same platform-neutral locator contracts that execute during test runs.
@@ -108,7 +108,7 @@ The inspector does not invent a second locator system. When it suggests a locato
 Most users install:
 
 ```bash
-npm install -D @astur/test astur-mobile
+npm install -D @astur-mobile/test astur-mobile
 ```
 
-`@astur/test` gives the Playwright fixture and assertions. `astur-mobile` gives the CLI, including `doctor`, `devices`, `init`, `test`, and `codegen`. Internal packages such as `@astur/core`, `@astur/android`, and `@astur/ios` stay published as normal npm packages so the project remains modular, but end users should not need to wire them manually.
+`@astur-mobile/test` gives the Playwright fixture and assertions. `astur-mobile` gives the CLI, including `doctor`, `devices`, `init`, `test`, and `codegen`. Internal packages such as `@astur-mobile/core`, `@astur-mobile/android`, and `@astur-mobile/ios` stay published as normal npm packages so the project remains modular, but end users should not need to wire them manually.

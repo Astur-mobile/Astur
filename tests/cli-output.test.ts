@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { __testing, main } from '@astur/cli';
-import type { DeviceInfo } from '@astur/protocol';
+import { __testing, main } from '@astur-mobile/cli';
+import type { DeviceInfo } from '@astur-mobile/protocol';
 
 describe('CLI platform-aware output', () => {
   afterEach(() => {

@@ -1,5 +1,5 @@
 {
-  "name": "@astur/core",
+  "name": "@astur-mobile/core",
   "version": "0.1.0-beta.0",
   "description": "Core Astur runtime, sessions, locators, and auto-waiting.",
   "license": "Apache-2.0",
@@ -21,6 +21,6 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur/protocol": "0.1.0-beta.0"
+    "@astur-mobile/protocol": "0.1.0-beta.0"
   }
 }

@@ -16,8 +16,8 @@ The runtime path is:
 
 ```text
 Astur locator/action API
-  -> @astur/core session element methods
-  -> @astur/android agent transport
+  -> @astur-mobile/core session element methods
+  -> @astur-mobile/android agent transport
   -> Kotlin UIAutomator agent
   -> UiDevice / By / Until / UiObject2
 ```
@@ -45,7 +45,7 @@ packages/android-agent
 Host startup now works like this:
 
 ```text
-@astur/android
+@astur-mobile/android
   -> use ASTUR_ANDROID_AGENT_ENDPOINT when supplied
   -> otherwise, if built agent APKs exist, install them
   -> adb forward tcp:<hostPort> tcp:<devicePort>
@@ -97,7 +97,7 @@ Current implementation status:
 
 - baseline command handlers are implemented in `AsturAgent.kt`
 - `packages/android-agent` contains the instrumentation runner and HTTP transport server
-- `@astur/android` can bootstrap built local agent APKs automatically when no endpoint is configured
+- `@astur-mobile/android` can bootstrap built local agent APKs automatically when no endpoint is configured
 - selector strategies supported: `accessibility`, `id`, `text`, `type`, and role mapping
 - explicit `NOT_IMPLEMENTED` responses remain for unsupported selector internals such as `xpath`
 - host driver keeps capability-aware fallback in `agent.mode: 'auto'`

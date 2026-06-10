@@ -121,7 +121,7 @@ Platform endpoint environment variables:
 ## `codegen`
 
 Bootstraps a runtime-backed inspector/codegen session using the same locator
-engine as `@astur/core`.
+engine as `@astur-mobile/core`.
 
 ```bash
 npx astur-mobile codegen
@@ -142,7 +142,7 @@ Current alpha behavior:
 - lets you switch devices from the current-device chip in the header without restarting `codegen`
 - exposes app and device actions under the `Controls` button
 - lets you install an uploaded APK, a simulator `.app`, or a real-device `.ipa`, launch an already-installed app by package/bundle id, grant/revoke permissions, and clear app data/cache where the platform supports it
-- exports TypeScript or JavaScript test code using the `@astur/test` API
+- exports TypeScript or JavaScript test code using the `@astur-mobile/test` API
 
 The device mirror can appear a moment before the UI tree fills. Real-device screenshots, UI-tree inspection, and native actions require a healthy Astur iOS agent bound to the app bundle id. Plain `npx astur-mobile codegen --ios` defaults the bundle id to `com.astur.demo`; pass `--app-id` (or set `ASTUR_IOS_BUNDLE_ID`) for your own app. Always pass a simulator `.app` or real-device `.ipa` with `--app` on first run so Astur can install it — if you pass only `--app-id` and the app is not installed, Astur returns `IOS_APP_NOT_INSTALLED`. For real devices, set `ASTUR_IOS_DEVELOPMENT_TEAM` so Xcode can sign the bundled XCUITest runner, and make sure the macOS signing keychain is unlocked. When the tree cannot be read, the inspector shows the platform error in the header status area instead of silently rendering an empty tree.
 

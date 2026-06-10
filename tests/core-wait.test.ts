@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TimeoutError, waitFor } from '@astur/core';
+import { TimeoutError, waitFor } from '@astur-mobile/core';
 
 describe('waitFor', () => {
   it('resolves once the predicate returns a truthy value', async () => {

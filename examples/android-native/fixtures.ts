@@ -1,4 +1,4 @@
-import { expect, test as base } from '@astur/test';
+import { expect, test as base } from '@astur-mobile/test';
 import { AsturDemoApp } from './pages/astur-demo-app.page.js';
 
 type AndroidNativeFixtures = {

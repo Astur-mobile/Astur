@@ -50,7 +50,7 @@ template: splash
     <h2 class="section-headline">Inspect, author, and ship mobile tests in one fast loop.</h2>
     <p class="section-description">
       Astur keeps the authoring surface tight: stream the device, inspect the semantic tree,
-      record the flow, and export reusable <span class="cyber-inline-code">@astur/test</span> code without adding an Appium or WebDriver layer.
+      record the flow, and export reusable <span class="cyber-inline-code">@astur-mobile/test</span> code without adding an Appium or WebDriver layer.
     </p>
     
     <div class="tech-specs-grid">
@@ -77,7 +77,7 @@ template: splash
         </div>
       </div>
       <div class="terminal-body workflow-terminal-body">
-        <pre><code><span class="t-line t-stage-row"><span class="t-stage">01 INSTALL</span></span><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npm</span> <span class="t-method">install</span> <span class="t-flag">-D</span> <span class="t-pkg">@astur/test</span> <span class="t-pkg">astur-mobile</span></span>
+        <pre><code><span class="t-line t-stage-row"><span class="t-stage">01 INSTALL</span></span><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npm</span> <span class="t-method">install</span> <span class="t-flag">-D</span> <span class="t-pkg">@astur-mobile/test</span> <span class="t-pkg">astur-mobile</span></span>
 <span class="t-line t-stage-row"><span class="t-stage">02 INSPECT</span></span><span class="t-line t-highlight"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">inspector</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// semantic tree mirrored, gestures visible, locators ranked</span>
 <span class="t-line t-stage-row"><span class="t-stage">03 AUTHOR</span></span><span class="t-line t-highlight"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">codegen</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// export Playwright-style flows you can keep and refine</span>
 <span class="t-line t-stage-row"><span class="t-stage">04 SHIP</span></span><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npm</span> <span class="t-method">test</span></span><span class="t-line"><span class="t-cursor"></span></span></code></pre>
@@ -175,7 +175,7 @@ template: splash
         <span class="generated-code-badge">generated spec</span>
       </div>
     </div>
-    <pre class="generated-code-body"><code><span class="t-line"><span class="t-keyword">import</span> &#123; <span class="t-obj">expect</span>, <span class="t-obj">test</span> &#125; <span class="t-keyword">from</span> <span class="t-str">'@astur/test'</span>;</span>
+    <pre class="generated-code-body"><code><span class="t-line"><span class="t-keyword">import</span> &#123; <span class="t-obj">expect</span>, <span class="t-obj">test</span> &#125; <span class="t-keyword">from</span> <span class="t-str">'@astur-mobile/test'</span>;</span>
 <span class="t-line"><span class="t-call">test</span>(<span class="t-str">'login'</span>, <span class="t-keyword">async</span> (&#123; <span class="t-obj">device</span> &#125;) =&gt; &#123;</span>
 <span class="t-line">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Email'</span>).<span class="t-method">fill</span>(<span class="t-str">'qa@example.com'</span>);</span>
 <span class="t-line">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Password'</span>).<span class="t-method">fill</span>(<span class="t-str">'secret'</span>);</span>

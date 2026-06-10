@@ -8,7 +8,7 @@ and fork, but the name and marks are protected.
 
 ## What the marks are
 
-"Astur", the Astur logo, and the `@astur` npm scope are trademarks of Amr Salem
+"Astur", the Astur logo, and the `@astur-mobile` npm scope are trademarks of Amr Salem
 (registered or common-law). Owning the copyright in the code and owning these
 marks are separate things: the Apache 2.0 license covers the code and explicitly
 does **not** grant any trademark rights.
@@ -24,7 +24,7 @@ does **not** grant any trademark rights.
 
 - Naming a product, service, company, or fork "Astur" or anything confusingly
   similar.
-- Publishing an npm package under the `@astur` scope, or any package whose name
+- Publishing an npm package under the `@astur-mobile` scope, or any package whose name
   implies it is the official Astur project.
 - Using the Astur logo or name as your own product or app icon, domain, or
   social handle.

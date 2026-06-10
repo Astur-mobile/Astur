@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createIosDriver } from '@astur/ios';
+import { createIosDriver } from '@astur-mobile/ios';
 import {
   AsturError,
   normalizeCapabilities,
@@ -8,7 +8,7 @@ import {
   type MobileElementSnapshot,
   type NativeAgentCommandEnvelope,
   type NativeAgentInfo
-} from '@astur/core';
+} from '@astur-mobile/core';
 
 interface AgentRequest {
   id: string;

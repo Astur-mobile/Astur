@@ -13,7 +13,7 @@ import {
   type PlatformDriver,
   type PlatformSession,
   type WebViewEndpoint
-} from '@astur/core';
+} from '@astur-mobile/core';
 
 describe('AsturRuntime', () => {
   it('aggregates diagnostics and devices across registered drivers', async () => {

@@ -13,7 +13,7 @@ import type {
   NormalizedCapabilities,
   NormalizedNativeAgentConfig,
   PlatformName
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 import { AsturError } from './errors.js';
 
 export function normalizeCapabilities(config: AsturConfig): NormalizedCapabilities {

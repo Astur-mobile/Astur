@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess, type ExecFileException } from 'node:child_process';
-import { AsturError } from '@astur/core';
+import { AsturError } from '@astur-mobile/core';
 
 export interface CommandResult {
   stdout: Buffer;

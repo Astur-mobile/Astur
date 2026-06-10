@@ -1,6 +1,6 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from '@astur/test';
+import { defineConfig } from '@astur-mobile/test';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const androidAgentMode = readAndroidAgentMode();

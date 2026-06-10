@@ -1,5 +1,5 @@
 {
-  "name": "@astur/docs-site",
+  "name": "@astur-mobile/docs-site",
   "version": "0.1.0-alpha.0",
   "private": true,
   "description": "Astur documentation site built with Astro Starlight.",

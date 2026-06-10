@@ -16,7 +16,7 @@ import type {
   MobileElementSnapshot,
   MobileRole,
   SwipeGesture,
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 
 // ─── WebSocket protocol ───────────────────────────────────────────────────────
 
@@ -1661,8 +1661,8 @@ function generateTestCode(steps: RecordingStep[], lang: 'typescript' | 'javascri
   }
 
   const importLine = lang === 'typescript'
-    ? `import { test, expect } from '@astur/test';`
-    : `const { test, expect } = require('@astur/test');`;
+    ? `import { test, expect } from '@astur-mobile/test';`
+    : `const { test, expect } = require('@astur-mobile/test');`;
 
   const lines = steps.map((s) => generateRecordedStepCode(s));
 
@@ -3455,8 +3455,8 @@ function updateCodeBlock() {
     return '  await device.' + locator + '.tap();';
   });
   const imp = codeLang === 'typescript'
-    ? "import { test, expect } from '@astur/test';"
-    : "const { test, expect } = require('@astur/test');";
+    ? "import { test, expect } from '@astur-mobile/test';"
+    : "const { test, expect } = require('@astur-mobile/test');";
   const body = imp + "\\n\\ntest('recorded flow', async ({ device }) => {\\n" + lines.join('\\n') + "\\n});\\n";
   codeBlock.textContent = body;
 }

@@ -11,7 +11,7 @@ import type {
   RoleSelectorOptions,
   SwipeGesture,
   TapOptions
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 import { AsturError } from './errors.js';
 import { preparePointerTargetForKeyboard } from './keyboard.js';
 import type { PlatformSession } from './session.js';

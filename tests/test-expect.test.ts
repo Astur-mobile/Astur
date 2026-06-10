@@ -5,7 +5,7 @@ import {
   expect as asturExpect,
   type MobileElementSnapshot,
   type PlatformSession
-} from '@astur/test';
+} from '@astur-mobile/test';
 
 const tree: MobileElementSnapshot = {
   type: 'android.root',
@@ -44,7 +44,7 @@ const tree: MobileElementSnapshot = {
   ]
 };
 
-describe('@astur/test expect matchers', () => {
+describe('@astur-mobile/test expect matchers', () => {
   it('asserts native locator visibility, existence, text, value, label, type, and bounds', async () => {
     const session = createSession();
     const title = new MobileLocator(session, by.text('Welcome'));

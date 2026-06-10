@@ -7,7 +7,7 @@ import type {
   NativeAgentInfo,
   NativeAgentMethod,
   PlatformName
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 import { AsturError } from './errors.js';
 
 export interface NativeAgentClient {

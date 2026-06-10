@@ -7,7 +7,7 @@ import {
   parseAndroidKeyboardState,
   parseAndroidLockState,
   parseAndroidWebViewSockets
-} from '@astur/android';
+} from '@astur-mobile/android';
 import { parseUiAutomatorXml } from '../packages/android/src/uiautomatorXml.js';
 
 describe('Android parser utilities', () => {

@@ -67,7 +67,7 @@ The state must be `device`. If it is `unauthorized`, unlock the device and appro
 ## Android Configuration
 
 ```ts
-import { defineConfig } from '@astur/test';
+import { defineConfig } from '@astur-mobile/test';
 
 export default defineConfig({
   testDir: './tests',

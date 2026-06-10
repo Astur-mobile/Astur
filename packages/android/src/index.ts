@@ -37,7 +37,7 @@ import type {
   SwipeGesture,
   WebViewEndpoint,
   WebViewSelector
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 import {
   centerOf,
   connectNativeAgentClient,
@@ -50,7 +50,7 @@ import {
   type NativeAgentClient,
   type PlatformDriver,
   type PlatformSession
-} from '@astur/core';
+} from '@astur-mobile/core';
 import { run, runText, spawnCommand, spawnDetached } from './command.js';
 import { parseUiAutomatorXml } from './uiautomatorXml.js';
 

@@ -9,7 +9,7 @@ This guide is designed to get you from zero setup to a reliable daily workflow.
 Install Astur into your project from npm:
 
 ```bash
-npm install -D @astur/test astur-mobile
+npm install -D @astur-mobile/test astur-mobile
 npx astur-mobile doctor
 ```
 
@@ -110,7 +110,7 @@ Generated files include:
 Create `playwright.config.ts`. Astur can start the emulator and infer Android package metadata from the APK:
 
 ```ts
-import { defineConfig } from '@astur/test';
+import { defineConfig } from '@astur-mobile/test';
 
 export default defineConfig({
   testDir: './tests',
@@ -263,7 +263,7 @@ export ASTUR_IOS_AGENT_ENDPOINT=http://127.0.0.1:8788
 Create `tests/login.test.ts`:
 
 ```ts
-import { expect, test } from '@astur/test';
+import { expect, test } from '@astur-mobile/test';
 
 test('login screen is visible', async ({ device }) => {
   await device.app.launch();

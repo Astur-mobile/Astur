@@ -1,4 +1,4 @@
-import type { MobileElementSnapshot } from '@astur/protocol';
+import type { MobileElementSnapshot } from '@astur-mobile/protocol';
 
 export function parseUiAutomatorXml(xml: string): MobileElementSnapshot {
   const children = [...xml.matchAll(/<node\b[^>]*>/g)].map((match) => {

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { pruneStaleIosAgentDerivedData } from '@astur/ios';
+import { pruneStaleIosAgentDerivedData } from '@astur-mobile/ios';
 
 describe('pruneStaleIosAgentDerivedData', () => {
   let root: string;

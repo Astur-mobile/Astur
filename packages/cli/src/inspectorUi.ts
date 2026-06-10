@@ -5,7 +5,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Bounds, DeviceInfo, LocatorSuggestion, MobileElementSnapshot } from '@astur/protocol';
+import type { Bounds, DeviceInfo, LocatorSuggestion, MobileElementSnapshot } from '@astur-mobile/protocol';
 
 export interface InspectorUiModel {
   device: DeviceInfo;
@@ -1175,7 +1175,7 @@ function renderInspectorHtml(payload: InspectorUiPayload): string {
             }
           }
         } else {
-          lines.push("import { expect, test } from '@astur/test';");
+          lines.push("import { expect, test } from '@astur-mobile/test';");
           lines.push('');
           lines.push("test('recorded flow', async ({ device }) => {");
 

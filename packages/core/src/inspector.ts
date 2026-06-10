@@ -8,7 +8,7 @@ import type {
   MobileRole,
   UiTreeSubscribeOptions,
   UiTreeUpdate
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 import { AsturError } from './errors.js';
 import { by, findElements, matches, MobileLocator } from './locator.js';
 import type { PlatformSession } from './session.js';

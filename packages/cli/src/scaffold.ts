@@ -1,6 +1,6 @@
 import { createInterface, type Interface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import type { PlatformName } from '@astur/protocol';
+import type { PlatformName } from '@astur-mobile/protocol';
 
 type PlatformChoice = 'android' | 'ios' | 'both';
 type AndroidTarget = 'emulator' | 'real' | 'browserstack';
@@ -176,7 +176,7 @@ function buildPlaywrightConfig(answers: InitAnswers): string {
     ...(answers.reports.junit ? [`['junit', { outputFile: 'test-results/mobile/results.xml' }]`] : [])
   ];
 
-  return `import { defineConfig } from '@astur/test';
+  return `import { defineConfig } from '@astur-mobile/test';
 
 export default defineConfig({
   testDir: './tests',
@@ -323,7 +323,7 @@ function buildIosApp(app: IosAppAnswers): string {
 }
 
 function buildExampleTest(): string {
-  return `import { expect, test } from '@astur/test';
+  return `import { expect, test } from '@astur-mobile/test';
 
 test('app launches', async ({ device }) => {
   await device.app.launch();

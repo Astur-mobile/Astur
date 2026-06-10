@@ -1,4 +1,4 @@
-# @astur/android-agent
+# @astur-mobile/android-agent
 
 Android instrumentation agent for Astur v2.
 

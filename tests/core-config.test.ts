@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeCapabilities } from '@astur/core';
+import { normalizeCapabilities } from '@astur-mobile/core';
 
 describe('normalizeCapabilities', () => {
   it('fills stable defaults', () => {

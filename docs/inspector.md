@@ -1,11 +1,11 @@
 # Astur Inspector And Codegen
 
-Astur Inspector is the visual authoring surface for mobile tests. It streams the device screen, reads the semantic UI tree through the same runtime used by tests, ranks locators, records actions, and exports `@astur/test` code.
+Astur Inspector is the visual authoring surface for mobile tests. It streams the device screen, reads the semantic UI tree through the same runtime used by tests, ranks locators, records actions, and exports `@astur-mobile/test` code.
 
 Unlike generic WebDriver/Appium inspectors, Astur Inspector is built around Astur's own runtime. That gives it three practical advantages:
 
 - generated locators use the same selector engine that will run in your tests
-- taps, scrolls, fills, app launch, permissions, rotation, and screenshots go through the same native Android/iOS session used by `@astur/test`
+- taps, scrolls, fills, app launch, permissions, rotation, and screenshots go through the same native Android/iOS session used by `@astur-mobile/test`
 - the inspector can rank semantic locators locally from the cached tree instead of waiting for a full remote round trip after every selection
 
 The result is a more dynamic authoring loop: inspect, interact, record, edit the generated step, switch device, launch another installed app, and continue without changing tools.
@@ -59,14 +59,14 @@ Each interaction lands in the **Recording Steps** tab as an editable action + lo
 
 ![The Recording Steps tab listing recorded tap actions with their generated locators.](/images/inspector-recording-steps.png)
 
-The **Code** tab turns those steps into a ready-to-run `@astur/test` spec (toggle TypeScript or JavaScript, then copy):
+The **Code** tab turns those steps into a ready-to-run `@astur-mobile/test` spec (toggle TypeScript or JavaScript, then copy):
 
-![The Code tab showing the exported @astur/test spec generated from the recorded steps.](/images/inspector-generated-code.png)
+![The Code tab showing the exported @astur-mobile/test spec generated from the recorded steps.](/images/inspector-generated-code.png)
 
 Exported code is intentionally plain:
 
 ```ts
-import { test, expect } from '@astur/test';
+import { test, expect } from '@astur-mobile/test';
 
 test('recorded flow', async ({ device }) => {
   await device.getByLabel('Email').fill('qa@example.com');

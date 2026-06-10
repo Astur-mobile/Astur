@@ -16,7 +16,7 @@ Local iOS automation requires macOS because Apple's simulator, Xcode, `xcrun`, `
 
 - Node.js 18 or newer
 - npm 9 or newer
-- Playwright Test, installed through `@astur/test`
+- Playwright Test, installed through `@astur-mobile/test`
 - A terminal with access to the platform tools on `PATH`
 
 Check:

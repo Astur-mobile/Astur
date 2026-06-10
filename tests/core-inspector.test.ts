@@ -4,7 +4,7 @@ import {
   createInspectorSession,
   type MobileElementSnapshot,
   type PlatformSession
-} from '@astur/core';
+} from '@astur-mobile/core';
 
 const tree: MobileElementSnapshot = {
   type: 'root',

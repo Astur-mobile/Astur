@@ -3,7 +3,7 @@ import type {
   Coordinates,
   KeyboardDismissMode,
   KeyboardState
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 import type { PlatformSession } from './session.js';
 import { delay } from './wait.js';
 

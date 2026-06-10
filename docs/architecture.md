@@ -4,10 +4,10 @@ Astur keeps the test authoring experience small while moving the expensive mobil
 
 ```mermaid
 flowchart LR
-  Test["User test<br/>@astur/test"] --> Core["@astur/core<br/>locators, waits, assertions"]
-  Core --> Protocol["@astur/protocol<br/>selectors and commands"]
-  Protocol --> Android["@astur/android"]
-  Protocol --> IOS["@astur/ios"]
+  Test["User test<br/>@astur-mobile/test"] --> Core["@astur-mobile/core<br/>locators, waits, assertions"]
+  Core --> Protocol["@astur-mobile/protocol<br/>selectors and commands"]
+  Protocol --> Android["@astur-mobile/android"]
+  Protocol --> IOS["@astur-mobile/ios"]
   Android --> AndroidAgent["Android UIAutomator agent"]
   IOS --> IOSAgent["iOS XCUITest agent"]
   AndroidAgent --> AndroidDevice["Android app"]
@@ -55,7 +55,7 @@ Astur still uses platform tools where they are the right tool:
 flowchart TB
   Lifecycle["Lifecycle tools<br/>adb, simctl, xcodebuild"] --> Device["Device / simulator"]
   Agent["Persistent native agent<br/>UIAutomator or XCUITest"] --> Device
-  Core["@astur/core"] --> Lifecycle
+  Core["@astur-mobile/core"] --> Lifecycle
   Core --> Agent
 ```
 
@@ -71,7 +71,7 @@ flowchart LR
   Tree["Semantic UI tree"] --> Inspector
   Inspector --> Ranking["Locator ranking"]
   Inspector --> Recording["Recorded actions"]
-  Ranking --> Code["Generated @astur/test code"]
+  Ranking --> Code["Generated @astur-mobile/test code"]
   Recording --> Code
 ```
 
@@ -93,7 +93,7 @@ The inspector does not invent a second locator system. When it suggests a locato
 Most users install:
 
 ```bash
-npm install -D @astur/test astur-mobile
+npm install -D @astur-mobile/test astur-mobile
 ```
 
-`@astur/test` gives the Playwright fixture and assertions. `astur-mobile` gives the CLI, including `doctor`, `devices`, `init`, `test`, and `codegen`. Internal packages such as `@astur/core`, `@astur/android`, and `@astur/ios` stay published as normal npm packages so the project remains modular, but end users should not need to wire them manually.
+`@astur-mobile/test` gives the Playwright fixture and assertions. `astur-mobile` gives the CLI, including `doctor`, `devices`, `init`, `test`, and `codegen`. Internal packages such as `@astur-mobile/core`, `@astur-mobile/android`, and `@astur-mobile/ios` stay published as normal npm packages so the project remains modular, but end users should not need to wire them manually.

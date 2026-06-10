@@ -16,7 +16,7 @@ simpler to set up, and harder to wedge.
 | | Appium / WebDriver tools | Astur |
 | --- | --- | --- |
 | Transport | Remote HTTP/WebDriver server you run | In-process drivers + native agents Astur starts for you |
-| Setup | Install/keep an Appium server, drivers, capabilities | `npm install -D @astur/test astur-mobile` |
+| Setup | Install/keep an Appium server, drivers, capabilities | `npm install -D @astur-mobile/test astur-mobile` |
 | Element engine | Server-side selectors, separate from your assertions | One selector engine shared by tests **and** the Inspector |
 | Authoring | Generic inspector over WebDriver | Inspector/codegen built on the same runtime your tests use |
 | Lifecycle | You manage emulators, runners, signing | Astur auto-boots, auto-builds, auto-signs, self-heals |
@@ -36,7 +36,7 @@ snapshots natively. Astur builds and launches them through the platform
 toolchain on every session — there is no Appium server, no manually installed
 runner, and no WebDriver bridge.
 
-**Playwright ergonomics on mobile.** The public API is `@astur/test`: fixtures,
+**Playwright ergonomics on mobile.** The public API is `@astur-mobile/test`: fixtures,
 projects, `expect` matchers, and locators that read like Playwright. Web views
 are automated through the same Playwright/CDP bridge, so native and web flows
 live in one test.

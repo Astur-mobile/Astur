@@ -6,7 +6,7 @@ import {
   normalizeNativeAgentEndpoint,
   type NativeAgentCommandEnvelope,
   type NativeAgentInfo
-} from '@astur/core';
+} from '@astur-mobile/core';
 
 interface AgentRequest {
   id: string;

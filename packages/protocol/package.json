@@ -1,5 +1,5 @@
 {
-  "name": "@astur/protocol",
+  "name": "@astur-mobile/protocol",
   "version": "0.1.0-beta.0",
   "description": "Shared Astur protocol and data types.",
   "license": "Apache-2.0",

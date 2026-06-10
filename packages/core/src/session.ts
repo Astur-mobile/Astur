@@ -39,7 +39,7 @@ import type {
   Bounds,
   WebViewEndpoint,
   WebViewSelector
-} from '@astur/protocol';
+} from '@astur-mobile/protocol';
 import { materializeCapabilities, normalizeCapabilities } from './config.js';
 import { AsturError } from './errors.js';
 import { createInspectorSession, type RuntimeInspectorSessionOptions } from './inspector.js';

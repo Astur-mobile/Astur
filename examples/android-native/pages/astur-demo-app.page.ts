@@ -7,7 +7,7 @@ import {
   type Bounds,
   type MobileElementSnapshot,
   type MobileLocator
-} from '@astur/test';
+} from '@astur-mobile/test';
 
 type DemoTab = 'home' | 'web' | 'login' | 'forms' | 'swipe' | 'drag';
 

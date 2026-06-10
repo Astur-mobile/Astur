@@ -14,7 +14,7 @@ import {
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAndroidDriver } from '@astur/android';
+import { createAndroidDriver } from '@astur-mobile/android';
 import {
   by,
   MobileLocator,
@@ -30,8 +30,8 @@ import {
   type WaitOptions,
   type RecordingStopOptions,
   type WebViewSelector
-} from '@astur/core';
-import { createIosDriver } from '@astur/ios';
+} from '@astur-mobile/core';
+import { createIosDriver } from '@astur-mobile/ios';
 
 export {
   by,
@@ -40,8 +40,8 @@ export {
   flattenTree,
   MobileLocator,
   pointInBounds
-} from '@astur/core';
-export type * from '@astur/core';
+} from '@astur-mobile/core';
+export type * from '@astur-mobile/core';
 
 export interface AsturFixtures {
   device: AsturDevice;
