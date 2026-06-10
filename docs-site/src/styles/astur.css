@@ -1150,6 +1150,40 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
 :root[data-theme="light"] .quantum-footer {
   border-top-color: rgba(15, 23, 42, 0.06);
 }
+/* Support / Ko-fi button in the footer */
+.astur-support-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--cyber-border-glass);
+}
+.astur-kofi {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none !important;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 18px rgba(20, 184, 166, 0.28);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+.astur-kofi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(20, 184, 166, 0.42);
+}
+.astur-kofi svg {
+  flex: 0 0 auto;
+}
+:root[data-theme="light"] .astur-support-footer {
+  border-top-color: rgba(15, 23, 42, 0.08);
+}
+
 .text-glow-link {
   color: var(--cyber-primary) !important;
   font-weight: 700;

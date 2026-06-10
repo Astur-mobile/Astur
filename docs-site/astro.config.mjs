@@ -47,6 +47,9 @@ export default defineConfig({
         }
       ],
       customCss: ['./src/styles/astur.css'],
+      components: {
+        Footer: './src/components/Footer.astro'
+      },
       sidebar: [
         {
           label: 'Start',
