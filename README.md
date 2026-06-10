@@ -60,7 +60,8 @@ npx astur-mobile test
 
 ## Documentation
 
-https://astur-mobile.github.io/Astur/
+User guides live in [`docs/`](docs/) and are published as a documentation site
+from the [astur-docs](https://github.com/Astur-mobile/astur-docs) repository.
 
 ## Example Test
 
@@ -139,6 +140,32 @@ await device.unlock();
 await device.isLocked();
 ```
 
+## Gestures And Scrolling
+
+`MobileLocator` exposes native gestures and a cross-platform scroll-to, so tests
+do not hand-roll coordinate math:
+
+```ts
+await device.getByRole('button', { name: 'Like' }).tap();
+await device.getByText('Counter').doubleTap();
+await device.getByText('Item').longPress();
+await device.getByTestId('card').dragTo(device.getByTestId('dropzone'));
+await device.getByText('Footer link').scrollIntoView();
+```
+
+`scrollIntoView()` swipes the nearest scrollable region (falling back to the
+viewport) until the target is on screen, then waits for it. Pass `direction`,
+`maxScrolls`, or a `container` locator to scope the search. Double-tap uses the
+platform's native double-tap gesture so the recognition window is honored.
+
+## Examples
+
+Runnable Android and iOS suites live in [`examples/`](examples/) and, as a
+standalone starter you can clone, in
+[astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate). They run
+against the Astur demo app; the iOS simulator build ships zipped at
+`assets/astur.demo.ios.simulator.zip` (unzip to `assets/Astur.app`).
+
 ## Package Layout
 
 ```text
@@ -149,7 +176,9 @@ packages/
   ios/            simctl/devicectl and XCUITest driver boundary
   test/           Playwright Test integration
   cli/            doctor, devices, init, codegen, inspector, test
-  astur-mobile/  Public CLI package with the `astur` executable
+  astur-mobile/   Public CLI package exposing the `astur-mobile` executable
+  create-astur/   Project scaffolder (`npm create astur`)
+  android-agent/  Kotlin UIAutomator agent sources (internal, not published)
 ```
 
 ## Design Principles
