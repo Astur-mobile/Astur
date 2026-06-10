@@ -27,12 +27,18 @@ export async function runText(file: string, args: readonly string[]): Promise<st
   return result.stdout.toString('utf8');
 }
 
-export function spawnDetached(file: string, args: readonly string[]): void {
+export function spawnDetached(file: string, args: readonly string[]): ChildProcess {
   const child = spawn(file, [...args], {
     detached: true,
     stdio: 'ignore'
   });
+  // A ChildProcess with no 'error' listener throws an uncaught exception when the
+  // binary cannot be launched (e.g. ENOENT), which would crash the host process.
+  // Keep a default no-op listener so a failed launch is recoverable; callers can
+  // attach their own listener to observe the error.
+  child.on('error', () => {});
   child.unref();
+  return child;
 }
 
 export function spawnCommand(file: string, args: readonly string[]): ChildProcess {

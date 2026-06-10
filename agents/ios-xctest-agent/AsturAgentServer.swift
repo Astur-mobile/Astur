@@ -148,6 +148,9 @@ final class AsturAgentServer {
             ]
             if let details = result.error?.details {
                 error["details"] = details
+                if let detailMap = details as? [String: Any] {
+                    body["diagnostics"] = detailMap["diagnostics"] ?? detailMap
+                }
             }
             body["error"] = error
         }

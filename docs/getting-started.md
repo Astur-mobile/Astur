@@ -6,13 +6,16 @@ The name comes from the astrolabe: a portable instrument that compressed complex
 
 This guide is designed to get you from zero setup to a reliable daily workflow.
 
-This guide assumes you are working from this repository. Published package usage will be:
+Install Astur into your project from npm:
 
 ```bash
 npm install -D @astur/test astur-mobile
+npx astur-mobile doctor
 ```
 
-For source development, use:
+Every command in these docs is the published CLI form (`npx astur-mobile …`), so it works the same in any project once the package is installed.
+
+If you are instead developing Astur from source, install workspace dependencies and build first:
 
 ```bash
 npm install
@@ -52,19 +55,29 @@ Environment diagnostics
 ◦ iOS
   ✓ PASS Xcode
   ✓ PASS iOS simulators
+  ◦ WARN iOS real-device signing
 ```
 
 Linux and Windows support Android locally. iOS is skipped because local iOS automation requires macOS with Xcode.
 
-If `doctor` shows warnings, keep going for Android as long as ADB and at least one Android device/emulator are available.
+If `doctor` shows real iOS signing warnings, simulator automation can still run. Physical iPhone automation needs `ASTUR_IOS_DEVELOPMENT_TEAM` so Xcode can sign the bundled XCUITest runner.
+
+If you are starting on iOS, pick the smallest path that matches your goal:
+
+- Simulator smoke test or Inspector authoring: no Apple team required. Point codegen at a simulator `.app` — `npx astur-mobile codegen --ios --simulator --app ./MyApp.app --app-id com.example.myapp`.
+- Simulator testing of your own app: build a simulator `.app` in Xcode first, then set it as `app.path`.
+- Real-device testing: use a device-signed `.ipa` and set `ASTUR_IOS_DEVELOPMENT_TEAM`.
+
+> No app handy? The Astur demo app (`Astur.app` / `astur.demo.ios.ipa`, bundle id `com.astur.demo`) is available in the Astur examples repository so you can try codegen before wiring up your own build.
 
 ## 2. Pick A Platform
 
-For the current alpha, Android and iOS simulator automation both use Astur's native-agent path by default. ADB and Xcode tools still manage lifecycle and artifacts, while the platform agents handle locator lookup, waits, and actions.
+Android, iOS simulator, and USB-connected iOS real-device automation all use Astur's native-agent path by default. ADB and Xcode tools still manage lifecycle and artifacts, while the platform agents handle locator lookup, waits, and actions.
 
 ```bash
 adb devices -l
 npx astur-mobile devices --android
+npx astur-mobile devices --ios
 ```
 
 If you see multiple devices, prefer exact IDs in config for deterministic runs.
@@ -162,6 +175,26 @@ app: {
 }
 ```
 
+iOS real-device config is the same shape, plus Apple signing setup:
+
+```bash
+export ASTUR_IOS_DEVELOPMENT_TEAM=ABCDE12345
+```
+
+```ts
+astur: {
+  platform: 'ios',
+  device: {
+    kind: 'real',
+    id: '00008030-000548220EF0802E'
+  },
+  app: {
+    path: './apps/Demo.ipa',
+    bundleId: 'com.example.demo'
+  }
+}
+```
+
 ## 5. Inspect And Generate A Test
 
 Astur Inspector is the fastest way to verify device connectivity, inspect native locators, record a short flow, and export a starter test.
@@ -173,8 +206,9 @@ npx astur-mobile codegen
 Common examples:
 
 ```bash
-npx astur-mobile codegen --android --device emulator-5554 --app ./apps/demo.apk --app-id com.example.demo
-npx astur-mobile codegen --ios --device <simulator-udid> --app ./apps/Demo.app --app-id com.example.demo
+npx astur-mobile codegen --android --device emulator-5554 --app ./MyApp.apk --app-id com.example.myapp
+npx astur-mobile codegen --ios --simulator --app ./MyApp.app --app-id com.example.myapp
+npx astur-mobile codegen --ios --real --device <device-udid> --app ./MyApp.ipa --app-id com.example.myapp
 ```
 
 In the Inspector:
@@ -183,7 +217,7 @@ In the Inspector:
 - use `Controls` to install an APK/IPA, launch an existing app, grant permissions, rotate, or lock/unlock
 - click `Record`, interact with the mirrored screen, then export TypeScript or JavaScript
 
-iOS screenshots can appear even when the UI tree is unavailable. Native iOS inspection requires the XCUITest agent to know the app bundle id. For your own app, pass `--app-id`, set `ASTUR_IOS_BUNDLE_ID`, or use `Controls` to launch and rebind by bundle id.
+iOS screenshots can appear even when the UI tree is unavailable. Native iOS inspection requires the XCUITest agent to know the app bundle id. For your own app, pass `--app` and `--app-id` (or set `ASTUR_IOS_BUNDLE_ID`), or use `Controls` to launch and rebind by bundle id. For real devices, also set `ASTUR_IOS_DEVELOPMENT_TEAM`.
 
 See [Inspector And Codegen](../inspector/) for the full workflow.
 
@@ -191,14 +225,14 @@ See [Inspector And Codegen](../inspector/) for the full workflow.
 
 Astur starts its bundled native agents by default where supported. Endpoint mode is only needed when you run a platform agent yourself or diagnose transport behavior.
 
-Use `automation.engine: 'auto'` during migration:
+Platform defaults are already set by Astur. Both platforms default to required agent mode (`automation.engine: 'agent'`, `legacyFallback: 'never'`):
 
-- Astur uses the native-agent endpoint when available.
-- Astur falls back when safe.
+- Android uses the bundled UIAutomator agent. Opt into `automation.engine: 'auto'` only if you need legacy ADB/XML fallback during migration.
+- iOS uses required XCUITest mode because native UI-tree reads and native actions cannot work reliably without the XCUITest agent; there is no fallback path.
 
-Use the default `automation.engine: 'agent'` in CI once agent coverage is stable:
+With the default `automation.engine: 'agent'`, native interactions never silently degrade:
 
-- session creation fails if endpoint/handshake is unavailable
+- session creation fails if the agent cannot be bootstrapped
 - command execution fails fast when agent command calls fail
 
 Example:
@@ -208,12 +242,10 @@ use: {
   astur: {
     platform: 'android',
     automation: {
-      engine: 'auto'
+      engine: 'agent'
     },
     agent: {
-      endpoint: 'tcp:127.0.0.1:8787',
-      launchTimeout: 15_000,
-      commandTimeout: 10_000
+      endpoint: 'tcp:127.0.0.1:8787'
     }
   }
 }
@@ -293,5 +325,9 @@ The iOS package currently supports simulator lifecycle:
 - open URLs
 
 Native element locators require the Swift XCUITest agent.
+
+Astur does not build your own simulator app for you. If you are testing your own app on simulator, build a simulator `.app` in Xcode first and point Astur at that output with `--app`. To try Astur without building anything, use the demo app from the Astur examples repository: `npx astur-mobile codegen --ios --simulator --app ./Astur.app --app-id com.astur.demo`.
+
+If you skip `--app` and the app is not already installed, codegen fails with `IOS_APP_NOT_INSTALLED`. Include `--app` on first run so Astur can install the app before attaching.
 
 For details, see [iOS Setup](../ios/).

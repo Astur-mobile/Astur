@@ -1,0 +1,114 @@
+name: Native Agent Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Native platform smoke target
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - android
+          - ios-simulator
+          - ios-real
+      spec:
+        description: Optional example spec path
+        required: false
+        default: android-native/login.test.ts
+
+permissions:
+  contents: read
+
+jobs:
+  android-required-agent:
+    name: Android required-agent smoke
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'android' }}
+    runs-on:
+      - self-hosted
+      - macOS
+      - android
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Run Android smoke with required agent
+        env:
+          ASTUR_ANDROID_AGENT_MODE: required
+          ASTUR_ANDROID_LEGACY_FALLBACK: never
+        run: npm --prefix examples run test:android:spec -- ${{ inputs.spec }}
+
+  ios-simulator-required-agent:
+    name: iOS simulator required-agent smoke
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'ios-simulator' }}
+    runs-on:
+      - self-hosted
+      - macOS
+      - ios-simulator
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Run iOS simulator smoke with required agent
+        env:
+          ASTUR_IOS_AGENT_MODE: required
+          ASTUR_IOS_LEGACY_FALLBACK: never
+        run: npm --prefix examples run test:ios:spec -- ${{ inputs.spec }}
+
+  ios-real-required-agent:
+    name: iOS real-device required-agent smoke
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'ios-real' }}
+    runs-on:
+      - self-hosted
+      - macOS
+      - ios-real-device
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Run iOS real-device smoke with required agent
+        env:
+          ASTUR_IOS_DEVICE_KIND: real
+          ASTUR_IOS_AGENT_MODE: required
+          ASTUR_IOS_LEGACY_FALLBACK: never
+        run: npm --prefix examples run test:ios:real -- ${{ inputs.spec }}

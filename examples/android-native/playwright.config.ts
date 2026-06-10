@@ -3,6 +3,15 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@astur/test';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const androidAgentMode = readAndroidAgentMode();
+
+function readAndroidAgentMode(): 'auto' | 'required' | 'off' | undefined {
+  const raw = process.env.ASTUR_ANDROID_AGENT_MODE;
+  if (raw === 'auto' || raw === 'required' || raw === 'off') {
+    return raw;
+  }
+  return undefined;
+}
 
 export default defineConfig({
   testDir: '.',
@@ -41,9 +50,17 @@ export default defineConfig({
       // },
       app: {
         path: resolve(repoRoot, 'assets/astur.demo.android.apk'),
-        packageName: 'com.astur.demo',
-        activity: '.MainActivity'
-      }
+        // packageName: 'com.astur.demo',
+        // activity: '.MainActivity'
+      },
+      ...(androidAgentMode
+        ? {
+          agent: {
+            mode: androidAgentMode,
+            legacyFallback: process.env.ASTUR_ANDROID_LEGACY_FALLBACK === 'never' ? 'never' : undefined
+          }
+        }
+        : {})
     }
   }
 });

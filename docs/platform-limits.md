@@ -6,7 +6,7 @@ Astur removes Appium from the setup, but it cannot remove platform rules.
 
 | Host OS | Android | iOS |
 | --- | --- | --- |
-| macOS | Supported | Supported for simulator lifecycle and native actions through the XCUITest agent |
+| macOS | Supported | Supported for simulators and USB real devices through Xcode tooling and the XCUITest agent |
 | Linux | Supported | Skipped locally |
 | Windows | Supported | Skipped locally |
 
@@ -59,16 +59,18 @@ For native apps, the reliable path is XCTest/XCUITest. Astur keeps this direct a
 
 Current state:
 
-- iOS driver supports bundled simulator agent bootstrap and endpoint transport wiring
+- iOS driver supports bundled agent bootstrap and endpoint transport wiring
 - simulator lifecycle and screenshot flows work through `simctl`
-- simulator native element lookup, waits, tap, double tap, long press, fill, drag, swipe, and keyboard commands work through the Swift XCUITest agent
+- real-device install, launch, terminate, uninstall, process lookup, and discovery work through `devicectl`
+- simulator and real-device native element lookup, waits, tap, double tap, long press, fill, drag, swipe, orientation, screenshots, and keyboard commands work through the Swift XCUITest agent
 
-Real-device iOS usage still requires Apple signing, trusted devices, Xcode, and provisioning.
+Real-device iOS usage requires Apple signing, trusted devices, Xcode, and provisioning. Astur handles the automation lifecycle, but it cannot invent a signing identity for the bundled XCTest runner.
 
 Technical limits:
 
-- Real iOS device execution needs signing-aware runner installation, provisioning profile handling, device trust/developer-mode validation, and a real-device-safe transport bridge.
+- Real iOS device execution requires a configured Apple development team and an app signed for the target device. Use `ASTUR_IOS_DEVELOPMENT_TEAM` for npm and CI runs, or select a team in the source Xcode project for local repository development.
 - System alerts are limited by XCTest visibility. If XCTest cannot query a system sheet reliably, Astur cannot promise a stable cross-version automation surface for it.
-- Direct per-app data/cache clearing is not exposed by `simctl`; the reliable simulator reset is uninstall and reinstall from an app path.
+- Direct per-app data/cache clearing is not exposed by public iOS tooling; the reliable reset path is uninstall and reinstall from an app path.
+- Real-device lock/unlock, permission mutation, and video recording are not exposed reliably through Apple's public local tooling. Real-device tests can still attach screenshots through the XCUITest agent.
 
-The source in `agents/ios-xctest-agent/` is the bundled Swift XCUITest agent. It binds to the target bundle id, reads the accessibility tree, performs native gestures and element actions, and returns compact JSON to the Node.js runtime. It solves simulator UI-tree and action execution; it does not bypass Apple's signing, transport, or system UI restrictions.
+The source in `agents/ios-xctest-agent/` is the bundled Swift XCUITest agent. It binds to the target bundle id, reads the accessibility tree, performs native gestures and element actions, and returns compact JSON to the Node.js runtime. It solves iOS UI-tree and action execution; it does not bypass Apple's signing, provisioning, or system UI restrictions.

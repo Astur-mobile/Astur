@@ -27,7 +27,7 @@ Default output hides long command errors. Use `--verbose` for full ADB, Xcode, o
 
 ## `devices`
 
-Lists Android devices and iOS simulators.
+Lists Android devices, iOS simulators, and connected iOS real devices.
 
 ```bash
 npx astur-mobile devices
@@ -35,7 +35,7 @@ npx astur-mobile devices --android
 npx astur-mobile devices --ios
 ```
 
-Use the printed `id` value as `use.astur.device.id` in `playwright.config.ts`. On Android this is the ADB serial, such as `emulator-5554` for an emulator or a USB serial for a real device. On iOS this is the simulator UDID from `simctl`.
+Use the printed `id` value as `use.astur.device.id` in `playwright.config.ts`. On Android this is the ADB serial, such as `emulator-5554` for an emulator or a USB serial for a real device. On iOS this is the simulator UDID from `simctl` or the physical device UDID from `devicectl`.
 
 `platform` selects the Android or iOS driver. `device.kind` is only an optional filter for loose selection, for example "any emulator" or "any real Android device". When you provide a concrete `id`, you usually do not need `kind`.
 
@@ -53,6 +53,9 @@ device: { id: '4E2F2A1D-9B8A-4D41-8E5F-123456789ABC' }
 
 // iOS simulator by name.
 device: { name: 'iPhone 16 Pro' }
+
+// Real iOS device by UDID.
+device: { kind: 'real', id: '00008030-000548220EF0802E' }
 
 // Loose selector: any online Android emulator.
 device: { kind: 'emulator' }
@@ -122,8 +125,9 @@ engine as `@astur/core`.
 
 ```bash
 npx astur-mobile codegen
-npx astur-mobile codegen --android --device emulator-5554 --app ./apps/demo.apk
-npx astur-mobile codegen --ios --device <sim-udid> --app ./apps/Demo.app --app-id com.example.demo
+npx astur-mobile codegen --android --device emulator-5554 --app ./MyApp.apk --app-id com.example.myapp
+npx astur-mobile codegen --ios --simulator --app ./MyApp.app --app-id com.example.myapp
+npx astur-mobile codegen --ios --real --device <device-udid> --app ./MyApp.ipa --app-id com.example.myapp
 ```
 
 Current alpha behavior:
@@ -137,10 +141,10 @@ Current alpha behavior:
 - records mouse-wheel scrolls over the mirror as `device.swipe(...)` steps
 - lets you switch devices from the current-device chip in the header without restarting `codegen`
 - exposes app and device actions under the `Controls` button
-- lets you install an uploaded APK or simulator-compatible IPA, launch an already-installed app by package/bundle id, grant/revoke permissions, and clear app data/cache where the platform supports it
+- lets you install an uploaded APK, a simulator `.app`, or a real-device `.ipa`, launch an already-installed app by package/bundle id, grant/revoke permissions, and clear app data/cache where the platform supports it
 - exports TypeScript or JavaScript test code using the `@astur/test` API
 
-iOS simulator screenshots can stream without the XCUITest agent, but UI-tree inspection and native actions still require a healthy Astur iOS agent bound to the app bundle id. Astur defaults iOS codegen to the bundled demo id `com.astur.demo`; for your app pass `--app-id`, set `ASTUR_IOS_BUNDLE_ID`, or use `Controls` to launch and rebind by bundle id. When the tree cannot be read, the inspector shows the platform error in the header status area instead of silently rendering an empty tree.
+The device mirror can appear a moment before the UI tree fills. Real-device screenshots, UI-tree inspection, and native actions require a healthy Astur iOS agent bound to the app bundle id. Plain `npx astur-mobile codegen --ios` defaults the bundle id to `com.astur.demo`; pass `--app-id` (or set `ASTUR_IOS_BUNDLE_ID`) for your own app. Always pass a simulator `.app` or real-device `.ipa` with `--app` on first run so Astur can install it — if you pass only `--app-id` and the app is not installed, Astur returns `IOS_APP_NOT_INSTALLED`. For real devices, set `ASTUR_IOS_DEVELOPMENT_TEAM` so Xcode can sign the bundled XCUITest runner, and make sure the macOS signing keychain is unlocked. When the tree cannot be read, the inspector shows the platform error in the header status area instead of silently rendering an empty tree.
 
 Flags:
 

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -118,6 +118,7 @@
 				000000000000000000000051 /* Sources */,
 				000000000000000000000053 /* Frameworks */,
 				000000000000000000000055 /* Resources */,
+				000000000000000000000099 /* Run Script */,
 			);
 			buildRules = (
 			);
@@ -183,6 +184,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		000000000000000000000099 /* Run Script */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy Framework Info.plists for Real Device";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n  echo \"Copying Info.plist for testing frameworks on real device...\"\n  FRAMEWORKS_DIR=\"${BUILT_PRODUCTS_DIR}/AsturIOSAgentUITests-Runner.app/Frameworks\"\n  for fw in Testing XCTAutomationSupport XCTest XCTestCore XCTestSupport XCUIAutomation XCUnit; do\n    fw_name=\"${fw}.framework\"\n    dest_path=\"${FRAMEWORKS_DIR}/${fw_name}\"\n    if [ -d \"${dest_path}\" ] && [ ! -f \"${dest_path}/Info.plist\" ]; then\n      src_plist=$(find \"${DEVELOPER_PLATFORMS_DIR}/iPhoneOS.platform/Developer/Library\" -path \"*/${fw_name}/Info.plist\" -print -quit)\n      if [ -n \"${src_plist}\" ]; then\n        echo \"Copying Info.plist from ${src_plist} to ${dest_path}/Info.plist\"\n        cp \"${src_plist}\" \"${dest_path}/Info.plist\"\n      fi\n    fi\n  done\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		000000000000000000000050 /* Sources */ = {
@@ -333,6 +355,7 @@
 			buildSettings = {
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 47B479RX32;
 				INFOPLIST_FILE = HostApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -353,6 +376,7 @@
 			buildSettings = {
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 47B479RX32;
 				INFOPLIST_FILE = HostApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

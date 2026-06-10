@@ -347,6 +347,7 @@ export interface ElementLongPressOptions extends ElementActionOptions {
 export interface ElementFillOptions extends ElementWaitOptions {
   keyboard?: KeyboardDismissMode;
   clear?: boolean;
+  textInputMode?: 'paste' | 'type';
 }
 
 export type ElementDragTarget = Coordinates | { selector: ElementSelector };
@@ -571,6 +572,10 @@ export interface NativeAgentInfo {
 
 export type NativeAgentMethod =
   | 'agent.ping'
+  | 'app.launch'
+  | 'app.terminate'
+  | 'device.screenshot'
+  | 'device.viewport'
   | 'device.setOrientation'
   | 'tree.get'
   | 'element.find'
@@ -661,6 +666,10 @@ export interface NativeAgentDeviceOrientationParams {
 
 export interface NativeAgentCommandParamsMap {
   'agent.ping': undefined;
+  'app.launch': undefined;
+  'app.terminate': undefined;
+  'device.screenshot': undefined;
+  'device.viewport': undefined;
   'device.setOrientation': NativeAgentDeviceOrientationParams;
   'tree.get': undefined;
   'element.find': NativeAgentElementCommandParams;
@@ -683,6 +692,10 @@ export interface NativeAgentCommandParamsMap {
 
 export interface NativeAgentCommandResultMap {
   'agent.ping': NativeAgentInfo;
+  'app.launch': void;
+  'app.terminate': void;
+  'device.screenshot': { base64: string };
+  'device.viewport': Bounds;
   'device.setOrientation': void;
   'tree.get': MobileElementSnapshot;
   'element.find': MobileElementSnapshot | undefined;

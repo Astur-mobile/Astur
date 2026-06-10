@@ -3,11 +3,13 @@ import type {
   Coordinates,
   DoubleTapOptions,
   ElementDoubleTapOptions,
+  ElementFillOptions,
   ElementSelector,
   LongPressOptions,
   MobileElementSnapshot,
   MobileRole,
   RoleSelectorOptions,
+  SwipeGesture,
   TapOptions
 } from '@astur/protocol';
 import { AsturError } from './errors.js';
@@ -53,6 +55,19 @@ export const by = {
   }
 };
 
+export type ScrollDirection = 'up' | 'down' | 'left' | 'right';
+
+export interface ScrollIntoViewOptions extends WaitOptions {
+  /** Direction to scroll the content toward the target. `'down'` (the default) reveals content further down the screen. */
+  direction?: ScrollDirection;
+  /** Maximum number of scroll gestures to attempt before giving up. Defaults to `10`. */
+  maxScrolls?: number;
+  /** Duration of each scroll gesture in milliseconds. Defaults to `400`. */
+  durationMs?: number;
+  /** Scrollable region to swipe within. Defaults to the device viewport. */
+  container?: MobileLocator;
+}
+
 export class MobileLocator {
   readonly selector: ElementSelector;
   private readonly session: PlatformSession;
@@ -64,7 +79,7 @@ export class MobileLocator {
 
   async tap(options: WaitOptions & TapOptions = {}): Promise<void> {
     if (this.session.tapElement) {
-      await this.session.tapElement(this.selector, options);
+      await this.session.tapElement(this.selector, withKeyboardDefault(this.session, options));
       return;
     }
 
@@ -79,7 +94,10 @@ export class MobileLocator {
 
   async doubleTap(options: WaitOptions & DoubleTapOptions = {}): Promise<void> {
     if (this.session.doubleTapElement) {
-      await this.session.doubleTapElement(this.selector, options as WaitOptions & ElementDoubleTapOptions);
+      await this.session.doubleTapElement(
+        this.selector,
+        withKeyboardDefault(this.session, options) as WaitOptions & ElementDoubleTapOptions
+      );
       return;
     }
 
@@ -102,7 +120,7 @@ export class MobileLocator {
 
   async longPress(options: WaitOptions & LongPressOptions = {}): Promise<void> {
     if (this.session.longPressElement) {
-      await this.session.longPressElement(this.selector, options);
+      await this.session.longPressElement(this.selector, withKeyboardDefault(this.session, options));
       return;
     }
 
@@ -128,7 +146,7 @@ export class MobileLocator {
       await this.session.dragElement(
         this.selector,
         target instanceof MobileLocator ? { selector: target.selector } : target,
-        options
+        withKeyboardDefault(this.session, options)
       );
       return;
     }
@@ -153,9 +171,63 @@ export class MobileLocator {
     });
   }
 
-  async fill(value: string, options: WaitOptions = {}): Promise<void> {
+  /**
+   * Scrolls the surrounding scroll view until this element is visible, then
+   * resolves with its snapshot. Replaces the hand-written "swipe in a loop
+   * until visible" helpers that page objects otherwise have to craft, and
+   * hides the iOS-viewport / Android-tree platform difference for the scroll
+   * region. If the element is already visible no gesture is performed.
+   */
+  async scrollIntoView(options: ScrollIntoViewOptions = {}): Promise<MobileElementSnapshot> {
+    const direction = options.direction ?? 'down';
+    const maxScrolls = Math.max(0, options.maxScrolls ?? 10);
+    const durationMs = options.durationMs ?? 400;
+
+    const current = await this.currentMatch();
+    if (current?.visible) {
+      return current;
+    }
+
+    for (let attempt = 0; attempt < maxScrolls; attempt += 1) {
+      const region = options.container
+        ? (await options.container.waitForVisible({
+          timeout: options.timeout,
+          interval: options.interval
+        })).bounds
+        : await this.scrollRegion();
+
+      await this.session.swipe(scrollGesture(region, direction, durationMs));
+
+      const match = await this.currentMatch();
+      if (match?.visible) {
+        return match;
+      }
+    }
+
+    return this.waitForVisible({
+      ...options,
+      message: options.message
+        ?? `Timed out scrolling ${direction} to reveal ${formatSelector(this.selector)} after ${maxScrolls} scroll attempts`
+    });
+  }
+
+  private async currentMatch(): Promise<MobileElementSnapshot | undefined> {
+    return this.session.findElement
+      ? this.session.findElement(this.selector)
+      : findElement(await this.session.getTree(), this.selector);
+  }
+
+  private async scrollRegion(): Promise<Bounds> {
+    if (this.session.getViewport) {
+      return this.session.getViewport();
+    }
+
+    return (await this.session.getTree()).bounds;
+  }
+
+  async fill(value: string, options: WaitOptions & ElementFillOptions = {}): Promise<void> {
     if (this.session.fillElement) {
-      await this.session.fillElement(this.selector, value, options);
+      await this.session.fillElement(this.selector, value, withKeyboardDefault(this.session, options));
       return;
     }
 
@@ -332,6 +404,44 @@ export function centerOf(bounds: Bounds): Coordinates {
   return {
     x: Math.round(bounds.x + bounds.width / 2),
     y: Math.round(bounds.y + bounds.height / 2)
+  };
+}
+
+export function pointInBounds(bounds: Bounds, xRatio: number, yRatio: number): Coordinates {
+  return {
+    x: Math.round(bounds.x + bounds.width * xRatio),
+    y: Math.round(bounds.y + bounds.height * yRatio)
+  };
+}
+
+function scrollGesture(region: Bounds, direction: ScrollDirection, durationMs: number): SwipeGesture {
+  const near = 0.78;
+  const far = 0.25;
+
+  switch (direction) {
+    case 'up':
+      return { start: pointInBounds(region, 0.5, far), end: pointInBounds(region, 0.5, near), durationMs };
+    case 'left':
+      return { start: pointInBounds(region, far, 0.5), end: pointInBounds(region, near, 0.5), durationMs };
+    case 'right':
+      return { start: pointInBounds(region, near, 0.5), end: pointInBounds(region, far, 0.5), durationMs };
+    case 'down':
+    default:
+      return { start: pointInBounds(region, 0.5, near), end: pointInBounds(region, 0.5, far), durationMs };
+  }
+}
+
+function withKeyboardDefault<TOptions extends object>(
+  session: PlatformSession,
+  options: TOptions
+): TOptions & { keyboard?: TapOptions['keyboard'] } {
+  if ('keyboard' in options && options.keyboard !== undefined) {
+    return options as TOptions & { keyboard?: TapOptions['keyboard'] };
+  }
+
+  return {
+    ...options,
+    keyboard: session.capabilities.keyboard.dismiss
   };
 }
 

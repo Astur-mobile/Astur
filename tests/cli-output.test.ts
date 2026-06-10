@@ -68,7 +68,7 @@ describe('CLI platform-aware output', () => {
 
     const setup = files.find((file) => file.path === 'ASTUR_SETUP.md')?.contents;
     expect(setup).toContain('## Parallel Testing');
-    expect(setup).toContain('Astur does not yet auto-reserve devices');
+    expect(setup).toContain('Astur reserves each configured device per Playwright worker');
     expect(setup).toContain('## Flutter Apps');
     expect(setup).toContain('black-box native mobile app');
   });
@@ -148,6 +148,14 @@ describe('CLI platform-aware output', () => {
 
     expect(__testing.parseCodegenArgs(['--android', '--no-ui']).ui).toBe(false);
     expect(__testing.parseCodegenArgs(['--ios', '--no-launch']).launch).toBe(false);
+    expect(__testing.parseCodegenArgs(['--simulator'])).toMatchObject({
+      platform: 'ios',
+      deviceKind: 'simulator'
+    });
+    expect(__testing.parseCodegenArgs(['--emulator'])).toMatchObject({
+      platform: 'android',
+      deviceKind: 'emulator'
+    });
   });
 
   it('selects ready devices for codegen bootstrap', () => {
@@ -167,6 +175,13 @@ describe('CLI platform-aware output', () => {
         state: 'online'
       },
       {
+        id: 'real-ios-device',
+        name: 'iPhone',
+        platform: 'ios',
+        kind: 'real',
+        state: 'online'
+      },
+      {
         id: 'sim-1',
         name: 'iPhone 16 Pro',
         platform: 'ios',
@@ -177,10 +192,22 @@ describe('CLI platform-aware output', () => {
 
     expect(__testing.selectCodegenDevice(devices)?.id).toBe('emulator-5554');
     expect(__testing.selectCodegenDevice(devices, 'sim-1')?.id).toBe('sim-1');
+    expect(__testing.selectCodegenDevice(devices, undefined, 'simulator')?.id).toBe('sim-1');
+    expect(__testing.selectCodegenDevice(devices, undefined, 'real')?.id).toBe('real-ios-device');
     expect(__testing.selectCodegenDevice(devices, 'offline-device')).toBeUndefined();
+    expect(__testing.selectCodegenDevice([
+      devices[2],
+      {
+        id: 'sim-shutdown',
+        name: 'iPhone 17 Pro',
+        platform: 'ios',
+        kind: 'simulator',
+        state: 'shutdown'
+      }
+    ], undefined, 'simulator')?.id).toBe('sim-shutdown');
   });
 
-  it('uses fallback-capable automation for codegen sessions', () => {
+  it('lets core apply platform-aware automation defaults for codegen sessions', () => {
     const config = __testing.buildCodegenConfig({
       id: 'emulator-5554',
       name: 'Pixel 7',
@@ -196,7 +223,7 @@ describe('CLI platform-aware output', () => {
       deviceId: 'emulator-5554'
     });
 
-    expect(config.automation?.engine).toBe('auto');
+    expect(config.automation).toBeUndefined();
     expect(config.device).toEqual({ id: 'emulator-5554' });
   });
 
@@ -217,7 +244,36 @@ describe('CLI platform-aware output', () => {
     });
 
     expect(config.app).toEqual({ bundleId: 'com.astur.demo', path: undefined });
-    expect(config.automation?.engine).toBe('agent');
+    expect(config.automation).toBeUndefined();
+  });
+
+  it('describes iOS real-device codegen preparation before the Inspector is ready', () => {
+    const config = __testing.buildCodegenConfig({
+      id: 'real-ios-device',
+      name: 'iPhone',
+      platform: 'ios',
+      kind: 'real',
+      state: 'online'
+    }, {
+      help: false,
+      json: false,
+      ui: true,
+      launch: true,
+      platform: 'ios',
+      deviceId: 'real-ios-device'
+    });
+
+    const details = __testing.codegenPreparationDetails({
+      id: 'real-ios-device',
+      name: 'iPhone',
+      platform: 'ios',
+      kind: 'real',
+      state: 'online'
+    }, config);
+
+    expect(details.title).toBe('iOS real device');
+    expect(details.notes.join('\n')).toContain('First real-device runs can take a few minutes');
+    expect(details.notes.join('\n')).toContain('The mirror becomes usable after the first screen frame');
   });
 
   it('generates matcher-aware assertions in recorded code output', () => {
@@ -341,7 +397,8 @@ describe('CLI platform-aware output', () => {
       platform: 'android',
       kind: 'emulator'
     })).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'refresh' }),
+      expect.objectContaining({ id: 'refresh', label: 'Refresh Screen' }),
+      expect.objectContaining({ id: 'tree.refresh', label: 'Refresh UI Tree' }),
       expect.objectContaining({ id: 'orientation.portrait' }),
       expect.objectContaining({ id: 'orientation.landscape' }),
       expect.objectContaining({ id: 'keyboard.dismiss' }),
@@ -356,7 +413,8 @@ describe('CLI platform-aware output', () => {
       platform: 'ios',
       kind: 'simulator'
     })).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'refresh' }),
+      expect.objectContaining({ id: 'refresh', label: 'Refresh Screen' }),
+      expect.objectContaining({ id: 'tree.refresh', label: 'Refresh UI Tree' }),
       expect.objectContaining({ id: 'orientation.portrait' }),
       expect.objectContaining({ id: 'orientation.landscape' }),
       expect.objectContaining({ id: 'keyboard.dismiss' }),
@@ -376,5 +434,20 @@ describe('CLI platform-aware output', () => {
       platform: 'ios',
       kind: 'real'
     }).find((action) => action.id === 'navigation.back')).toBeUndefined();
+  });
+
+  it('renders non-recording direct action controls in the Inspector UI', () => {
+    const html = __testing.inspectorServer.buildInspectorHtml({
+      id: 'emulator-5554',
+      name: 'Pixel 7',
+      platform: 'android',
+      kind: 'emulator',
+      state: 'online'
+    });
+
+    expect(html).toContain('id="interact-mode-btn"');
+    expect(html).toContain('id="element-tap-btn"');
+    expect(html).toContain('id="element-fill-input"');
+    expect(html).toContain("type: 'direct_action'");
   });
 });

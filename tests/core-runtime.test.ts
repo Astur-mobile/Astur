@@ -131,6 +131,32 @@ describe('AsturRuntime', () => {
     expect(driver.session.getTree).not.toHaveBeenCalled();
   });
 
+  it('returns the native viewport when the platform exposes it', async () => {
+    const driver = createDriver('ios', 'sim-1');
+    driver.session.getViewport = vi.fn(async () => ({ x: 0, y: 0, width: 390, height: 844 }));
+    const runtime = new AsturRuntime().register(driver);
+    const device = await runtime.createDevice({ platform: 'ios' });
+
+    await expect(device.viewport()).resolves.toEqual({ x: 0, y: 0, width: 390, height: 844 });
+    expect(driver.session.getViewport).toHaveBeenCalledOnce();
+    expect(driver.session.getTree).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the root tree bounds for viewport when the platform has no native viewport command', async () => {
+    const driver = createDriver('android', 'emulator-5554');
+    driver.session.getTree = vi.fn(async () => ({
+      type: 'root',
+      enabled: true,
+      visible: true,
+      bounds: { x: 0, y: 0, width: 1080, height: 2400 },
+      children: []
+    }));
+    const runtime = new AsturRuntime().register(driver);
+    const device = await runtime.createDevice({ platform: 'android' });
+
+    await expect(device.viewport()).resolves.toEqual({ x: 0, y: 0, width: 1080, height: 2400 });
+  });
+
   it('exposes gesture and system navigation helpers on the device', async () => {
     const driver = createDriver('android', 'emulator-5554');
     const runtime = new AsturRuntime().register(driver);
@@ -161,6 +187,22 @@ describe('AsturRuntime', () => {
     expect(driver.session.pressKey).toHaveBeenNthCalledWith(1, 'BACK');
     expect(driver.session.pressKey).toHaveBeenNthCalledWith(2, 'HOME');
     expect(driver.session.pressKey).toHaveBeenNthCalledWith(3, 'APP_SWITCH');
+  });
+
+  it('exposes soft keyboard helpers on the device', async () => {
+    const driver = createDriver('ios', 'sim-1');
+    driver.session.getKeyboardState = vi.fn(async () => ({ visible: true }));
+    driver.session.dismissKeyboard = vi.fn();
+    const runtime = new AsturRuntime().register(driver);
+    const device = await runtime.createDevice({ platform: 'ios' });
+
+    await expect(device.keyboard.isVisible()).resolves.toBe(true);
+    await device.keyboard.dismiss();
+    await device.keyboard.hide();
+    await device.keyboard.show();
+
+    expect(driver.session.getKeyboardState).toHaveBeenCalledTimes(2);
+    expect(driver.session.dismissKeyboard).toHaveBeenCalledTimes(2);
   });
 
   it('exposes native and webview context helpers through the device', async () => {

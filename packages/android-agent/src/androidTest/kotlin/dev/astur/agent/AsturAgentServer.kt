@@ -131,13 +131,21 @@ class AsturAgentServer(
                 .put("result", toJsonValue(result.result))
                 .put("data", toJsonValue(result.result))
         } else {
+            val details = result.error?.details
             json.put(
                 "error",
                 JSONObject()
                     .put("code", result.error?.code ?: "UNKNOWN")
                     .put("message", result.error?.message ?: "Unknown Android agent error.")
-                    .put("details", toJsonValue(result.error?.details))
+                    .put("details", toJsonValue(details))
             )
+
+            if (details is Map<*, *>) {
+                val diagnostics = details["diagnostics"]
+                if (diagnostics != null) {
+                    json.put("diagnostics", toJsonValue(diagnostics))
+                }
+            }
         }
 
         return json

@@ -36,6 +36,7 @@ import type {
   AsturConfig,
   AppResetOptions,
   AppUnderTest,
+  Bounds,
   WebViewEndpoint,
   WebViewSelector
 } from '@astur/protocol';
@@ -72,6 +73,7 @@ export interface PlatformSession {
   unlockDevice(): Promise<void>;
   isDeviceLocked(): Promise<boolean>;
   getTree(): Promise<MobileElementSnapshot>;
+  getViewport?(): Promise<Bounds>;
   subscribeTree?(options?: UiTreeSubscribeOptions): AsyncIterable<UiTreeUpdate>;
   hitTest?(point: Coordinates): Promise<MobileElementSnapshot | undefined>;
   highlightElement?(selector: ElementSelector): Promise<void>;
@@ -256,6 +258,30 @@ export class AsturDevice {
       }
 
       await this.session.dismissKeyboard();
+    },
+
+    hide: async (): Promise<void> => {
+      await this.keyboard.dismiss();
+    },
+
+    show: async (target?: MobileLocator | ElementSelector): Promise<void> => {
+      if (!target) {
+        const visible = this.session.getKeyboardState
+          ? (await this.session.getKeyboardState().catch((): KeyboardState => ({ visible: false }))).visible
+          : false;
+
+        if (visible) {
+          return;
+        }
+
+        throw new AsturError(
+          'KEYBOARD_TARGET_REQUIRED',
+          'Showing the mobile keyboard requires a text-input locator. Use device.keyboard.show(device.getById("field")) or locator.tap({ keyboard: "preserve" }).'
+        );
+      }
+
+      const locator = target instanceof MobileLocator ? target : this.find(target);
+      await locator.tap({ keyboard: 'preserve' });
     }
   };
 
@@ -467,6 +493,14 @@ export class AsturDevice {
 
   async tree(): Promise<MobileElementSnapshot> {
     return this.session.getTree();
+  }
+
+  async viewport(): Promise<Bounds> {
+    if (this.session.getViewport) {
+      return this.session.getViewport();
+    }
+
+    return (await this.session.getTree()).bounds;
   }
 
   async openWeb(url: string): Promise<void> {

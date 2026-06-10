@@ -98,7 +98,7 @@ export class AndroidDriver implements PlatformDriver {
 
   constructor(options: AndroidDriverOptions = {}) {
     this.adbPath = options.adbPath ?? process.env.ASTUR_ADB ?? 'adb';
-    this.emulatorPath = options.emulatorPath ?? process.env.ASTUR_EMULATOR ?? 'emulator';
+    this.emulatorPath = options.emulatorPath ?? process.env.ASTUR_EMULATOR ?? resolveEmulatorPath();
     this.aaptPath = options.aaptPath ?? process.env.ASTUR_AAPT;
   }
 
@@ -202,8 +202,14 @@ export class AndroidDriver implements PlatformDriver {
     }
 
     if (!device) {
-      throw new AsturError('DEVICE_NOT_FOUND', 'No matching Android device is online.', {
-        selector: resolvedCapabilities.device,
+      const selector = resolvedCapabilities.device;
+      const pinnedEmulator = selector.kind === 'emulator' || Boolean(selector.id?.startsWith('emulator-'));
+      const hint = pinnedEmulator && !selector.avd
+        ? ' To let Astur boot it automatically when it is offline, also set device.avd (and optionally autoBoot: true) — an emulator cannot be started from its id alone.'
+        : '';
+
+      throw new AsturError('DEVICE_NOT_FOUND', `No matching Android device is online.${hint}`, {
+        selector,
         devices
       });
     }
@@ -400,16 +406,40 @@ export class AndroidDriver implements PlatformDriver {
     }
 
     args.push(...(selector.emulatorArgs ?? []));
-    spawnDetached(this.emulatorPath, args);
-    await this.waitForBoot(selector);
+
+    const child = spawnDetached(this.emulatorPath, args);
+    let launchError: AsturError | undefined;
+    child.once('error', (error: Error) => {
+      launchError = new AsturError(
+        'EMULATOR_LAUNCH_FAILED',
+        `Could not launch the Android emulator "${this.emulatorPath}": ${error.message}. Install the Android SDK emulator and make sure it is on PATH, or set ASTUR_EMULATOR / ANDROID_HOME.`,
+        { avd: selector.avd, emulatorPath: this.emulatorPath }
+      );
+    });
+    child.once('exit', (code, signal) => {
+      if (code != null && code !== 0) {
+        launchError = new AsturError(
+          'EMULATOR_LAUNCH_FAILED',
+          `The Android emulator for AVD "${selector.avd}" exited (code ${code}) before finishing boot. The AVD name may be wrong, or an instance of it may already be running.`,
+          { avd: selector.avd, code, signal }
+        );
+      }
+    });
+
+    await this.waitForBoot(selector, () => launchError);
   }
 
-  private async waitForBoot(selector: DeviceSelector): Promise<void> {
+  private async waitForBoot(selector: DeviceSelector, getLaunchError?: () => AsturError | undefined): Promise<void> {
     const timeout = selector.bootTimeout ?? 120_000;
     const startedAt = Date.now();
     let lastDevices: DeviceInfo[] = [];
 
     while (Date.now() - startedAt <= timeout) {
+      const launchError = getLaunchError?.();
+      if (launchError) {
+        throw launchError;
+      }
+
       lastDevices = await this.listDevices().catch(() => []);
       const device = selectDevice(lastDevices, { ...selector, kind: 'emulator' });
 
@@ -1547,6 +1577,21 @@ async function waitForAndroidAgent(
       cause: lastError
     }
   );
+}
+
+function resolveEmulatorPath(): string {
+  const executable = process.platform === 'win32' ? 'emulator.exe' : 'emulator';
+  const sdkRoot = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT;
+
+  if (sdkRoot) {
+    const candidate = join(sdkRoot, 'emulator', executable);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Fall back to PATH lookup so an explicitly-configured emulator still works.
+  return executable;
 }
 
 function resolveAaptPath(): string | undefined {

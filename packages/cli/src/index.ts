@@ -6,11 +6,12 @@ import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAndroidDriver } from '@astur/android';
-import { AsturRuntime, AsturDevice } from '@astur/core';
+import { AsturError, AsturRuntime, AsturDevice } from '@astur/core';
 import { createIosDriver } from '@astur/ios';
 import type {
   AsturConfig,
   DeviceInfo,
+  DeviceKind,
   DoctorCheck,
   ElementSelector,
   LocatorSuggestion,
@@ -32,6 +33,7 @@ interface CodegenArgs {
   ui: boolean;
   launch: boolean;
   platform?: PlatformName;
+  deviceKind?: DeviceKind;
   deviceId?: string;
   appPath?: string;
   appId?: string;
@@ -149,7 +151,7 @@ async function codegen(args: string[]): Promise<void> {
 
   const runtime = createRuntime();
   const available = await runtime.listDevices(parsed.platform);
-  const selected = selectCodegenDevice(available, parsed.deviceId);
+  const selected = selectCodegenDevice(available, parsed.deviceId, parsed.deviceKind);
 
   if (!selected) {
     printHeader('codegen', 'Playwright-style mobile inspector bootstrap');
@@ -165,22 +167,25 @@ async function codegen(args: string[]): Promise<void> {
 
     // Create device without fetching tree — server streams everything
     const config = buildCodegenConfig(selected, parsed);
+    printCodegenPreparation(selected, config);
     let device: AsturDevice;
     let selectedDevice = selected;
     try {
-      device = await runtime.createDevice(config);
+      device = await createCodegenDevice(runtime, config, {
+        forceIosAppInstall: selectedDevice.platform === 'ios' && Boolean(parsed.appPath)
+      });
       if (parsed.launch && config.app) {
         await device.app.launch();
       }
     } catch (err) {
-      console.error(`\n${colors.red('Failed to connect to device:')} ${String(err)}`);
+      console.error(`\n${colors.red('Failed to connect to device:')} ${formatCodegenConnectionError(err)}`);
       process.exitCode = 1;
       return;
     }
 
     let handle: { port: number; close(): void };
     try {
-      handle = await startInspectorServer(device.inspector({ pollIntervalMs: 500 }), selectedDevice, {
+      handle = await startInspectorServer(device.inspector(codegenInspectorOptions(selectedDevice)), selectedDevice, {
         captureScreenshot: () => device.screenshot().catch(() => undefined) as Promise<Buffer | undefined>,
         performDeviceAction: (action) => runInspectorDeviceAction(device, action),
         performTap: (point) => device.tap(point),
@@ -196,14 +201,16 @@ async function codegen(args: string[]): Promise<void> {
               appId: identifier,
               launch: false
             });
-            const nextDevice = await runtime.createDevice(nextConfig);
+            const nextDevice = await createCodegenDevice(runtime, nextConfig, {
+              forceIosAppInstall: selectedDevice.platform === 'ios' && hasConfiguredAppPath(nextConfig)
+            });
             await nextDevice.app.launch({ app: { bundleId: identifier } });
             const previousDevice = device;
             device = nextDevice;
             await previousDevice.close().catch(() => undefined);
             return {
               device: selectedDevice,
-              inspector: nextDevice.inspector({ pollIntervalMs: 500 })
+              inspector: nextDevice.inspector(codegenInspectorOptions(selectedDevice))
             };
           }
 
@@ -212,7 +219,7 @@ async function codegen(args: string[]): Promise<void> {
         listDevices: () => runtime.listDevices(),
         switchDevice: async (deviceId) => {
           const devices = await runtime.listDevices();
-          const next = selectCodegenDevice(devices, deviceId);
+          const next = selectCodegenDevice(devices, deviceId, parsed.deviceKind);
           if (!next) {
             throw new Error(`No ready device found for ${deviceId}.`);
           }
@@ -223,20 +230,23 @@ async function codegen(args: string[]): Promise<void> {
             deviceId: next.id,
             launch: false
           });
-          const nextDevice = await runtime.createDevice(nextConfig);
+          const nextDevice = await createCodegenDevice(runtime, nextConfig, {
+            forceIosAppInstall: next.platform === 'ios' && hasConfiguredAppPath(nextConfig)
+          });
           const previousDevice = device;
           device = nextDevice;
           selectedDevice = next;
           await previousDevice.close().catch(() => undefined);
           return {
             device: next,
-            inspector: nextDevice.inspector({ pollIntervalMs: 500 })
+            inspector: nextDevice.inspector(codegenInspectorOptions(next))
           };
         },
         onListen: (port) => {
           const url = `http://localhost:${port}`;
           console.log(`\n${colors.bold('device')}   ${selectedDevice.platform} ${selectedDevice.name} (${selectedDevice.id})`);
           console.log(`${colors.bold('ui')}       ${colors.green('live')} ${colors.dim(url)}`);
+          console.log(`${colors.bold('ready')}    ${colors.yellow('pending')} ${colors.dim('the mirror becomes live on the first screen frame; the UI tree can finish loading separately')}`);
           openBrowser(url);
         }
       });
@@ -247,13 +257,22 @@ async function codegen(args: string[]): Promise<void> {
       return;
     }
 
+    // Guard against re-entrancy: an impatient user mashing Ctrl-C would
+    // otherwise fire cleanup() repeatedly, each call re-attaching exit/error
+    // listeners to the agent ChildProcess (the MaxListenersExceededWarning) and
+    // racing multiple teardown chains.
+    let cleaningUp = false;
     const cleanup = async () => {
+      if (cleaningUp) {
+        return;
+      }
+      cleaningUp = true;
       handle.close();
       await device.close().catch(() => undefined);
       process.exit(0);
     };
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
+    process.once('SIGINT', cleanup);
+    process.once('SIGTERM', cleanup);
     await new Promise<never>(() => undefined);
     return;
   }
@@ -425,6 +444,9 @@ ${colors.bold('Usage')}
 ${colors.bold('Options')}
   --android            Target Android devices only
   --ios                Target iOS devices only
+  --emulator           Target Android emulators only
+  --simulator          Target iOS simulators only
+  --real               Target real devices only
   --platform <name>    Explicit platform: android or ios
   --device <id>        Prefer a specific device id/UDID
   --app <path>         App path to install/use for launch (.apk, .app, .ipa)
@@ -548,6 +570,17 @@ function parseCodegenArgs(args: string[]): CodegenArgs {
       case '--ios':
         parsed.platform = 'ios';
         break;
+      case '--emulator':
+        parsed.platform = 'android';
+        parsed.deviceKind = 'emulator';
+        break;
+      case '--simulator':
+        parsed.platform = 'ios';
+        parsed.deviceKind = 'simulator';
+        break;
+      case '--real':
+        parsed.deviceKind = 'real';
+        break;
       case '--platform': {
         const value = args[index + 1];
         if (!value) {
@@ -604,14 +637,21 @@ function parseCodegenArgs(args: string[]): CodegenArgs {
   return parsed;
 }
 
-function selectCodegenDevice(devices: DeviceInfo[], deviceId?: string): DeviceInfo | undefined {
+function selectCodegenDevice(
+  devices: DeviceInfo[],
+  deviceId?: string,
+  deviceKind?: DeviceKind
+): DeviceInfo | undefined {
   const isReady = (device: DeviceInfo) => device.state === 'online' || device.state === 'booted';
+  const isSelectable = (device: DeviceInfo) => isReady(device) || (deviceKind === 'simulator' && device.state === 'shutdown');
+  const matchesKind = (device: DeviceInfo) => !deviceKind || device.kind === deviceKind;
 
   if (deviceId) {
-    return devices.find((device) => device.id === deviceId && isReady(device));
+    return devices.find((device) => device.id === deviceId && matchesKind(device) && isSelectable(device));
   }
 
-  return devices.find(isReady);
+  return devices.find((device) => matchesKind(device) && isReady(device))
+    ?? devices.find((device) => matchesKind(device) && isSelectable(device));
 }
 
 async function bootstrapCodegen(runtime: AsturRuntime, selected: DeviceInfo, parsed: CodegenArgs): Promise<CodegenBootstrap> {
@@ -655,11 +695,6 @@ function buildCodegenConfig(selected: DeviceInfo, parsed: CodegenArgs): AsturCon
   const appId = parsed.appId ?? defaultCodegenAppId(selected.platform);
   const config: AsturConfig = {
     platform: selected.platform,
-    automation: {
-      engine: selected.platform === 'ios' ? 'agent' : 'auto',
-      commandTimeoutMs: selected.platform === 'ios' ? 30_000 : undefined,
-      startupTimeoutMs: selected.platform === 'ios' ? 60_000 : undefined
-    },
     device: {
       id: selected.id
     }
@@ -681,7 +716,143 @@ function buildCodegenConfig(selected: DeviceInfo, parsed: CodegenArgs): AsturCon
     path: parsed.appPath,
     bundleId: appId
   };
+  config.timeout = 60_000;
+  config.agent = {
+    mode: 'required',
+    install: true,
+    legacyFallback: 'never',
+    launchTimeout: 60_000,
+    commandTimeout: 20_000
+  };
   return config;
+}
+
+function printCodegenPreparation(selected: DeviceInfo, config: AsturConfig): void {
+  const details = codegenPreparationDetails(selected, config);
+  console.log(`\n${colors.bold('status')}   ${colors.yellow('preparing')} ${details.title}`);
+  for (const detail of details.notes) {
+    console.log(`         ${colors.dim(detail)}`);
+  }
+}
+
+function codegenPreparationDetails(
+  selected: DeviceInfo,
+  config: AsturConfig
+): { title: string; notes: string[] } {
+  if (selected.platform === 'ios') {
+    const notes = [
+      'Astur is installing/starting the bundled XCUITest agent and preparing the app.',
+      'The mirror becomes usable after the first screen frame; the UI tree may continue loading separately.'
+    ];
+
+    if (selected.kind === 'real') {
+      notes.unshift('First real-device runs can take a few minutes while Xcode builds and signs the agent.');
+    }
+
+    if (!config.app) {
+      notes.push('No app was provided, so Astur will inspect the currently available device state.');
+    }
+
+    return {
+      title: selected.kind === 'real' ? 'iOS real device' : 'iOS simulator',
+      notes
+    };
+  }
+
+  return {
+    title: selected.kind === 'emulator' ? 'Android emulator' : 'Android device',
+    notes: [
+      'Astur is connecting to the device, preparing automation services, and launching the app when configured.',
+      'The mirror becomes usable after the first screen frame; the UI tree may continue loading separately.'
+    ]
+  };
+}
+
+function codegenInspectorOptions(device: DeviceInfo): { pollIntervalMs: number } {
+  return {
+    pollIntervalMs: device.platform === 'ios' ? 2_000 : 500
+  };
+}
+
+function formatCodegenConnectionError(error: unknown): string {
+  if (!(error instanceof AsturError)) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  const lines = [`${error.code}: ${error.message}`];
+  const details = isRecord(error.details) ? error.details : undefined;
+  const bundleId = typeof details?.bundleId === 'string' ? details.bundleId : undefined;
+
+  switch (error.code) {
+    case 'IOS_APP_INSTALL_SIGNATURE_INVALID':
+      lines.push(
+        'Fix: rebuild or re-sign the IPA with a non-expired provisioning profile that includes this iPhone UDID, then run codegen again.'
+      );
+      break;
+    case 'IOS_APP_SIGNATURE_NOT_TRUSTED':
+      lines.push(
+        'Fix: install an IPA signed for this iPhone UDID, trust the developer profile on the phone, and make sure --app-id matches the IPA bundle id.'
+      );
+      if (bundleId) {
+        lines.push(`Bundle id: ${bundleId}`);
+      }
+      break;
+    case 'IOS_DEVELOPMENT_TEAM_REQUIRED':
+      lines.push('Fix: set ASTUR_IOS_DEVELOPMENT_TEAM to your Apple development team id, then run codegen again.');
+      break;
+    case 'IOS_SIGNING_KEYCHAIN_LOCKED':
+      lines.push('Fix: unlock the macOS login keychain or allow codesign/Xcode access to the Apple Development certificate.');
+      break;
+    case 'IOS_AGENT_HOST_REQUIRED':
+      lines.push('Fix: set ASTUR_IOS_AGENT_HOST to a Mac IP address reachable by the iPhone.');
+      break;
+  }
+
+  const commandOutput = typeof details?.commandOutput === 'string' ? details.commandOutput.trim() : '';
+  if (commandOutput) {
+    const tail = commandOutput.split(/\r?\n/).slice(-12).join('\n');
+    lines.push(`${colors.dim('install output:')}\n${tail}`);
+  }
+
+  const xcodebuildOutput = typeof details?.xcodebuildOutput === 'string' ? details.xcodebuildOutput.trim() : '';
+  if (xcodebuildOutput) {
+    const tail = xcodebuildOutput.split(/\r?\n/).slice(-12).join('\n');
+    lines.push(`${colors.dim('xcodebuild tail:')}\n${tail}`);
+  }
+
+  return lines.join('\n');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+async function createCodegenDevice(
+  runtime: AsturRuntime,
+  config: AsturConfig,
+  options: { forceIosAppInstall?: boolean } = {}
+): Promise<AsturDevice> {
+  if (!options.forceIosAppInstall || config.platform !== 'ios') {
+    return runtime.createDevice(config);
+  }
+
+  const previous = process.env.ASTUR_IOS_APP_FORCE_INSTALL;
+  process.env.ASTUR_IOS_APP_FORCE_INSTALL = '1';
+  try {
+    return await runtime.createDevice(config);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.ASTUR_IOS_APP_FORCE_INSTALL;
+    } else {
+      process.env.ASTUR_IOS_APP_FORCE_INSTALL = previous;
+    }
+  }
+}
+
+function hasConfiguredAppPath(config: AsturConfig): boolean {
+  return typeof config.app === 'string'
+    ? config.app.length > 0
+    : Boolean(config.app?.path);
 }
 
 function defaultCodegenAppId(platform: PlatformName): string | undefined {
@@ -701,6 +872,7 @@ function defaultCodegenAppId(platform: PlatformName): string | undefined {
 async function runInspectorDeviceAction(device: AsturDevice, action: InspectorDeviceAction): Promise<void> {
   switch (action) {
     case 'refresh':
+    case 'tree.refresh':
       return;
     case 'orientation.portrait':
       await device.orientation.portrait();
@@ -923,6 +1095,7 @@ export const __testing = {
   parseCodegenArgs,
   selectCodegenDevice,
   buildCodegenConfig,
+  codegenPreparationDetails,
   inspectorServer: inspectorServerTesting
 };
 

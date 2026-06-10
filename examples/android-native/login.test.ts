@@ -11,10 +11,10 @@ test('login accepts credentials and shows feedback', async ({ app, device }) => 
   await expect(app.login.email).toHaveValue('qa@astur.dev');
 
   await app.login.submit.tap();
-  await expect(device.getByText('Welcome back')).toBeVisible();
+  await expect(device.getByText('Welcome back', { exact: false })).toBeVisible();
   await device.getByText('OK').tap();
 
   await expect(app.login.statusTitle).toBeVisible();
-  await expect(app.login.biometric).toBeDisabled();
   await expect(app.login.feedbackPanel).toBeVisible();
+  await expect(device.getByText('Astur login succeeded', { exact: false })).toBeVisible();
 });

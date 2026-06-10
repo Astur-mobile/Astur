@@ -1,0 +1,7 @@
+# Enables the "Sponsor" button on this repository.
+# After onboarding GitHub Sponsors (with Stripe Connect) for the org/account,
+# adjust the handles below. Add other platforms (open_collective, polar, etc.)
+# as you connect them.
+github: [Astur-mobile]
+# open_collective: astur
+# polar: astur

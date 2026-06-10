@@ -1,8 +1,10 @@
 import {
   by,
+  centerOf,
+  flattenTree,
+  pointInBounds,
   type AsturDevice,
   type Bounds,
-  type Coordinates,
   type MobileElementSnapshot,
   type MobileLocator
 } from '@astur/test';
@@ -43,6 +45,10 @@ export class AsturDemoApp {
     this.web = new WebLabPage(device);
     this.menu = new MenuDrawer(device);
     this.nav = new BottomNavigation(device);
+  }
+
+  get platform(): AsturDevice['deviceInfo']['platform'] {
+    return this.device.deviceInfo.platform;
   }
 
   async launch(): Promise<void> {
@@ -211,20 +217,34 @@ export class HomePage {
   }
 
   async revealTapLaboratory(): Promise<void> {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (await this.tapLabCard.isVisible({ timeout: 300 })) {
+    if (!isIos(this.device)) {
+      await this.tapLabCard.scrollIntoView({ direction: 'down', maxScrolls: 5 });
+      return;
+    }
+
+    // iOS-specific: the tap counters render in a row just below the tap target.
+    // It is not enough for the target to be "visible" — it must have room
+    // beneath it in the viewport so the counters are on screen too, because
+    // iosTapLabCounters() only reads counters that the tree reports as visible.
+    // Do NOT simplify this to a plain scrollIntoView: that leaves the counters
+    // clipped at the bottom edge and the counter read fails.
+    const viewport = await this.device.viewport();
+    const bottomLimit = viewport.y + viewport.height - 140;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const target = await this.tapTarget.snapshot({ timeout: 400 }).catch(() => undefined);
+      if (target?.visible && target.bounds.y + target.bounds.height <= bottomLimit) {
         return;
       }
 
-      const screen = await this.screen.snapshot({ timeout: 1_000 });
       await this.device.swipe({
-        start: pointIn(screen.bounds, 0.5, 0.82),
-        end: pointIn(screen.bounds, 0.5, 0.25),
-        durationMs: 550
+        start: pointInBounds(viewport, 0.5, 0.82),
+        end: pointInBounds(viewport, 0.5, 0.25),
+        durationMs: 350
       });
     }
 
-    await this.tapLabCard.waitForVisible({ timeout: 4_000 });
+    await this.tapTarget.waitForVisible({ timeout: 4_000 });
   }
 
   async tapLabCounters(): Promise<TapLabCounters> {
@@ -246,18 +266,39 @@ export class HomePage {
   }
 
   private async iosTapLabCounters(): Promise<TapLabCounters> {
-    const nodes = (await this.device.findMany([
-      by.text('SINGLE TAPS'),
-      by.text('DOUBLE TAPS'),
-      by.text('LONG PRESS'),
-      ...Array.from({ length: 21 }, (_, value) => by.text(String(value)))
-    ])).filter((node) => node.visible);
+    // Read the accessibility tree once and locate each counter by its visible
+    // label, then the digit rendered beneath it — the same geometry approach
+    // the Android path uses. This replaces a multi-selector findMany scan that
+    // times out on the iOS simulator, where XCTest re-enumerates every static
+    // text on the (text-heavy) screen for each selector.
+    const nodes = flattenTree(await this.device.tree()).filter((node) => node.visible);
 
     return {
       singleTaps: readCounterFromNodes(nodes, 'SINGLE TAPS'),
       doubleTaps: readCounterFromNodes(nodes, 'DOUBLE TAPS'),
       longPresses: readCounterFromNodes(nodes, 'LONG PRESS')
     };
+  }
+
+  async visibleIosTapLabCounterValues(values: number[]): Promise<number[]> {
+    const target = await this.tapTarget.snapshot({ timeout: 1_000 });
+    const candidates: Array<{ value: number; node: MobileElementSnapshot }> = [];
+
+    for (const value of values) {
+      candidates.push(
+        ...(await this.device.getByText(String(value)).queryAll()).map((node) => ({ value, node }))
+      );
+    }
+
+    const uniqueCounters = uniqueByBounds(candidates.map(({ node }) => node))
+      .filter((node) => node.visible)
+      .filter((node) => node.bounds.y >= target.bounds.y + target.bounds.height - 4)
+      .filter((node) => horizontalOverlap(node.bounds, target.bounds) > 0)
+      .sort((a, b) => a.bounds.x - b.bounds.x);
+
+    return uniqueCounters
+      .map((node) => candidates.find((candidate) => candidate.node === node || sameBounds(candidate.node, node))?.value)
+      .filter((value): value is number => value !== undefined);
   }
 }
 
@@ -309,6 +350,10 @@ export class LoginPage {
   async signIn(email: string, password: string): Promise<void> {
     await this.enterCredentials(email, password);
     await this.submit.tap();
+  }
+
+  async revealFeedbackControls(): Promise<void> {
+    await this.biometric.scrollIntoView({ direction: 'down', maxScrolls: 4 });
   }
 }
 
@@ -393,45 +438,18 @@ export class FormsPage {
   }
 
   async revealTextInput(): Promise<void> {
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      if (await this.textInput.isVisible({ timeout: 300 })) {
-        return;
-      }
-
-      const screen = await this.device.tree();
-      await this.device.swipe({
-        start: pointIn(screen.bounds, 0.5, 0.35),
-        end: pointIn(screen.bounds, 0.5, 0.82),
-        durationMs: 450
-      });
-    }
-
-    await this.textInput.waitForVisible({ timeout: 4_000 });
+    await this.textInput.scrollIntoView({ direction: 'up', maxScrolls: 6 });
   }
 
   async revealSlider(): Promise<void> {
-    const scan: Array<{ startY: number; endY: number; attempts: number }> = [
-      { startY: 0.35, endY: 0.82, attempts: 2 },
-      { startY: 0.78, endY: 0.35, attempts: 4 },
-      { startY: 0.35, endY: 0.82, attempts: 2 }
-    ];
-
-    for (const direction of scan) {
-      for (let attempt = 0; attempt < direction.attempts; attempt += 1) {
-        if (await this.sliderLabel.isVisible({ timeout: 300 })) {
-          return;
-        }
-
-        const screen = await this.screen.snapshot({ timeout: 1_000 });
-        await this.device.swipe({
-          start: pointIn(screen.bounds, 0.5, direction.startY),
-          end: pointIn(screen.bounds, 0.5, direction.endY),
-          durationMs: 450
-        });
-      }
+    // The slider can sit above or below the current viewport depending on where
+    // the previous step left the form, so search down first, then up.
+    // scrollIntoView returns immediately if it is already on screen.
+    try {
+      await this.sliderLabel.scrollIntoView({ direction: 'down', maxScrolls: 4 });
+    } catch {
+      await this.sliderLabel.scrollIntoView({ direction: 'up', maxScrolls: 4 });
     }
-
-    await this.sliderLabel.waitForVisible({ timeout: 4_000 });
   }
 
   async sliderPercent(): Promise<number> {
@@ -459,27 +477,14 @@ export class FormsPage {
     const bounds = await this.sliderTrackBounds();
 
     await this.device.swipe({
-      start: pointIn(bounds, 0.5, 0.5),
-      end: pointIn(bounds, target / 100, 0.5),
+      start: pointInBounds(bounds, 0.5, 0.5),
+      end: pointInBounds(bounds, target / 100, 0.5),
       durationMs: 650
     });
   }
 
   async revealActionButtons(): Promise<void> {
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      if (await this.activeButton.isVisible({ timeout: 300 })) {
-        return;
-      }
-
-      const screen = await this.screen.snapshot({ timeout: 1_000 });
-      await this.device.swipe({
-        start: pointIn(screen.bounds, 0.5, 0.82),
-        end: pointIn(screen.bounds, 0.5, 0.35),
-        durationMs: 450
-      });
-    }
-
-    await this.activeButton.waitForVisible({ timeout: 4_000 });
+    await this.activeButton.scrollIntoView({ direction: 'down', maxScrolls: 4 });
   }
 
   private async sliderTrackBounds(): Promise<Bounds> {
@@ -513,20 +518,7 @@ export class FormsPage {
   }
 
   async revealUploadCard(): Promise<void> {
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      if (await this.uploadCard.isVisible({ timeout: 300 })) {
-        return;
-      }
-
-      const screen = await this.screen.snapshot({ timeout: 1_000 });
-      await this.device.swipe({
-        start: pointIn(screen.bounds, 0.5, 0.82),
-        end: pointIn(screen.bounds, 0.5, 0.25),
-        durationMs: 550
-      });
-    }
-
-    await this.uploadCard.waitForVisible({ timeout: 4_000 });
+    await this.uploadCard.scrollIntoView({ direction: 'down', maxScrolls: 4 });
   }
 
   async chooseFirstVisibleMedia(): Promise<void> {
@@ -567,19 +559,14 @@ export class SwipePage {
   async swipeCarouselLeft(): Promise<void> {
     const carousel = await this.carousel.snapshot();
     await this.device.swipe({
-      start: pointIn(carousel.bounds, 0.85, 0.5),
-      end: pointIn(carousel.bounds, 0.15, 0.5),
+      start: pointInBounds(carousel.bounds, 0.85, 0.5),
+      end: pointInBounds(carousel.bounds, 0.15, 0.5),
       durationMs: 600
     });
   }
 
   async scrollToVerticalCard(): Promise<void> {
-    const screen = await this.screen.snapshot();
-    await this.device.gestures.swipe({
-      start: pointIn(screen.bounds, 0.5, 0.82),
-      end: pointIn(screen.bounds, 0.5, 0.28),
-      durationMs: 700
-    });
+    await this.verticalCard.scrollIntoView({ direction: 'down' });
   }
 }
 
@@ -710,11 +697,11 @@ export class MenuDrawer {
 }
 
 function findNodeById(root: MobileElementSnapshot, id: string): MobileElementSnapshot | undefined {
-  return flatten(root).find((node) => node.id === id);
+  return flattenTree(root).find((node) => node.id === id);
 }
 
 function readCounter(root: MobileElementSnapshot, label: string): number {
-  return readCounterFromNodes(flatten(root), label);
+  return readCounterFromNodes(flattenTree(root), label);
 }
 
 function readCounterFromNodes(nodes: MobileElementSnapshot[], label: string): number {
@@ -735,10 +722,6 @@ function readCounterFromNodes(nodes: MobileElementSnapshot[], label: string): nu
   }
 
   return Number(textOf(valueNode));
-}
-
-function flatten(node: MobileElementSnapshot): MobileElementSnapshot[] {
-  return [node, ...node.children.flatMap((child) => flatten(child))];
 }
 
 function textOf(node: MobileElementSnapshot): string {
@@ -772,18 +755,34 @@ function horizontalOverlap(
   return Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
 }
 
-function centerOf(bounds: Bounds): Coordinates {
-  return {
-    x: Math.round(bounds.x + bounds.width / 2),
-    y: Math.round(bounds.y + bounds.height / 2)
-  };
+function uniqueByBounds(nodes: MobileElementSnapshot[]): MobileElementSnapshot[] {
+  const seen = new Set<string>();
+  const unique: MobileElementSnapshot[] = [];
+
+  for (const node of nodes) {
+    const key = [
+      textOf(node),
+      node.bounds.x,
+      node.bounds.y,
+      node.bounds.width,
+      node.bounds.height
+    ].join(':');
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(node);
+  }
+
+  return unique;
 }
 
-function pointIn(bounds: Bounds, xRatio: number, yRatio: number): Coordinates {
-  return {
-    x: Math.round(bounds.x + bounds.width * xRatio),
-    y: Math.round(bounds.y + bounds.height * yRatio)
-  };
+function sameBounds(a: MobileElementSnapshot, b: MobileElementSnapshot): boolean {
+  return textOf(a) === textOf(b)
+    && a.bounds.x === b.bounds.x
+    && a.bounds.y === b.bounds.y
+    && a.bounds.width === b.bounds.width
+    && a.bounds.height === b.bounds.height;
 }
 
 function isIos(device: AsturDevice): boolean {

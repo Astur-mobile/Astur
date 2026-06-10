@@ -752,11 +752,7 @@ private class UiAutomatorBackend(
             ?: throw AsturAgentException(
                 "ELEMENT_NOT_FOUND",
                 "Could not resolve element before action.",
-                mapOf(
-                    "selector" to selector.toMap(),
-                    "state" to options.wait.state,
-                    "timeout" to options.wait.timeoutMs
-                )
+                locatorFailureDetails(selector, options.wait.state, options.wait.timeoutMs)
             )
 
         ensureActionable(element, selector, options.actionability)
@@ -768,7 +764,7 @@ private class UiAutomatorBackend(
             throw AsturAgentException(
                 "ELEMENT_NOT_VISIBLE",
                 "Element is not visible.",
-                mapOf("selector" to selector.toMap())
+                actionabilityFailureDetails(element, selector, "visible")
             )
         }
 
@@ -776,15 +772,16 @@ private class UiAutomatorBackend(
             throw AsturAgentException(
                 "ELEMENT_DISABLED",
                 "Element is disabled.",
-                mapOf("selector" to selector.toMap())
+                actionabilityFailureDetails(element, selector, "enabled")
             )
         }
 
-        if (requirements.stable && !isStable(element)) {
+        val stable = if (requirements.stable) isStable(element) else null
+        if (requirements.stable && stable != true) {
             throw AsturAgentException(
                 "ELEMENT_UNSTABLE",
                 "Element bounds are not stable.",
-                mapOf("selector" to selector.toMap())
+                actionabilityFailureDetails(element, selector, "stable", stable)
             )
         }
 
@@ -798,10 +795,67 @@ private class UiAutomatorBackend(
                 throw AsturAgentException(
                     "ELEMENT_NOT_HITTABLE",
                     "Element is not hittable.",
-                    mapOf("selector" to selector.toMap())
+                    actionabilityFailureDetails(element, selector, "hittable", stable)
                 )
             }
         }
+    }
+
+    private fun locatorFailureDetails(
+        selector: AsturSelector,
+        state: String,
+        timeoutMs: Long
+    ): Map<String, Any?> {
+        val candidate = runCatching { findObject(selector)?.let { toSnapshot(it).toMap() } }.getOrNull()
+        val diagnostics = mutableMapOf<String, Any?>(
+            "selector" to selector.toMap(),
+            "state" to state,
+            "timeoutMs" to timeoutMs,
+            "matchingCandidates" to if (candidate == null) 0 else 1
+        )
+
+        if (candidate != null) {
+            diagnostics["candidate"] = candidate
+        }
+
+        return mapOf(
+            "selector" to selector.toMap(),
+            "state" to state,
+            "timeout" to timeoutMs,
+            "diagnostics" to diagnostics
+        )
+    }
+
+    private fun actionabilityFailureDetails(
+        element: UiObject2,
+        selector: AsturSelector,
+        failed: String,
+        stable: Boolean? = null
+    ): Map<String, Any?> {
+        val candidate = toSnapshot(element).toMap()
+        val actionability = mutableMapOf<String, Any?>(
+            "failed" to failed,
+            "visible" to isVisible(element),
+            "enabled" to runCatching { element.isEnabled }.getOrDefault(false)
+        )
+
+        if (stable != null) {
+            actionability["stable"] = stable
+        }
+
+        val diagnostics = mapOf(
+            "selector" to selector.toMap(),
+            "matchingCandidates" to 1,
+            "candidate" to candidate,
+            "actionability" to actionability
+        )
+
+        return mapOf(
+            "selector" to selector.toMap(),
+            "candidate" to candidate,
+            "actionability" to actionability,
+            "diagnostics" to diagnostics
+        )
     }
 
     private fun waitForObject(selector: AsturSelector, options: AsturWaitOptions): UiObject2? {

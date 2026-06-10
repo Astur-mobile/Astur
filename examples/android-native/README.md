@@ -7,13 +7,13 @@ This example expects:
 - an AVD named `Pixel_9_API_35`, or an updated `device.avd` in `playwright.config.ts`
 - the Astur Android agent APK/test APK built by the repository build
 
-Astur defaults to the v2 native-agent engine, installs and starts the Android agent automatically, and keeps the low-level automation settings out of the example config. Set an explicit endpoint only when you are attaching to an already-running agent:
+Astur defaults Android to the v2 native-agent engine in migration-safe `auto` mode, installs and starts the Android agent automatically, and keeps the low-level automation settings out of the example config. Set an explicit endpoint only when you are attaching to an already-running agent:
 
 ```bash
 export ASTUR_ANDROID_AGENT_ENDPOINT=tcp:127.0.0.1:8787
 ```
 
-Advanced projects can still override the engine in `use.astur.automation`, for example `engine: 'auto'` during migration or `engine: 'legacy-adb'` when intentionally comparing against the old shell/XML path.
+Advanced projects can still override the engine in `use.astur.automation`, for example `engine: 'agent'` to fail fast in CI or `engine: 'legacy-adb'` when intentionally comparing against the old shell/XML path.
 
 Run the full feature suite from this repository root after building:
 
@@ -32,7 +32,7 @@ The suite is split by user-facing functionality:
 - `forms.test.ts` covers text input, switch, checkbox, and form button state.
 - `forms-slider.test.ts` covers the form slider bar and value updates.
 - `media-upload.test.ts` covers selecting a media file from the form screen.
-- `tap-laboratory.test.ts` covers single tap, double tap, and long press on the home screen.
+- `tap-laboratory.test.ts` covers single tap, double tap, and long press on Android. The current iOS demo IPA exposes the same counters, but XCTest double taps are reported by the app as two single taps on real hardware, so the iOS assertion records that platform behavior until the demo app gesture handler is updated.
 - `orientation-menu.test.ts` covers portrait/landscape rotation and the responsive menu state.
 - `swipe.test.ts` covers carousel and vertical swipe behavior.
 - `drag-and-drop.test.ts` covers the drag puzzle.
@@ -65,16 +65,24 @@ xcrun simctl list devices booted
 npx astur-mobile test --config examples/android-native/playwright.parallel.config.ts examples/android-native/login.test.ts
 ```
 
+To filter both by file and project, place the file path before `--project` because Playwright's `--project` option accepts multiple values:
+
+```bash
+npm run test:parallel:spec -- android-native/login.test.ts --project ios-simulator
+```
+
 The parallel config maps projects to separate platforms:
 
-- `android-emulator` -> `ASTUR_ANDROID_DEVICE_ID` or `emulator-5554`
+- `android-device` -> `ASTUR_ANDROID_DEVICE_ID` or `emulator-5554`
 - `ios-simulator` -> `ASTUR_IOS_DEVICE_ID` or `ASTUR_IOS_DEVICE_NAME` or `iPhone 16`
 
-Keep these ids aligned with `adb devices -l` and `xcrun simctl list devices`. Astur does not auto-reserve devices yet, so each parallel project must select a different device.
+Keep these ids aligned with `adb devices -l` and `xcrun simctl list devices`. Each parallel project must select a different device. Astur reserves the selected device per Playwright worker and fails fast if another worker tries to control the same device at the same time.
 
 Each project gets an isolated Astur session and its own native artifact directory. The two device workers run at the same time; when one device finishes, its session closes without waiting for the other device's test steps. The Playwright command itself still exits only after all project results are collected so it can produce one combined report.
 
 Keep device-level parallel runs project-based. Do not point two projects at the same emulator id, and do not enable unrestricted file-level parallelism for multiple specs targeting the same physical device. In the parallel config, each mobile project sets `workers: 1` while the top-level config uses `workers: 2`; that allows Android and iOS to run at the same time without allowing two Android specs or two iOS specs to fight over the same device.
+
+The example package intentionally exposes only `npm run test:parallel` for the mixed-platform run. Running one selected Android or iOS project from the parallel config is just a serial single-device run, so use `npm run test:android` or `npm run test:ios` for that case.
 
 The default single-device config uses `workers: 1` for this reason. Use `playwright.parallel.config.ts` when each worker targets a different Android or iOS device.
 

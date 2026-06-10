@@ -83,6 +83,8 @@ The inspector does not invent a second locator system. When it suggests a locato
 - Keep native polling inside the platform agent.
 - Use screenshots and UI snapshots for diagnostics, not as the default control path.
 - Keep one platform agent alive per Playwright worker when possible.
+- Reserve one physical device per Playwright worker; true parallelism requires multiple devices.
+- When a config uses a loose device selector, let Astur choose an available matching device from the local pool instead of sending all workers to the same first device.
 - Restart or reset the app between specs only when isolation requires it.
 - Keep iOS XCTest requirements explicit instead of hiding them behind WebDriver.
 

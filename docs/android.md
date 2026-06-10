@@ -199,6 +199,7 @@ app: { packageName: 'com.example', activity: '.MainActivity' }
 | Lock state | `device.lock()`, `device.unlock()`, `device.isLocked()` | Uses Android shell/device state APIs. |
 | Native locators | `getByText()`, `getByLabel()`, `getByTestId()`, `getByRole()` | Runs through the UIAutomator native-agent path by default. |
 | Coordinates | `device.tap()`, `device.longPress()`, `device.swipe()`, `device.drag()` | Useful for gesture surfaces and inspector-generated fallback steps. |
+| Scroll into view | `locator.scrollIntoView({ direction, maxScrolls })` | Cross-platform. Swipes the surrounding scroll view until the element is visible, then resolves with its snapshot. Replaces hand-written "swipe in a loop until visible" page-object helpers. |
 
 Element and gesture examples:
 
@@ -206,6 +207,10 @@ Element and gesture examples:
 await device.getByText('Continue').tap();
 await device.getByLabel('Email').fill('qa@example.com');
 await device.getByRole('button', { name: 'Submit' }).longPress({ durationMs: 800 });
+
+// Scroll a long form until the target is on screen, then act on it.
+await device.getByText('Submit').scrollIntoView();
+await device.getByLabel('Biometric login').scrollIntoView({ direction: 'up', maxScrolls: 6 });
 
 await device.tap({ x: 120, y: 780 });
 await device.longPress({ x: 360, y: 900 }, { durationMs: 900 });
@@ -239,6 +244,34 @@ await device.screenshot();
 When native-agent endpoint mode is enabled and healthy, element/gesture commands can run through the device-side Kotlin agent transport. If endpoint mode is unavailable in `auto`, Astur falls back to current ADB/UIAutomator behavior.
 
 `device.gestures` also exposes `tap`, `longPress`, `pressAndHold`, `swipe`, and `drag` as a grouped API. `device.navigation` exposes `back`, `home`, and `recentApps`.
+
+### Scrolling To Off-Screen Elements
+
+`locator.scrollIntoView()` is the built-in way to bring an element that is below or above the fold into view before acting on it. It is cross-platform (Android and iOS) and lives on every locator, so you no longer need to hand-write "swipe in a loop until visible" helpers in page objects. If the element is already visible it returns immediately without scrolling.
+
+```ts
+// Default: scroll down within the viewport, up to 10 swipes.
+await device.getByText('Save changes').scrollIntoView();
+
+// Reveal something above the current position.
+await device.getByLabel('Biometric login').scrollIntoView({ direction: 'up' });
+
+// Scroll inside a specific scrollable container instead of the whole screen.
+await device.getById('product-42').scrollIntoView({
+  container: device.getById('catalog-list'),
+  maxScrolls: 15
+});
+```
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `direction` | `'down'` | Direction to scroll the content toward the target: `'down'`, `'up'`, `'left'`, or `'right'`. |
+| `maxScrolls` | `10` | Maximum number of scroll gestures before giving up. |
+| `durationMs` | `400` | Duration of each scroll gesture. |
+| `container` | viewport | Scrollable element to swipe within. Defaults to the device viewport, which Astur resolves per platform (iOS viewport vs Android tree bounds). |
+| `timeout` / `interval` | session defaults | Forwarded to the final visibility wait. |
+
+If the element never appears, `scrollIntoView()` throws a timeout error naming the selector and the scroll direction it tried.
 
 App management maps to ADB package manager commands:
 

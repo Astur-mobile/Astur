@@ -68,7 +68,21 @@ describe('inspector runtime helpers', () => {
       selector: by.id('continue-button')
     });
 
-    expect(session.tapElement).toHaveBeenCalledWith(by.id('continue-button'), {});
+    expect(session.tapElement).toHaveBeenCalledWith(by.id('continue-button'), { keyboard: 'auto' });
+  });
+
+  it('executes fill actions through the shared runtime locator path', async () => {
+    const session = createSession(tree);
+    session.fill = vi.fn();
+    const inspector = createInspectorSession(session);
+
+    await inspector.executeAction({
+      kind: 'fill',
+      selector: by.id('continue-button'),
+      value: 'amr'
+    });
+
+    expect(session.fill).toHaveBeenCalledWith(by.id('continue-button'), 'amr');
   });
 
   it('provides a polling fallback tree stream when native subscriptions are unavailable', async () => {

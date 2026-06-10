@@ -46,6 +46,7 @@ export default defineConfig({
           label: 'Start',
           items: [
             { label: 'Overview', slug: 'index' },
+            { label: 'Why Astur', slug: 'why-astur' },
             { label: 'Getting Started', slug: 'getting-started' },
             { label: 'Inspector And Codegen', slug: 'inspector' }
           ]

@@ -1,0 +1,82 @@
+---
+title: Why Astur
+description: Why Astur is a new generation of mobile test automation — a smart, device-native architecture without the Appium server.
+sidebar:
+  order: 2
+---
+
+Astur is a new generation of mobile test automation. Previous tools wrap a remote
+automation **server** (Appium / WebDriver) and a separate runner you install and
+keep alive. Astur removes that layer: it talks to **native platform agents** it
+builds and manages itself, behind a Playwright-style API. The result is faster,
+simpler to set up, and harder to wedge.
+
+## The old model vs. Astur
+
+| | Appium / WebDriver tools | Astur |
+| --- | --- | --- |
+| Transport | Remote HTTP/WebDriver server you run | In-process drivers + native agents Astur starts for you |
+| Setup | Install/keep an Appium server, drivers, capabilities | `npm install -D @astur/test astur-mobile` |
+| Element engine | Server-side selectors, separate from your assertions | One selector engine shared by tests **and** the Inspector |
+| Authoring | Generic inspector over WebDriver | Inspector/codegen built on the same runtime your tests use |
+| Lifecycle | You manage emulators, runners, signing | Astur auto-boots, auto-builds, auto-signs, self-heals |
+
+## What makes the architecture "smart"
+
+**One runtime, one selector engine — end to end.** The locators you write
+(`getByRole`, `getByText`, `getById`) are resolved by the same engine the
+Inspector uses to rank locators from the live tree. What you see while authoring
+is what runs in the test — there is no second, server-side matching layer to
+drift out of sync.
+
+**Native agents instead of a remote server.** Astur ships a Kotlin
+**UIAutomator** agent for Android and a Swift **XCUITest** agent for iOS. They run
+on the device and perform lookups, waits, taps, fills, swipes, drags, and tree
+snapshots natively. Astur builds and launches them through the platform
+toolchain on every session — there is no Appium server, no manually installed
+runner, and no WebDriver bridge.
+
+**Playwright ergonomics on mobile.** The public API is `@astur/test`: fixtures,
+projects, `expect` matchers, and locators that read like Playwright. Web views
+are automated through the same Playwright/CDP bridge, so native and web flows
+live in one test.
+
+**Gestures executed natively.** Taps, double-taps, long-presses, swipes, drags,
+and `scrollIntoView` go through the native agent — including correct double-tap
+timing inside the OS recognition window and a cross-platform
+`locator.scrollIntoView()` that hides the iOS-viewport vs. Android-tree
+difference.
+
+**A self-healing lifecycle — this is the part that matters in real CI.** Mobile
+automation breaks when emulators, simulators, and build sessions leak. Astur
+treats lifecycle as a first-class concern:
+
+- **Auto-boot** a configured Android AVD when it is offline (no "device not found").
+- **Auto-build, auto-sign, and auto-launch** the XCUITest agent through Xcode;
+  the agent is never installed by hand.
+- **Reap orphaned sessions on startup** — a previous run that crashed or was
+  `kill -9`'d leaves no wedged `xcodebuild`/simulator behind on the next run.
+- **Prune stale build caches** so per-version DerivedData cannot accumulate and
+  fill the disk.
+- **Tear down on interrupt** — Ctrl-C and even a forcefully closed terminal
+  (SIGHUP) group-kill the agent so nothing is left holding the device.
+- **Device-level parallelism** with reservations, so two workers never fight over
+  the same emulator or simulator.
+
+**npm-first and auditable.** Everything installs from npm. Packages ship with
+provenance, and platform agents are bundled per package so a normal install needs
+no extra build step (the iOS agent is compiled on your Mac because Apple requires
+it).
+
+## Why it is faster and more reliable
+
+Removing the remote server removes a network hop and a process to keep healthy.
+Selecting and asserting through one engine removes a class of "the inspector said
+X but the test sees Y" failures. And the self-healing lifecycle removes the most
+common reason mobile suites flake in CI: leftover device/runner state. That
+combination — native execution, a single selector engine, and a lifecycle that
+cleans up after itself — is what makes Astur a generational step rather than
+another Appium wrapper.
+
+Next: see the [Architecture](/architecture/) page for the execution model, or
+[Getting Started](/getting-started/) to run your first test.

@@ -51,6 +51,17 @@ const IOS_TREE: MobileElementSnapshot = {
   children: []
 };
 
+const IOS_ELEMENT: MobileElementSnapshot = {
+  id: 'login-submit-button',
+  text: 'Login',
+  label: 'Login',
+  type: 'XCUIElementTypeButton',
+  enabled: true,
+  visible: true,
+  bounds: { x: 100, y: 200, width: 300, height: 64 },
+  children: []
+};
+
 describe('iOS native-agent mode', () => {
   const servers: AgentServer[] = [];
   let previousIosEndpoint: string | undefined;
@@ -195,6 +206,78 @@ describe('iOS native-agent mode', () => {
 
     await expect(session.getTree()).resolves.toEqual(IOS_TREE);
     expect(server.requests.map((request) => request.method)).toEqual(['agent.ping', 'tree.get']);
+  });
+
+  it('propagates the Astur session timeout into native element commands', async () => {
+    const agentInfo: NativeAgentInfo = {
+      ...IOS_AGENT_INFO,
+      capabilities: ['agent.ping', 'element.wait', 'element.tap']
+    };
+    const server = await createAgentServer((request) => {
+      if (request.method === 'agent.ping') {
+        return {
+          body: ok(request.id, agentInfo)
+        };
+      }
+
+      if (request.method === 'element.wait') {
+        return {
+          body: ok(request.id, IOS_ELEMENT)
+        };
+      }
+
+      if (request.method === 'element.tap') {
+        return {
+          body: ok(request.id, undefined)
+        };
+      }
+
+      return {
+        status: 404,
+        body: {
+          id: request.id,
+          ok: false,
+          error: {
+            code: 'UNKNOWN_COMMAND',
+            message: request.method
+          }
+        }
+      };
+    });
+    servers.push(server);
+
+    const driver = createDriver();
+    const session = await driver.createSession(normalizeCapabilities({
+      platform: 'ios',
+      timeout: 23_000,
+      device: {
+        id: IOS_DEVICE.id
+      },
+      agent: {
+        mode: 'required',
+        endpoint: server.endpoint,
+        launchTimeout: 500,
+        commandTimeout: 500
+      }
+    }));
+    const selector = { strategy: 'id' as const, value: 'login-submit-button' };
+
+    await expect(session.waitForElement(selector, { state: 'visible' })).resolves.toEqual(IOS_ELEMENT);
+    await expect(session.tapElement?.(selector)).resolves.toBeUndefined();
+
+    expect(server.requests.find((request) => request.method === 'element.wait')?.params).toMatchObject({
+      selector,
+      options: {
+        timeout: 23_000,
+        state: 'visible'
+      }
+    });
+    expect(server.requests.find((request) => request.method === 'element.tap')?.params).toMatchObject({
+      selector,
+      options: {
+        timeout: 23_000
+      }
+    });
   });
 
   it('wraps command failures in required mode', async () => {

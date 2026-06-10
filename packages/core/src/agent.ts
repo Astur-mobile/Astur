@@ -224,7 +224,9 @@ async function sendNativeAgentCommand<M extends NativeAgentMethod>(
       {
         endpoint,
         method,
-        error: payload.error
+        error: payload.error,
+        diagnostics: payload.diagnostics,
+        timing: payload.timing
       }
     );
   }

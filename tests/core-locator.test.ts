@@ -128,22 +128,33 @@ describe('MobileLocator', () => {
     await locator.longPress({ timeout: 25, interval: 1, durationMs: 900 });
     await locator.dragTo(target, { timeout: 25, interval: 1, durationMs: 700 });
 
-    expect(session.tapElement).toHaveBeenCalledWith(by.label('Sign in'), { timeout: 25, interval: 1 });
+    expect(session.tapElement).toHaveBeenCalledWith(by.label('Sign in'), {
+      timeout: 25,
+      interval: 1,
+      keyboard: 'auto'
+    });
     expect(session.doubleTapElement).toHaveBeenCalledWith(by.label('Sign in'), {
       timeout: 25,
       interval: 1,
-      intervalMs: 60
+      intervalMs: 60,
+      keyboard: 'auto'
     });
-    expect(session.fillElement).toHaveBeenCalledWith(by.label('Sign in'), 'hello', { timeout: 25, interval: 1 });
+    expect(session.fillElement).toHaveBeenCalledWith(by.label('Sign in'), 'hello', {
+      timeout: 25,
+      interval: 1,
+      keyboard: 'auto'
+    });
     expect(session.longPressElement).toHaveBeenCalledWith(by.label('Sign in'), {
       timeout: 25,
       interval: 1,
-      durationMs: 900
+      durationMs: 900,
+      keyboard: 'auto'
     });
     expect(session.dragElement).toHaveBeenCalledWith(by.label('Sign in'), { selector: by.text('Welcome') }, {
       timeout: 25,
       interval: 1,
-      durationMs: 700
+      durationMs: 700,
+      keyboard: 'auto'
     });
     expect(session.getTree).not.toHaveBeenCalled();
   });
@@ -356,6 +367,63 @@ describe('MobileLocator', () => {
       end: { x: 105, y: 130 },
       durationMs: 700
     });
+  });
+
+  it('scrollIntoView returns immediately without swiping when the element is already visible', async () => {
+    const session = createSession();
+    const locator = new MobileLocator(session, by.label('Sign in'));
+
+    await expect(locator.scrollIntoView()).resolves.toMatchObject({ label: 'Sign in' });
+
+    expect(session.swipe).not.toHaveBeenCalled();
+  });
+
+  it('scrollIntoView swipes within the viewport until the element appears', async () => {
+    const session = createSession();
+    session.getViewport = vi.fn(async () => ({ x: 0, y: 0, width: 300, height: 600 }));
+    session.findElement = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ ...tree.children[1], visible: true });
+    const locator = new MobileLocator(session, by.label('Sign in'));
+
+    await expect(locator.scrollIntoView({ direction: 'down' })).resolves.toMatchObject({ visible: true });
+
+    expect(session.getViewport).toHaveBeenCalledOnce();
+    expect(session.swipe).toHaveBeenCalledTimes(1);
+    expect(session.swipe).toHaveBeenCalledWith({
+      start: { x: 150, y: 468 },
+      end: { x: 150, y: 150 },
+      durationMs: 400
+    });
+  });
+
+  it('scrollIntoView reverses the gesture for the up direction', async () => {
+    const session = createSession();
+    session.getViewport = vi.fn(async () => ({ x: 0, y: 0, width: 300, height: 600 }));
+    session.findElement = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ ...tree.children[0], visible: true });
+    const locator = new MobileLocator(session, by.text('Welcome'));
+
+    await locator.scrollIntoView({ direction: 'up' });
+
+    expect(session.swipe).toHaveBeenCalledWith({
+      start: { x: 150, y: 150 },
+      end: { x: 150, y: 468 },
+      durationMs: 400
+    });
+  });
+
+  it('scrollIntoView gives up after maxScrolls attempts', async () => {
+    const session = createSession();
+    session.getViewport = vi.fn(async () => ({ x: 0, y: 0, width: 300, height: 600 }));
+    const locator = new MobileLocator(session, by.id('never-present'));
+
+    await expect(
+      locator.scrollIntoView({ maxScrolls: 2, timeout: 25, interval: 1 })
+    ).rejects.toThrow(/never-present/);
+
+    expect(session.swipe).toHaveBeenCalledTimes(2);
   });
 });
 

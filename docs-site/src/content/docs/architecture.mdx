@@ -7,28 +7,26 @@ sidebar:
 
 Astur keeps the test authoring experience small while moving the expensive mobile work into native platform agents.
 
-<div class="astur-flow" aria-label="Astur high-level architecture">
-  <div class="flow-node primary">User test<br/><span>@astur/test</span></div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-node">Core runtime<br/><span>locators, waits, assertions</span></div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-node">Protocol<br/><span>selectors and commands</span></div>
-  <div class="flow-split">
-    <div class="flow-branch">
-      <div class="flow-arrow">→</div>
-      <div class="flow-node">Android driver</div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-node accent">UIAutomator agent</div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-node">Android app</div>
+<div class="architecture-map" aria-label="Astur high-level architecture">
+  <div class="architecture-stage">
+    <div class="flow-node primary">User test<span>@astur/test</span></div>
+    <div class="flow-node">Core runtime<span>locators, waits, assertions</span></div>
+    <div class="flow-node">Protocol<span>selectors and commands</span></div>
+  </div>
+
+  <div class="architecture-split">
+    <div class="architecture-lane">
+      <div class="lane-label">Android</div>
+      <div class="flow-node">Android driver<span>ADB lifecycle</span></div>
+      <div class="flow-node accent">UIAutomator agent<span>native lookup and actions</span></div>
+      <div class="flow-node">Android app<span>app under test</span></div>
     </div>
-    <div class="flow-branch">
-      <div class="flow-arrow">→</div>
-      <div class="flow-node">iOS driver</div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-node accent">XCUITest agent</div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-node">iOS app</div>
+
+    <div class="architecture-lane">
+      <div class="lane-label">iOS</div>
+      <div class="flow-node">iOS driver<span>simctl and xcodebuild lifecycle</span></div>
+      <div class="flow-node accent">XCUITest agent<span>native lookup and actions</span></div>
+      <div class="flow-node">iOS app<span>app under test</span></div>
     </div>
   </div>
 </div>
@@ -41,6 +39,8 @@ await expect(device.getByText('Welcome')).toBeVisible();
 ```
 
 The runtime below that API handles device selection, app lifecycle, native locator lookup, actionability checks, gestures, screenshots, video, traces, and inspector/codegen support.
+
+The source `docs/architecture.md` keeps Mermaid diagrams for repository readers. The public Astro docs use an MDX/CSS version of the same graph because Starlight does not render Mermaid fences automatically without adding a Mermaid integration.
 
 ## Why This Is Fast
 
@@ -98,6 +98,8 @@ The inspector does not invent a second locator system. When it suggests a locato
 - Keep native polling inside the platform agent.
 - Use screenshots and UI snapshots for diagnostics, not as the default control path.
 - Keep one platform agent alive per Playwright worker when possible.
+- Reserve one physical device per Playwright worker; true parallelism requires multiple devices.
+- When a config uses a loose device selector, let Astur choose an available matching device from the local pool instead of sending all workers to the same first device.
 - Restart or reset the app between specs only when isolation requires it.
 - Keep iOS XCTest requirements explicit instead of hiding them behind WebDriver.
 

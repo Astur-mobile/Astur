@@ -5,6 +5,7 @@ import { defineConfig } from '@astur/test';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const appPath = resolve(repoRoot, 'assets/astur.demo.android.apk');
 const androidDeviceId = process.env.ASTUR_ANDROID_DEVICE_ID ?? 'emulator-5554';
+const androidAvd = process.env.ASTUR_ANDROID_AVD ?? 'Pixel_9_API_35';
 const iosDeviceId = process.env.ASTUR_IOS_DEVICE_ID;
 const configuredWorkers = resolveWorkersFromCli();
 
@@ -82,25 +83,25 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'android-emulator',
+      name: 'android-device',
       workers: 1,
       use: {
         astur: {
           platform: 'android',
-          automation: {
-            engine: 'auto',
-            legacyFallback: 'on-agent-failure',
-            startupTimeoutMs: 30_000,
-            commandTimeoutMs: 20_000
-          },
           timeout: 20_000,
           artifacts: {
             screenshot: 'only-on-failure',
             video: 'off'
           },
           device: {
+            // Pin the device id so each parallel worker controls a known
+            // emulator, but also provide the AVD so Astur can boot it when it is
+            // offline instead of failing fast with DEVICE_NOT_FOUND.
             kind: 'emulator',
-            id: androidDeviceId
+            id: androidDeviceId,
+            avd: androidAvd,
+            autoBoot: true,
+            bootTimeout: 120_000
           },
           app: {
             path: appPath,
@@ -116,16 +117,6 @@ export default defineConfig({
       use: {
         astur: {
           platform: 'ios',
-          // iOS native UI interaction requires the XCTest agent.
-          // Keep this project strict so we fail fast at startup instead of falling back and
-          // later crashing on native element actions.
-          agent: {
-            mode: 'required',
-            install: true,
-            legacyFallback: 'never',
-            launchTimeout: 120_000,
-            commandTimeout: 30_000
-          },
           // iOS simulator boot + app shell hydration can be slower under mixed-platform parallel load.
           timeout: 35_000,
           artifacts: {

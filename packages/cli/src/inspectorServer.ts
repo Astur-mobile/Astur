@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto';
 import { constants, readFileSync } from 'node:fs';
-import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, normalize, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -33,6 +34,7 @@ export type ServerEvent =
 export type AssertionKind = 'visible' | 'text' | 'containsText' | 'value' | 'label' | 'type';
 export type InspectorDeviceAction =
   | 'refresh'
+  | 'tree.refresh'
   | 'orientation.portrait'
   | 'orientation.landscape'
   | 'keyboard.dismiss'
@@ -42,8 +44,10 @@ export type InspectorDeviceAction =
   | 'navigation.home'
   | 'navigation.recents';
 
+export type InspectorDirectActionKind = 'tap' | 'fill';
+
 export type ClientEvent =
-  | { type: 'click'; x: number; y: number; record?: boolean }
+  | { type: 'click'; x: number; y: number; record?: boolean; perform?: boolean }
   | { type: 'select'; uid: string }
   | { type: 'list_devices' }
   | { type: 'switch_device'; deviceId: string }
@@ -51,6 +55,7 @@ export type ClientEvent =
   | { type: 'swipe'; gesture: SwipeGesture; record?: boolean }
   | { type: 'record_toggle' }
   | { type: 'add_step'; action: 'tap' | 'fill' | 'expect'; locator: string; value?: string; assertion?: AssertionKind }
+  | { type: 'direct_action'; action: InspectorDirectActionKind; selector: ElementSelector; value?: string }
   | { type: 'device_action'; action: InspectorDeviceAction }
   | { type: 'clear_steps' }
   | { type: 'export'; lang: 'typescript' | 'javascript' };
@@ -138,6 +143,8 @@ export interface InspectorServerHandle {
   close(): void;
 }
 
+type InspectorRefreshResult = 'updated' | 'busy' | 'failed' | 'reported';
+
 const INSPECTOR_VERSION = readInspectorVersion();
 
 // ─── Main export ─────────────────────────────────────────────────────────────
@@ -148,11 +155,20 @@ export function startInspectorServer(
   options: InspectorServerOptions
 ): Promise<InspectorServerHandle> {
   return new Promise((resolveHandle, rejectHandle) => {
-    const frameIntervalMs = options.frameIntervalMs ?? 750;
-    const treeIntervalMs = options.treeIntervalMs ?? 1200;
+    const baseFrameIntervalMs = options.frameIntervalMs ?? 750;
+    const baseTreeIntervalMs = options.treeIntervalMs ?? 1200;
+    // When the screen/tree stays unchanged we back off polling up to this cap to
+    // reduce device load (slow adb dumps, simulator screenshots) while idle. The
+    // interval snaps back to the base value as soon as something changes or an
+    // action runs, so responsiveness is preserved during active inspection.
+    const maxIdleIntervalMs = 4_000;
 
     // ── State ──────────────────────────────────────────────────────────────
     let activeInspector = inspector;
+    let frameIdleStreak = 0;
+    let treeIdleStreak = 0;
+    let lastTreeSignature: string | undefined;
+    let lastFrameBuffer: Buffer | undefined;
     let activeDevice = device;
     let currentNodes: UiNode[] = [];
     let currentViewport: Viewport = { width: 1, height: 1 };
@@ -164,6 +180,7 @@ export function startInspectorServer(
     let initialSuggestions: LocatorSuggestion[] = [];
     let gestureCommandInFlight = false;
     let lastGestureCommandAt = 0;
+    const bundleUploads = new Map<string, string>();
 
     // ── HTTP server ────────────────────────────────────────────────────────
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -190,6 +207,22 @@ export function startInspectorServer(
           initialUid: pickInitialUid(currentNodes),
           suggestions: initialSuggestions,
         }));
+        return;
+      }
+
+      if (url.startsWith('/api/upload-app-file')) {
+        handleAppBundleFileUpload(req, res).catch((error) => {
+          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end(formatActionError(error));
+        });
+        return;
+      }
+
+      if (url.startsWith('/api/upload-app-bundle')) {
+        handleAppBundleFinalize(req, res).catch((error) => {
+          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end(formatActionError(error));
+        });
         return;
       }
 
@@ -231,23 +264,171 @@ export function startInspectorServer(
       const name = basename(params.get('filename') || 'astur-uploaded-app');
       const dir = await mkdtemp(join(tmpdir(), 'astur-inspector-upload-'));
       const path = join(dir, name);
+      try {
+        const payload = await readRequestBuffer(req);
+        await writeFile(path, payload);
+        await options.installApp(path);
+        await syncInspectorState();
+        broadcast({ type: 'status', message: `Action OK: Installed ${name}` });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, path }));
+      } finally {
+        await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
+
+    async function handleAppBundleFileUpload(req: IncomingMessage, res: ServerResponse): Promise<void> {
+      if (req.method !== 'POST') {
+        res.writeHead(405);
+        res.end('Method not allowed');
+        return;
+      }
+
+      if (!options.installApp) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('App install is unavailable in this inspector session.');
+        return;
+      }
+
+      const params = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const uploadId = normalizeUploadId(params.get('uploadId'));
+      const relativePath = normalizeClientUploadPath(params.get('relativePath'));
+      if (!uploadId || !relativePath) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('uploadId and relativePath are required for bundle uploads.');
+        return;
+      }
+
+      const dir = await getBundleUploadDir(uploadId);
+      const targetPath = resolveBundleUploadPath(dir, relativePath);
+      const payload = await readRequestBuffer(req);
+      await mkdir(dirname(targetPath), { recursive: true });
+      await writeFile(targetPath, payload);
+      if (looksLikeExecutableBinary(payload)) {
+        await chmod(targetPath, 0o755).catch(() => undefined);
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, path: relativePath }));
+    }
+
+    async function handleAppBundleFinalize(req: IncomingMessage, res: ServerResponse): Promise<void> {
+      if (req.method !== 'POST') {
+        res.writeHead(405);
+        res.end('Method not allowed');
+        return;
+      }
+
+      if (!options.installApp) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('App install is unavailable in this inspector session.');
+        return;
+      }
+
+      const params = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const uploadId = normalizeUploadId(params.get('uploadId'));
+      const rootName = basename(params.get('rootName') || '').trim();
+      if (!uploadId || !rootName) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('uploadId and rootName are required to finalize a bundle upload.');
+        return;
+      }
+
+      if (!rootName.toLowerCase().endsWith('.app')) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Bundle uploads must finalize to a .app root.');
+        return;
+      }
+
+      const dir = bundleUploads.get(uploadId);
+      if (!dir) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('No bundle upload exists for this uploadId.');
+        return;
+      }
+
+      const installPath = resolveBundleUploadPath(dir, rootName);
+
+      try {
+        await options.installApp(installPath);
+        await syncInspectorState();
+        broadcast({ type: 'status', message: `Action OK: Installed ${rootName}` });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, path: installPath }));
+      } finally {
+        bundleUploads.delete(uploadId);
+        await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
+
+    async function getBundleUploadDir(uploadId: string): Promise<string> {
+      const existing = bundleUploads.get(uploadId);
+      if (existing) {
+        return existing;
+      }
+
+      const dir = await mkdtemp(join(tmpdir(), `astur-inspector-bundle-${uploadId}-`));
+      bundleUploads.set(uploadId, dir);
+      return dir;
+    }
+
+    async function readRequestBuffer(req: IncomingMessage): Promise<Buffer> {
       const chunks: Buffer[] = [];
 
       for await (const chunk of req) {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       }
 
-      await writeFile(path, Buffer.concat(chunks));
-      await options.installApp(path);
-      await syncInspectorState();
-      broadcast({ type: 'status', message: `Action OK: Installed ${name}` });
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, path }));
+      return Buffer.concat(chunks);
+    }
+
+    function normalizeUploadId(value: string | null): string | undefined {
+      const normalized = String(value ?? '').trim().replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80);
+      return normalized || undefined;
+    }
+
+    function normalizeClientUploadPath(value: string | null): string | undefined {
+      const normalized = normalize(String(value ?? '').replace(/\\/g, '/')).replace(/^\/+/, '');
+      if (!normalized || normalized === '.' || normalized.startsWith('..')) {
+        return undefined;
+      }
+
+      return normalized.replace(/\\/g, '/');
+    }
+
+    function resolveBundleUploadPath(rootDir: string, relativePath: string): string {
+      const target = resolve(rootDir, relativePath);
+      const root = resolve(rootDir);
+      if (target !== root && !target.startsWith(root + sep)) {
+        throw new Error(`Invalid upload path: ${relativePath}`);
+      }
+
+      return target;
+    }
+
+    function looksLikeExecutableBinary(payload: Buffer): boolean {
+      if (payload.length < 4) {
+        return false;
+      }
+
+      const magic = payload.subarray(0, 4).toString('hex');
+      return [
+        'feedface',
+        'feedfacf',
+        'cefaedfe',
+        'cffaedfe',
+        'cafebabe',
+        'bebafeca',
+        'cafebabf',
+        'bfbabeca'
+      ].includes(magic);
     }
 
     // ── WebSocket server ───────────────────────────────────────────────────
     const wss = new WebSocketServer({ server });
     const clients = new Set<WebSocket>();
+    let lastFrameDataUri: string | undefined;
+    let lastFrameTimestamp = 0;
 
     function broadcast(event: ServerEvent): void {
       const data = JSON.stringify(event);
@@ -273,6 +454,13 @@ export function startInspectorServer(
         logoDataUri,
       };
       ws.send(JSON.stringify(bootstrapEvent), () => { /* ignore send errors */ });
+      if (lastFrameDataUri) {
+        ws.send(JSON.stringify({
+          type: 'frame',
+          dataUri: lastFrameDataUri,
+          timestamp: lastFrameTimestamp,
+        } satisfies ServerEvent), () => { /* ignore send errors */ });
+      }
 
       ws.on('close', () => clients.delete(ws));
 
@@ -295,6 +483,7 @@ export function startInspectorServer(
           let node: UiNode | undefined;
           let suggestions: LocatorSuggestion[] = [];
           const shouldRecordTap = recording && event.record !== false;
+          const shouldPerformTap = event.perform === true && !shouldRecordTap;
 
           const localNode = findUiNodeAtPoint(currentNodes, { x: event.x, y: event.y }, {
             preferActionable: shouldRecordTap
@@ -305,7 +494,7 @@ export function startInspectorServer(
             suggestions = suggestLocatorsForNode(localNode, currentNodes);
           }
 
-          if (!node) {
+          if (!node && currentNodes.length > 0 && !shouldRecordTap && !shouldPerformTap) {
             const hit = await activeInspector.hitTest({ x: event.x, y: event.y });
             if (!hit) {
               return;
@@ -323,6 +512,16 @@ export function startInspectorServer(
           }
 
           if (!node || !uid) {
+            if (shouldPerformTap) {
+              await performInspectorCoordinateTap({ x: event.x, y: event.y }, ws);
+            } else if (shouldRecordTap) {
+              await recordInspectorCoordinateTap({ x: event.x, y: event.y }, ws);
+            } else {
+              ws.send(JSON.stringify({
+                type: 'status',
+                message: 'Action Pending: UI tree is still loading. Use Interact mode to tap by coordinate until elements are inspectable.'
+              }));
+            }
             return;
           }
 
@@ -330,33 +529,13 @@ export function startInspectorServer(
           const selectionEvent: ServerEvent = { type: 'selection', uid, node, suggestions };
           ws.send(JSON.stringify(selectionEvent));
 
-          if (shouldRecordTap && !suggestions[0]) {
-            if (!options.performTap) {
-              ws.send(JSON.stringify({
-                type: 'status',
-                message: 'Action Error: Tap could not be recorded because the selected element has no stable locator.'
-              }));
-              break;
-            }
+          if (shouldPerformTap) {
+            await performInspectorCoordinateTap({ x: event.x, y: event.y }, ws);
+            break;
+          }
 
-            try {
-              await options.performTap({ x: event.x, y: event.y });
-              const step: RecordingStep = {
-                index: steps.length,
-                action: 'tapPoint',
-                locator: '',
-                point: { x: event.x, y: event.y }
-              };
-              steps.push(step);
-              broadcast({ type: 'step', ...step });
-              await syncInspectorState();
-              broadcast({ type: 'status', message: 'Action OK: Coordinate tap recorded' });
-            } catch (error) {
-              ws.send(JSON.stringify({
-                type: 'status',
-                message: `Action Error: Tap failed: ${formatActionError(error)}`
-              }));
-            }
+          if (shouldRecordTap && !suggestions[0]) {
+            await recordInspectorCoordinateTap({ x: event.x, y: event.y }, ws);
           }
 
           if (shouldRecordTap && suggestions[0]) {
@@ -387,6 +566,34 @@ export function startInspectorServer(
             broadcast({ type: 'step', ...step });
             await syncInspectorState();
             broadcast({ type: 'status', message: 'Action OK: Tap recorded' });
+          }
+          break;
+        }
+
+        case 'direct_action': {
+          try {
+            if (event.action === 'fill') {
+              await activeInspector.executeAction({
+                kind: 'fill',
+                selector: event.selector,
+                value: event.value ?? '',
+                options: { timeout: 2_000 }
+              });
+            } else {
+              await activeInspector.executeAction({
+                kind: 'tap',
+                selector: event.selector,
+                options: { timeout: 2_000 }
+              });
+            }
+
+            await syncInspectorState();
+            broadcast({ type: 'status', message: `Action OK: ${event.action === 'fill' ? 'Filled' : 'Tapped'}` });
+          } catch (error) {
+            ws.send(JSON.stringify({
+              type: 'status',
+              message: `Action Error: ${event.action === 'fill' ? 'Fill' : 'Tap'} failed: ${formatActionError(error)}`
+            }));
           }
           break;
         }
@@ -550,8 +757,26 @@ export function startInspectorServer(
 
         case 'device_action': {
           if (event.action === 'refresh') {
-            await syncInspectorState();
-            broadcast({ type: 'status', message: 'Action OK: Refreshed screen and tree' });
+            const result = await pushFrame();
+            if (result === 'updated') {
+              broadcast({ type: 'status', message: 'Action OK: Screen refreshed' });
+            } else if (result === 'busy') {
+              broadcast({ type: 'status', message: 'Action Pending: Screen refresh already running' });
+            } else {
+              broadcast({ type: 'status', message: 'Action Error: Screen refresh failed' });
+            }
+            break;
+          }
+
+          if (event.action === 'tree.refresh') {
+            const result = await pushTree({ reportFirstError: true });
+            if (result === 'updated') {
+              broadcast({ type: 'status', message: 'Action OK: UI tree refreshed' });
+            } else if (result === 'busy') {
+              broadcast({ type: 'status', message: 'Action Pending: UI tree refresh already running' });
+            } else if (result === 'failed') {
+              broadcast({ type: 'status', message: 'Action Error: UI tree refresh did not return an update' });
+            }
             break;
           }
 
@@ -587,37 +812,102 @@ export function startInspectorServer(
       }
     }
 
+    async function performInspectorCoordinateTap(point: Coordinates, ws: WebSocket): Promise<void> {
+      if (!options.performTap) {
+        ws.send(JSON.stringify({ type: 'status', message: 'Action Error: Tap is unavailable in this session.' }));
+        return;
+      }
+
+      try {
+        await options.performTap(point);
+        await syncInspectorState();
+        broadcast({ type: 'status', message: 'Action OK: Tapped' });
+      } catch (error) {
+        ws.send(JSON.stringify({
+          type: 'status',
+          message: `Action Error: Tap failed: ${formatActionError(error)}`
+        }));
+      }
+    }
+
+    async function recordInspectorCoordinateTap(point: Coordinates, ws: WebSocket): Promise<void> {
+      if (!options.performTap) {
+        ws.send(JSON.stringify({
+          type: 'status',
+          message: 'Action Error: Tap could not be recorded because coordinate tapping is unavailable in this session.'
+        }));
+        return;
+      }
+
+      try {
+        await options.performTap(point);
+        const step: RecordingStep = {
+          index: steps.length,
+          action: 'tapPoint',
+          locator: '',
+          point
+        };
+        steps.push(step);
+        broadcast({ type: 'step', ...step });
+        await syncInspectorState();
+        broadcast({ type: 'status', message: 'Action OK: Coordinate tap recorded' });
+      } catch (error) {
+        ws.send(JSON.stringify({
+          type: 'status',
+          message: `Action Error: Tap failed: ${formatActionError(error)}`
+        }));
+      }
+    }
+
     // ── Frame streaming loop ────────────────────────────────────────────────
     let frameTimer: ReturnType<typeof setTimeout> | undefined;
     let frameInFlight = false;
 
-    async function pushFrame(): Promise<void> {
+    async function pushFrame(): Promise<InspectorRefreshResult> {
       if (clients.size === 0 || frameInFlight) {
-        return;
+        return 'busy';
       }
 
       frameInFlight = true;
       try {
         const buf = await options.captureScreenshot();
         if (buf && buf.length > 0) {
+          // Skip re-encoding and re-broadcasting identical frames (common on
+          // static screens such as forms); this saves base64 work and socket
+          // bandwidth and lets the poll loop back off while the screen is idle.
+          if (lastFrameBuffer && buf.equals(lastFrameBuffer)) {
+            frameIdleStreak += 1;
+            return 'updated';
+          }
+
+          lastFrameBuffer = buf;
+          lastFrameDataUri = `data:image/png;base64,${buf.toString('base64')}`;
+          lastFrameTimestamp = Date.now();
+          frameIdleStreak = 0;
           broadcast({
             type: 'frame',
-            dataUri: `data:image/png;base64,${buf.toString('base64')}`,
-            timestamp: Date.now(),
+            dataUri: lastFrameDataUri,
+            timestamp: lastFrameTimestamp,
           });
+          return 'updated';
         }
+        return 'failed';
       } catch {
         // device may be busy
+        return 'failed';
       } finally {
         frameInFlight = false;
       }
     }
 
     function scheduleFrame(): void {
+      const interval = clients.size === 0
+        ? maxIdleIntervalMs
+        : nextPollInterval(baseFrameIntervalMs, frameIdleStreak, maxIdleIntervalMs);
       frameTimer = setTimeout(async () => {
         await pushFrame();
         scheduleFrame();
-      }, frameIntervalMs);
+      }, interval);
     }
 
     // ── Tree polling loop ──────────────────────────────────────────────────
@@ -627,9 +917,16 @@ export function startInspectorServer(
     let lastTreeErrorAt = 0;
     let consecutiveTreeErrors = 0;
 
-    async function pushTree(): Promise<void> {
+    async function pushTree(options: { reportFirstError?: boolean } = {}): Promise<InspectorRefreshResult> {
       if (treeInFlight) {
-        return;
+        return 'busy';
+      }
+
+      // Avoid expensive UI-tree reads (e.g. adb `uiautomator dump`, broad XCUI
+      // queries) when nobody is watching. Bootstrap/manual refreshes pass
+      // reportFirstError and are always honoured.
+      if (clients.size === 0 && !options.reportFirstError) {
+        return 'busy';
       }
 
       treeInFlight = true;
@@ -641,6 +938,18 @@ export function startInspectorServer(
           currentViewport = viewport;
           consecutiveTreeErrors = 0;
           lastTreeErrorMessage = undefined;
+
+          const signature = computeTreeSignature(nodes);
+          if (signature === lastTreeSignature && !options.reportFirstError) {
+            // Tree is unchanged: keep the freshly captured nodes for hit-testing
+            // but skip the broadcast and suggestion recompute, and let the poll
+            // loop back off.
+            treeIdleStreak += 1;
+            return 'updated';
+          }
+
+          lastTreeSignature = signature;
+          treeIdleStreak = 0;
           revision += 1;
           const initialUid = selectedUid ?? pickInitialUid(currentNodes);
           const initialNode = initialUid
@@ -648,17 +957,18 @@ export function startInspectorServer(
             : undefined;
           initialSuggestions = initialNode ? suggestLocatorsForNode(initialNode, currentNodes) : [];
           broadcast({ type: 'tree', nodes, viewport, revision });
-          break;
+          return 'updated';
         }
+        return 'failed';
       } catch (error) {
         consecutiveTreeErrors += 1;
         const message = formatActionError(error);
         const now = Date.now();
-        if (consecutiveTreeErrors < 2 && currentNodes.length > 0) {
-          return;
+        if (!options.reportFirstError && consecutiveTreeErrors < 2 && currentNodes.length > 0) {
+          return 'failed';
         }
 
-        if (message !== lastTreeErrorMessage || now - lastTreeErrorAt > 8_000) {
+        if (options.reportFirstError || message !== lastTreeErrorMessage || now - lastTreeErrorAt > 8_000) {
           lastTreeErrorMessage = message;
           lastTreeErrorAt = now;
           const prefix = currentNodes.length > 0 ? 'Action Pending' : 'Action Error';
@@ -667,25 +977,40 @@ export function startInspectorServer(
             type: 'status',
             message: `${prefix}: ${label}: ${message}`
           });
+          return 'reported';
         }
+
+        return 'failed';
       } finally {
         treeInFlight = false;
       }
     }
 
-    async function syncInspectorState(): Promise<void> {
-      await Promise.allSettled([pushFrame(), pushTree()]);
+    async function syncInspectorState(): Promise<{ frame: InspectorRefreshResult; tree: InspectorRefreshResult }> {
+      // An action just ran: snap polling back to the responsive base interval so
+      // the resulting screen/tree change surfaces immediately.
+      frameIdleStreak = 0;
+      treeIdleStreak = 0;
+      const frame = await pushFrame();
+      void pushTree({ reportFirstError: true }).catch(() => undefined);
+      return { frame, tree: 'busy' };
     }
 
     function scheduleTree(): void {
+      const interval = clients.size === 0
+        ? maxIdleIntervalMs
+        : nextPollInterval(baseTreeIntervalMs, treeIdleStreak, maxIdleIntervalMs);
       treeTimer = setTimeout(async () => {
         await pushTree();
         scheduleTree();
-      }, treeIntervalMs);
+      }, interval);
     }
 
     // ── Startup ────────────────────────────────────────────────────────────
-    server.listen(options.port ?? 0, () => {
+    // Bind to loopback only: the inspector grants full device control (tap,
+    // fill, swipe, app install) over an unauthenticated socket and must never be
+    // reachable from other hosts on the network.
+    server.listen(options.port ?? 0, '127.0.0.1', () => {
       const addr = server.address();
       const port = typeof addr === 'object' && addr ? addr.port : 0;
 
@@ -700,6 +1025,10 @@ export function startInspectorServer(
         close() {
           clearTimeout(frameTimer);
           clearTimeout(treeTimer);
+          for (const dir of bundleUploads.values()) {
+            void rm(dir, { recursive: true, force: true }).catch(() => undefined);
+          }
+          bundleUploads.clear();
           wss.close();
           server.close();
         },
@@ -716,6 +1045,50 @@ export function startInspectorServer(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Back off a polling interval the longer the device stays idle, capped at
+ * maxMs. The interval returns to the base value (streak 0) the moment a change
+ * or action is observed, keeping active inspection responsive while idle
+ * sessions stop hammering slow device transports.
+ */
+function nextPollInterval(baseMs: number, idleStreak: number, maxMs: number): number {
+  if (idleStreak <= 1) {
+    return baseMs;
+  }
+
+  const factor = 1 + Math.min(3, (idleStreak - 1) * 0.5);
+  return Math.min(maxMs, Math.round(baseMs * factor));
+}
+
+/**
+ * Compact, order-sensitive fingerprint of the visible UI tree used to detect
+ * whether anything changed between polls. Hashing keeps the stored value small
+ * and the comparison O(1) regardless of tree size.
+ */
+function computeTreeSignature(nodes: UiNode[]): string {
+  const hash = createHash('sha1');
+  for (const node of nodes) {
+    hash.update(node.uid);
+    hash.update('|');
+    hash.update(node.type);
+    hash.update('|');
+    hash.update(`${node.bounds.x},${node.bounds.y},${node.bounds.width},${node.bounds.height}`);
+    hash.update('|');
+    hash.update(node.visible ? '1' : '0');
+    hash.update(node.enabled ? '1' : '0');
+    hash.update('|');
+    hash.update(node.id ?? '');
+    hash.update('|');
+    hash.update(node.label ?? '');
+    hash.update('|');
+    hash.update(node.text ?? '');
+    hash.update('|');
+    hash.update(node.value ?? '');
+    hash.update('\n');
+  }
+  return hash.digest('hex');
+}
 
 function flattenSnapshot(root: MobileElementSnapshot): UiNode[] {
   const nodes: UiNode[] = [];
@@ -1340,7 +1713,8 @@ export interface InspectorDeviceActionDefinition {
 }
 
 const BASE_INSPECTOR_DEVICE_ACTIONS: readonly InspectorDeviceActionDefinition[] = [
-  { id: 'refresh', label: 'Refresh', group: 'device' },
+  { id: 'refresh', label: 'Refresh Screen', group: 'device' },
+  { id: 'tree.refresh', label: 'Refresh UI Tree', group: 'device' },
   { id: 'orientation.portrait', label: 'Portrait', group: 'device' },
   { id: 'orientation.landscape', label: 'Landscape', group: 'device' },
   { id: 'keyboard.dismiss', label: 'Dismiss Keyboard', group: 'device' },
@@ -1410,6 +1784,8 @@ function inspectorDeviceActionIcon(action: InspectorDeviceAction): string {
   switch (action) {
     case 'refresh':
       return iconSvg('<path d="M21 12a9 9 0 0 1-9 9 8.7 8.7 0 0 1-6.2-2.6"/><path d="M3 12a9 9 0 0 1 15.2-6.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/>');
+    case 'tree.refresh':
+      return iconSvg('<path d="M21 12a9 9 0 0 1-9 9 8.7 8.7 0 0 1-6.2-2.6"/><path d="M3 12a9 9 0 0 1 15.2-6.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/><path d="M12 7v4"/><path d="M9 11h6"/><path d="M8 16h8"/>');
     case 'orientation.portrait':
       return iconSvg('<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>');
     case 'orientation.landscape':
@@ -1458,6 +1834,7 @@ function inspectorAppActionLabel(action: InspectorAppActionKind): string {
 }
 
 export const __testing = {
+  buildInspectorHtml,
   generateTestCode,
   generateRecordedStepCode,
   getInspectorDeviceActionDefinitions,
@@ -1505,10 +1882,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 #live-badge{padding:3px 8px;border-radius:10px;font-size:11px;font-weight:600;background:#1a3d1a;color:var(--green);border:1px solid #2e6b2e;display:flex;align-items:center;gap:4px}
 #live-badge.connecting{background:#3a2a10;color:var(--yellow);border-color:#6a4e20}
 #live-badge::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0}
-#device-controls{position:relative;display:flex;align-items:center;gap:8px;margin-left:auto}
+#device-controls{position:relative;display:flex;align-items:center;gap:8px}
 #device-menu-btn{padding:6px 12px;border-radius:var(--radius);border:1px solid var(--border);font-size:12px;font-weight:600;cursor:pointer;background:var(--surface2);color:var(--text);transition:all .15s}
 #device-menu-btn:hover,#device-controls.open #device-menu-btn{border-color:var(--accent);color:var(--accent-hover)}
-#device-status{max-width:220px;font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#device-status{flex:1;min-width:0;font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;padding:0 12px}
 #device-status[data-tone="pending"]{color:var(--yellow)}
 #device-status[data-tone="success"]{color:var(--green)}
 #device-status[data-tone="error"]{color:var(--red)}
@@ -1522,6 +1899,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .device-action-btn.icon{width:32px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center}
 .device-action-btn.icon svg{width:15px;height:15px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .device-row{display:flex;gap:6px;align-items:center}
+.device-row.upload-zone.drag-active .device-input,.device-row.upload-zone.drag-active .device-action-btn{border-color:var(--accent);background:rgba(31,111,235,.08)}
+.device-help{font-size:10px;line-height:1.45;color:var(--text-muted);padding:0 2px}
+#app-upload-selection{min-height:14px;color:var(--text-dim)}
 .device-input{min-width:0;flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:6px 8px;font:11px var(--font);color:var(--text);outline:none}
 .device-input:focus{border-color:var(--accent)}
 .device-list{display:flex;flex-direction:column;gap:4px;max-height:150px;overflow:auto}
@@ -1538,6 +1918,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .panel-header{padding:10px 14px;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--text-dim);text-transform:uppercase;border-bottom:1px solid var(--border);flex-shrink:0}
 #inspector-section{display:flex;flex-direction:column;overflow:hidden;flex:1}
 #inspector-hint{padding:12px 14px;font-size:12px;color:var(--text-dim);border-bottom:1px solid var(--border);flex-shrink:0}
+#action-section{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.action-mode-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mode-btn,.element-action-btn{min-height:30px;padding:5px 10px;border-radius:var(--radius);border:1px solid var(--border);font-size:11px;font-weight:700;cursor:pointer;background:var(--surface2);color:var(--text);transition:border-color .15s,color .15s,background .15s}
+.mode-btn:hover,.element-action-btn:hover{border-color:var(--accent);color:var(--accent-hover)}
+.mode-btn.active{border-color:var(--accent);color:var(--accent-hover);background:rgba(31,111,235,.12)}
+.element-action-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center}
+.element-action-input{min-width:0;height:30px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:5px 8px;font:11px var(--font);color:var(--text);outline:none}
+.element-action-input:focus{border-color:var(--accent)}
+.mode-btn:disabled,.element-action-btn:disabled,.element-action-input:disabled{opacity:.45;cursor:not-allowed;color:var(--text-muted)}
+.mode-btn:disabled:hover,.element-action-btn:disabled:hover{border-color:var(--border);color:var(--text-muted)}
 #locator-section{padding:12px 14px;flex-shrink:0}
 #best-locator-label{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px}
 #best-locator-code{display:flex;align-items:flex-start;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font:12px/1.4 var(--mono);color:var(--accent-hover);word-break:break-all}
@@ -1559,12 +1949,14 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 #details-table td{padding:5px 14px;border-bottom:1px solid var(--border)}
 #details-table td:first-child{color:var(--text-muted);width:40%;font-size:11px}
 #details-table td:last-child{color:var(--text);font:11px/1.4 var(--mono);word-break:break-all}
-#inspector-footer{display:flex;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0}
+#inspector-footer{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0}
+#legal-note{font-size:10px;color:var(--text-muted);line-height:1.4}
 /* Center mirror */
 #center-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 18px 16px;overflow:hidden;background:var(--bg)}
 #phone-shell{position:relative;background:transparent;border:none;padding:0;box-shadow:none;flex-shrink:0}
 #phone-notch{display:none}
-#mirror-stage{position:relative;cursor:crosshair;overflow:hidden;border-radius:28px;background:#0a0a0f;box-shadow:0 24px 64px rgba(0,0,0,.48),0 0 0 1px rgba(255,255,255,.08)}
+#mirror-stage{position:relative;cursor:crosshair;overflow:hidden;border-radius:28px;background:#0a0a0f;box-shadow:0 24px 64px rgba(0,0,0,.48),0 0 0 1px rgba(255,255,255,.08);width:360px;height:720px;max-width:calc(100vw - 420px);max-height:calc(100vh - 96px)}
+#mirror-stage[data-mode="interact"]{cursor:pointer}
 #mirror-stage.dragging{cursor:grabbing}
 #mirror-img{display:block;max-width:100%;user-select:none;pointer-events:none;border-radius:inherit}
 #mirror-img.placeholder{opacity:.15}
@@ -1572,9 +1964,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .el-highlight{position:absolute;border:2px solid var(--purple);background:rgba(139,92,246,.12);border-radius:2px;transition:all .1s}
 .el-label{position:absolute;top:-18px;left:0;background:var(--purple);color:#fff;font:10px/18px var(--mono);padding:0 5px;border-radius:3px;white-space:nowrap}
 #mirror-status{margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center}
-#busy-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(13,17,23,.45);z-index:5}
+#busy-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:rgba(13,17,23,.72);z-index:5;text-align:center;padding:24px}
 #busy-overlay.active{display:flex}
 .spinner{width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.18);border-top-color:var(--accent-hover);animation:spin .8s linear infinite}
+.busy-label{font-size:12px;font-weight:600;color:var(--text)}
+.busy-subtitle{font-size:11px;color:var(--text-muted);max-width:220px}
 @keyframes spin{to{transform:rotate(360deg)}}
 #left-column-splitter,#right-column-splitter{position:relative;cursor:col-resize;background:var(--surface);border-left:1px solid var(--border);border-right:1px solid var(--border)}
 #left-column-splitter::before,#right-column-splitter::before{content:'';position:absolute;top:50%;left:50%;width:4px;height:44px;border-radius:999px;background:var(--border);transform:translate(-50%,-50%)}
@@ -1587,14 +1981,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 #tree-search-row{padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;gap:6px}
 #tree-search{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:5px 8px;font:12px var(--font);color:var(--text);outline:none}
 #tree-search:focus{border-color:var(--accent)}
-#tree-list{flex:1;overflow-y:auto;padding:4px 0}
-.tree-node{display:flex;align-items:center;gap:4px;padding:2px 8px;cursor:pointer;border-left:2px solid transparent;transition:background .1s}
+#tree-list{flex:1;overflow:auto;padding:4px 0}
+.tree-empty{padding:16px 12px;font-size:12px;color:var(--text-muted);text-align:center}
+.tree-node{display:flex;align-items:center;gap:4px;padding:2px 8px;cursor:pointer;border-left:2px solid transparent;transition:background .1s;min-width:100%;width:max-content}
 .tree-node:hover{background:var(--surface2)}
 .tree-node.selected{background:rgba(31,111,235,.15);border-left-color:var(--accent)}
 .tree-node.hidden{opacity:.35}
 .tree-expander{width:14px;flex-shrink:0;font-size:10px;color:var(--text-muted);cursor:pointer;user-select:none}
-.tree-type{font:10px/1 var(--mono);color:var(--text-muted);flex-shrink:0;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tree-title{font-size:11px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.tree-type{font:10px/1 var(--mono);color:var(--text-muted);flex-shrink:0;white-space:nowrap}
+.tree-title{font-size:11px;color:var(--text-dim);flex:0 0 auto;white-space:nowrap}
 /* Code panel */
 #code-panel{display:flex;flex-direction:column;overflow:hidden;min-height:0}
 #code-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
@@ -1602,6 +1997,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .code-tab:hover{color:var(--text)}
 .code-tab.active{color:var(--accent-hover);border-bottom-color:var(--accent-hover)}
 #code-view{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#code-lang-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);flex-shrink:0;align-items:center;padding-right:8px}
+#code-script-copy-btn{margin-left:auto}
 #code-block{flex:1;overflow:auto;padding:10px 12px;font:11px/1.6 var(--mono);color:#c9d1d9;background:var(--bg);white-space:pre;tab-size:2}
 #steps-view{flex:1;display:flex;flex-direction:column;overflow:hidden}
 #steps-toolbar{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0}
@@ -1646,9 +2043,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       </div>
     </div>
     <div id="live-badge" class="connecting">Connecting…</div>
+    <span id="device-status" aria-live="polite"></span>
     <div id="device-controls">
       <button id="device-menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Controls</button>
-      <span id="device-status" aria-live="polite"></span>
       <div id="device-menu">
         <div class="device-menu-section">
           <div class="device-menu-label">App</div>
@@ -1656,10 +2053,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
             <input id="app-identifier-input" class="device-input" placeholder="package or bundle id"/>
             <button type="button" class="device-action-btn" id="launch-app-btn">Launch</button>
           </div>
-          <div class="device-row">
+          <div id="app-upload-row" class="device-row upload-zone">
             <input id="app-upload-input" class="device-input" type="file" accept=".apk,.ipa,.app"/>
             <button type="button" class="device-action-btn" id="install-app-btn">Install</button>
           </div>
+          <div id="app-upload-hint" class="device-help">Android installs use .apk. iOS Simulator uses a simulator-built .app from Xcode. Real iPhone/iPad installs use a signed .ipa.</div>
+          <div id="app-upload-selection" class="device-help"></div>
           <div class="device-row">
             <input id="permission-input" class="device-input" placeholder="permission, e.g. camera"/>
             <button type="button" class="device-action-btn" id="grant-permission-btn">Grant</button>
@@ -1684,6 +2083,17 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       <div class="panel-header">Inspector</div>
       <div id="inspector-section">
         <div id="inspector-hint">Tap on the screen or select an element in the tree to generate locators.</div>
+        <div id="action-section">
+          <div class="action-mode-row" role="group" aria-label="Mirror click mode">
+            <button type="button" id="inspect-mode-btn" class="mode-btn active" title="Select elements in the mirror">Inspect</button>
+            <button type="button" id="interact-mode-btn" class="mode-btn" title="Tap the device without recording">Interact</button>
+          </div>
+          <div class="element-action-row">
+            <button type="button" id="element-tap-btn" class="element-action-btn" disabled>Tap</button>
+            <input id="element-fill-input" class="element-action-input" placeholder="text" disabled/>
+            <button type="button" id="element-fill-btn" class="element-action-btn" disabled>Fill</button>
+          </div>
+        </div>
         <div id="locator-section">
           <div id="best-locator-label">Best Locator</div>
           <div id="best-locator-code">—</div>
@@ -1696,6 +2106,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
           </table>
         </div>
         <div id="inspector-footer">
+          <span id="legal-note">© ${new Date().getFullYear()} Astur · Open source, Apache-2.0</span>
           <span id="version-chip">v${escHtml(INSPECTOR_VERSION)}</span>
         </div>
       </div>
@@ -1710,7 +2121,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <div id="mirror-stage">
           <img id="mirror-img" class="placeholder" src="" alt="Device mirror" draggable="false"/>
           <div id="highlight-overlay"></div>
-          <div id="busy-overlay"><div class="spinner"></div></div>
+          <div id="busy-overlay" class="active" aria-live="polite" aria-busy="true">
+            <div class="spinner"></div>
+            <div id="busy-label" class="busy-label">Inspector is not ready yet</div>
+            <div id="busy-subtitle" class="busy-subtitle">Astur is preparing the device, screen stream, and UI tree. This can take a few minutes on first real-device runs.</div>
+          </div>
         </div>
       </div>
       <div id="mirror-status">Waiting for device…</div>
@@ -1736,9 +2151,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
           <div class="code-tab" data-tab="steps">Recording Steps</div>
         </div>
         <div id="code-view">
-          <div id="code-lang-tabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);flex-shrink:0">
+          <div id="code-lang-tabs">
             <button class="code-tab active" data-lang="typescript">TypeScript</button>
             <button class="code-tab" data-lang="javascript">JavaScript</button>
+            <button id="code-script-copy-btn" class="copy-btn" type="button" title="Copy script" aria-label="Copy script"></button>
           </div>
           <pre id="code-block">// No steps recorded yet</pre>
         </div>
@@ -1789,13 +2205,18 @@ let viewport = { width: 1, height: 1 };
 let selectedUid = null;
 let currentSuggestions = [];
 let activeLocator = '';
+let activeSelector = null;
 let recording = false;
+let mirrorMode = 'inspect';
 let steps = [];
 let codeLang = 'typescript';
 let activeTab = 'code';
 let currentDevice = ${JSON.stringify(toBootstrapDevice(device))};
 let devices = [currentDevice];
 let busyCount = 0;
+let socketConnected = false;
+let hasFrame = false;
+let hasTree = false;
 let composerMode = null;
 let dragStart = null;
 let suppressNextClick = false;
@@ -1821,8 +2242,16 @@ const exportBtn = $('export-btn');
 const mirrorImg = $('mirror-img');
 const mirrorStage = $('mirror-stage');
 const busyOverlay = $('busy-overlay');
+const busyLabel = $('busy-label');
+const busySubtitle = $('busy-subtitle');
 const centerPanel = $('center-panel');
 const highlightOverlay = $('highlight-overlay');
+const inspectorHint = $('inspector-hint');
+const inspectModeBtn = $('inspect-mode-btn');
+const interactModeBtn = $('interact-mode-btn');
+const elementTapBtn = $('element-tap-btn');
+const elementFillInput = $('element-fill-input');
+const elementFillBtn = $('element-fill-btn');
 const bestLocatorCode = $('best-locator-code');
 const alternativesList = $('alternatives-list');
 const detailsBody = $('details-body');
@@ -1830,6 +2259,7 @@ const treeList = $('tree-list');
 const treeSearch = $('tree-search');
 const treeBadge = $('tree-badge');
 const codeBlock = $('code-block');
+const codeScriptCopyBtn = $('code-script-copy-btn');
 const stepsBody = $('steps-body');
 const codeView = $('code-view');
 const stepsView = $('steps-view');
@@ -1843,7 +2273,10 @@ const composerValue = $('composer-value');
 const composerCancelBtn = $('composer-cancel-btn');
 const composerAddBtn = $('composer-add-btn');
 const appIdentifierInput = $('app-identifier-input');
+const appUploadRow = $('app-upload-row');
 const appUploadInput = $('app-upload-input');
+const appUploadHint = $('app-upload-hint');
+const appUploadSelection = $('app-upload-selection');
 const permissionInput = $('permission-input');
 const launchAppBtn = $('launch-app-btn');
 const installAppBtn = $('install-app-btn');
@@ -1857,19 +2290,21 @@ const rightColumnSplitter = $('right-column-splitter');
 const rightPanel = $('right-panel');
 const rightSplitter = $('right-splitter');
 let deviceStatusTimer;
+let pendingInstallSelection = null;
 
 // ── WebSocket ──────────────────────────────────────────────────────────────
 let ws;
 function connectWs() {
   ws = new WebSocket('ws://' + location.host);
   ws.onopen = () => {
-    liveBadge.textContent = 'Live';
-    liveBadge.className = '';
-    liveBadge.style.cssText = '';
+    socketConnected = true;
+    updateDeviceReadiness();
   };
   ws.onclose = () => {
+    socketConnected = false;
     liveBadge.textContent = 'Disconnected';
     liveBadge.className = 'connecting';
+    updateDeviceReadiness('Connection lost. Reconnecting…');
     setTimeout(connectWs, 2000);
   };
   ws.onerror = () => ws.close();
@@ -1888,6 +2323,7 @@ function send(obj) {
 function handleServerEvent(ev) {
   switch (ev.type) {
     case 'bootstrap':
+      resetDeviceReadiness('Inspector is not ready yet');
       currentDevice = ev.device || currentDevice;
       devices = mergeDevices(devices, currentDevice);
       renderDeviceHeader();
@@ -1895,9 +2331,11 @@ function handleServerEvent(ev) {
       if (ev.logoDataUri) { logo.src = ev.logoDataUri; logo.style.display = ''; }
       nodes = ev.nodes || [];
       viewport = ev.viewport || { width: 1, height: 1 };
+      hasTree = nodes.length > 0;
       if (ev.suggestions) currentSuggestions = ev.suggestions;
       renderTree();
       if (ev.initialUid) selectUid(ev.initialUid, ev.suggestions || [], false);
+      updateDeviceReadiness();
       break;
 
     case 'devices':
@@ -1906,15 +2344,19 @@ function handleServerEvent(ev) {
       break;
 
     case 'frame':
+      hasFrame = true;
       mirrorImg.src = ev.dataUri;
       mirrorImg.classList.remove('placeholder');
       $('mirror-status').textContent = '';
       sizeMirror();
+      updateDeviceReadiness();
       break;
 
     case 'tree':
       nodes = ev.nodes || [];
       viewport = ev.viewport || viewport;
+      sizeMirror();
+      hasTree = nodes.length > 0;
       renderTree();
       if (deviceStatus.textContent.startsWith('UI tree unavailable') || deviceStatus.textContent.startsWith('UI tree refresh delayed')) {
         showDeviceStatus('', '');
@@ -1928,11 +2370,12 @@ function handleServerEvent(ev) {
         const auto = nodes.find(n => n.visible && n.enabled && !n.type.endsWith('.root') && (n.id || n.label || n.text));
         if (auto) send({ type: 'select', uid: auto.uid });
       }
+      updateDeviceReadiness();
       break;
 
     case 'selection':
       nodes = updateNodeInList(nodes, ev.uid, ev.node);
-      selectUid(ev.uid, ev.suggestions || [], false);
+      selectUid(ev.uid, ev.suggestions || [], true);
       break;
 
     case 'step':
@@ -2022,7 +2465,68 @@ function toggleDeviceSwitcher() {
 
 function setBusy(active) {
   busyCount = Math.max(0, busyCount + (active ? 1 : -1));
-  busyOverlay.classList.toggle('active', busyCount > 0);
+  updateDeviceReadiness();
+}
+
+function resetDeviceReadiness(message) {
+  hasFrame = false;
+  hasTree = false;
+  selectedUid = null;
+  currentSuggestions = [];
+  activeLocator = '';
+  activeSelector = null;
+  mirrorImg.src = '';
+  mirrorImg.classList.add('placeholder');
+  highlightOverlay.innerHTML = '';
+  renderLocators([]);
+  detailsBody.innerHTML = '';
+  updateDeviceReadiness(message);
+}
+
+function updateDeviceReadiness(message) {
+  const screenReady = socketConnected && hasFrame;
+  const overlayActive = busyCount > 0 || !screenReady;
+  busyOverlay.classList.toggle('active', overlayActive);
+  busyOverlay.setAttribute('aria-busy', overlayActive ? 'true' : 'false');
+
+  if (!socketConnected) {
+    liveBadge.textContent = 'Connecting…';
+    liveBadge.className = 'connecting';
+    busyLabel.textContent = message || 'Connecting to Inspector…';
+    busySubtitle.textContent = 'Waiting for the local Inspector session. The device is not ready yet.';
+    $('mirror-status').textContent = message || 'Connecting to Inspector…';
+    return;
+  }
+
+  if (!hasFrame) {
+    liveBadge.textContent = 'Preparing';
+    liveBadge.className = 'connecting';
+    busyLabel.textContent = message || 'Preparing device…';
+    busySubtitle.textContent = 'Astur is waiting for the first screen frame. If this is the first real-device run, Xcode/agent setup may take a few minutes.';
+    $('mirror-status').textContent = message || 'Waiting for device…';
+    return;
+  }
+
+  if (!hasTree) {
+    liveBadge.textContent = 'Live';
+    liveBadge.className = '';
+    busyLabel.textContent = busyCount > 0 ? 'Running action…' : 'Screen ready';
+    busySubtitle.textContent = busyCount > 0
+      ? 'Waiting for device response.'
+      : 'The screen is visible. The UI tree is still loading, so inspection and locator ranking may lag behind the mirror.';
+    if (busyCount === 0 && !$('device-status').textContent) {
+      $('mirror-status').textContent = 'UI tree still loading…';
+    }
+    return;
+  }
+
+  liveBadge.textContent = 'Live';
+  liveBadge.className = '';
+  busyLabel.textContent = busyCount > 0 ? 'Running action…' : 'Ready';
+  busySubtitle.textContent = busyCount > 0 ? 'Waiting for device response.' : '';
+  if (busyCount === 0) {
+    $('mirror-status').textContent = '';
+  }
 }
 
 function releaseGestureLock() {
@@ -2035,6 +2539,261 @@ function releaseGestureLock() {
 
 function renderDeviceHeader() {
   deviceName.textContent = currentDevice ? currentDevice.name : 'Device';
+  applyDeviceInstallSpec(currentDevice);
+}
+
+function deviceInstallSpec(device) {
+  if (device && device.platform === 'android') {
+    return {
+      installKind: 'file',
+      accept: '.apk',
+      extensions: ['.apk'],
+      identifierPlaceholder: 'package id, e.g. com.example.app',
+      hint: 'Android installs use .apk files. You can choose a file or drag one into this area.',
+      emptyMessage: 'Choose an .apk to install on Android.',
+      invalidMessage: 'Android installs require an .apk file.'
+    };
+  }
+
+  if (device && device.platform === 'ios' && device.kind === 'simulator') {
+    return {
+      installKind: 'bundle',
+      accept: '.app',
+      extensions: ['.app'],
+      identifierPlaceholder: 'bundle id, e.g. com.example.app',
+      hint: 'iOS Simulator installs use a simulator-built .app bundle from Xcode. Choose the .app bundle directory or drag it into this area.',
+      emptyMessage: 'Choose a simulator-built .app bundle for iOS Simulator.',
+      invalidMessage: 'iOS Simulator installs require a simulator-built .app bundle from Xcode.'
+    };
+  }
+
+  if (device && device.platform === 'ios') {
+    return {
+      installKind: 'file',
+      accept: '.ipa',
+      extensions: ['.ipa'],
+      identifierPlaceholder: 'bundle id, e.g. com.example.app',
+      hint: 'Real iPhone and iPad installs use a signed .ipa with a valid provisioning profile trusted on the device. You can choose a file or drag one into this area.',
+      emptyMessage: 'Choose a signed .ipa to install on iPhone or iPad.',
+      invalidMessage: 'Real iPhone and iPad installs require a signed .ipa.'
+    };
+  }
+
+  return {
+    installKind: 'file',
+    accept: '.apk,.app,.ipa',
+    extensions: ['.apk', '.app', '.ipa'],
+    identifierPlaceholder: 'package or bundle id',
+    hint: 'Android installs use .apk. iOS Simulator uses a simulator-built .app from Xcode. Real iPhone and iPad installs use a signed .ipa.',
+    emptyMessage: 'Choose an install artifact.',
+    invalidMessage: 'Choose a valid install artifact for the current device.'
+  };
+}
+
+function applyDeviceInstallSpec(device) {
+  const spec = deviceInstallSpec(device);
+  appIdentifierInput.placeholder = spec.identifierPlaceholder;
+  if (spec.installKind === 'bundle') {
+    appUploadInput.removeAttribute('accept');
+    appUploadInput.setAttribute('webkitdirectory', '');
+    appUploadInput.setAttribute('directory', '');
+    appUploadInput.multiple = true;
+  } else {
+    appUploadInput.accept = spec.accept;
+    appUploadInput.removeAttribute('webkitdirectory');
+    appUploadInput.removeAttribute('directory');
+    appUploadInput.multiple = false;
+  }
+  appUploadInput.title = '';
+  const specKey = spec.installKind + ':' + spec.accept;
+  if (appUploadInput.dataset.acceptSpec !== specKey) {
+    appUploadInput.value = '';
+    appUploadInput.dataset.acceptSpec = specKey;
+    pendingInstallSelection = null;
+  }
+  if (appUploadHint) {
+    appUploadHint.textContent = spec.hint;
+  }
+  renderInstallSelection();
+}
+
+function isAllowedInstallArtifact(file, spec) {
+  const name = String(file && file.name || '').toLowerCase();
+  return spec.extensions.some((extension) => name.endsWith(extension));
+}
+
+function renderInstallSelection() {
+  if (!appUploadSelection) return;
+  if (!pendingInstallSelection) {
+    appUploadSelection.textContent = '';
+    return;
+  }
+
+  if (pendingInstallSelection.kind === 'bundle') {
+    appUploadSelection.textContent = 'Selected bundle: ' + pendingInstallSelection.rootName + ' (' + pendingInstallSelection.files.length + ' files)';
+    return;
+  }
+
+  appUploadSelection.textContent = 'Selected file: ' + pendingInstallSelection.file.name;
+}
+
+function setPendingInstallSelection(selection) {
+  pendingInstallSelection = selection;
+  renderInstallSelection();
+}
+
+function clearPendingInstallSelection() {
+  pendingInstallSelection = null;
+  renderInstallSelection();
+}
+
+function normalizeBundleEntries(files) {
+  return Array.from(files || []).map((file) => ({
+    file,
+    relativePath: String(file.webkitRelativePath || file.name).replace(/\\\\/g, '/')
+  }));
+}
+
+function inferBundleRootName(entries) {
+  const roots = [...new Set(entries.map((entry) => String(entry.relativePath || '').split('/')[0]).filter(Boolean))];
+  return roots.length === 1 ? roots[0] : undefined;
+}
+
+function createInstallSelectionFromFiles(files, spec) {
+  const list = Array.from(files || []);
+  if (!list.length) {
+    return null;
+  }
+
+  if (spec.installKind === 'bundle') {
+    const entries = normalizeBundleEntries(list);
+    const rootName = inferBundleRootName(entries);
+    if (!rootName || !rootName.toLowerCase().endsWith('.app')) {
+      throw new Error(spec.invalidMessage);
+    }
+
+    return {
+      kind: 'bundle',
+      rootName,
+      files: entries
+    };
+  }
+
+  const file = list[0];
+  if (!isAllowedInstallArtifact(file, spec)) {
+    throw new Error(spec.invalidMessage);
+  }
+
+  return {
+    kind: 'file',
+    file
+  };
+}
+
+function readDirectoryEntries(reader) {
+  return new Promise((resolve) => {
+    const entries = [];
+    const readBatch = () => {
+      reader.readEntries((batch) => {
+        if (!batch.length) {
+          resolve(entries);
+          return;
+        }
+        entries.push(...batch);
+        readBatch();
+      }, () => resolve(entries));
+    };
+    readBatch();
+  });
+}
+
+async function readDroppedEntry(entry, prefix) {
+  if (entry.isFile) {
+    return new Promise((resolve) => {
+      entry.file((file) => {
+        resolve([{ file, relativePath: prefix + file.name }]);
+      }, () => resolve([]));
+    });
+  }
+
+  if (!entry.isDirectory) {
+    return [];
+  }
+
+  const nextPrefix = prefix + entry.name + '/';
+  const children = await readDirectoryEntries(entry.createReader());
+  const nested = await Promise.all(children.map((child) => readDroppedEntry(child, nextPrefix)));
+  return nested.flat();
+}
+
+async function createInstallSelectionFromDrop(dataTransfer, spec) {
+  if (spec.installKind !== 'bundle') {
+    return createInstallSelectionFromFiles(dataTransfer.files, spec);
+  }
+
+  const items = Array.from(dataTransfer.items || []);
+  const nested = await Promise.all(items.map(async (item) => {
+    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+    if (entry) {
+      return readDroppedEntry(entry, '');
+    }
+    const file = item.getAsFile ? item.getAsFile() : null;
+    return file ? [{ file, relativePath: file.name }] : [];
+  }));
+  const entries = nested.flat();
+
+  if (entries.length) {
+    const rootName = inferBundleRootName(entries);
+    if (!rootName || !rootName.toLowerCase().endsWith('.app')) {
+      throw new Error(spec.invalidMessage);
+    }
+
+    return {
+      kind: 'bundle',
+      rootName,
+      files: entries
+    };
+  }
+
+  return createInstallSelectionFromFiles(dataTransfer.files, spec);
+}
+
+async function uploadInstallSelection(selection) {
+  if (!selection) {
+    return;
+  }
+
+  if (selection.kind === 'bundle') {
+    const uploadId = self.crypto && self.crypto.randomUUID
+      ? self.crypto.randomUUID()
+      : String(Date.now()) + Math.random().toString(16).slice(2);
+
+    for (const entry of selection.files) {
+      const response = await fetch('/api/upload-app-file?uploadId=' + encodeURIComponent(uploadId) + '&relativePath=' + encodeURIComponent(entry.relativePath), {
+        method: 'POST',
+        body: entry.file
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+    }
+
+    const finalize = await fetch('/api/upload-app-bundle?uploadId=' + encodeURIComponent(uploadId) + '&rootName=' + encodeURIComponent(selection.rootName), {
+      method: 'POST'
+    });
+    if (!finalize.ok) {
+      throw new Error(await finalize.text());
+    }
+    return;
+  }
+
+  const response = await fetch('/api/upload-app?filename=' + encodeURIComponent(selection.file.name), {
+    method: 'POST',
+    body: selection.file
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
 }
 
 function mergeDevices(list, device) {
@@ -2079,6 +2838,14 @@ function renderTree() {
   const query = treeSearch.value.toLowerCase();
   treeBadge.textContent = nodes.length ? '(' + nodes.length + ')' : '';
   const frag = document.createDocumentFragment();
+  if (!nodes.length) {
+    const empty = document.createElement('div');
+    empty.className = 'tree-empty';
+    empty.textContent = socketConnected ? 'Reading UI tree…' : 'Connecting to Inspector…';
+    treeList.innerHTML = '';
+    treeList.appendChild(empty);
+    return;
+  }
   for (const node of nodes) {
     const haystack = [node.title, node.type, node.id, node.label, node.text, node.value]
       .filter(Boolean)
@@ -2153,12 +2920,14 @@ function updateHighlight(uid) {
 
 // ── Locators ──────────────────────────────────────────────────────────────
 function renderLocators(suggestions) {
-  currentSuggestions = suggestions || [];
-  const best = suggestions[0];
+  const list = suggestions || [];
+  currentSuggestions = list;
+  const best = list[0];
   activeLocator = best ? best.code : '';
+  activeSelector = best ? best.selector : null;
   renderBestLocator();
   alternativesList.innerHTML = '';
-  for (const s of suggestions.slice(1, 5)) {
+  for (const s of list.slice(1, 5)) {
     const div = document.createElement('div');
     div.className = 'alt-item';
     const code = document.createElement('span');
@@ -2171,6 +2940,7 @@ function renderLocators(suggestions) {
     div.append(code, score, copy);
     div.addEventListener('click', () => {
       activeLocator = s.code;
+      activeSelector = s.selector;
       renderBestLocator();
     });
     alternativesList.appendChild(div);
@@ -2182,6 +2952,7 @@ function renderBestLocator() {
   bestLocatorCode.dataset.locator = activeLocator;
   if (!activeLocator) {
     bestLocatorCode.textContent = '—';
+    activeSelector = null;
     updateStepControls();
     return;
   }
@@ -2264,12 +3035,31 @@ function isFillableSelectedNode() {
 
 function updateStepControls() {
   const hasLocator = !!activeLocator && activeLocator !== '—';
+  const canRunAction = hasLocator && !!activeSelector;
+  const canFill = canRunAction && isFillableSelectedNode();
   addTapBtn.disabled = !hasLocator;
   addExpectBtn.disabled = !hasLocator;
   addFillBtn.disabled = !hasLocator || !isFillableSelectedNode();
   addFillBtn.title = addFillBtn.disabled && hasLocator
     ? 'Fill is only available for text input elements'
     : '';
+  elementTapBtn.disabled = !canRunAction;
+  elementFillInput.disabled = !canFill;
+  elementFillBtn.disabled = !canFill;
+  elementFillBtn.title = !canFill && canRunAction
+    ? 'Fill is only available for text input elements'
+    : '';
+}
+
+function setMirrorMode(mode) {
+  mirrorMode = mode;
+  const interacting = mode === 'interact';
+  inspectModeBtn.classList.toggle('active', !interacting);
+  interactModeBtn.classList.toggle('active', interacting);
+  mirrorStage.dataset.mode = mode;
+  inspectorHint.textContent = interacting
+    ? 'Tap the screen to interact with the device without recording.'
+    : 'Tap on the screen or select an element in the tree to generate locators.';
 }
 
 // ── Details ────────────────────────────────────────────────────────────────
@@ -2294,9 +3084,26 @@ function renderDetails(node) {
 }
 
 // ── Mirror click ───────────────────────────────────────────────────────────
+function resolveMirrorSourceSize() {
+  const viewportWidth = Number(viewport.width || 0);
+  const viewportHeight = Number(viewport.height || 0);
+  if (viewportWidth > 1 && viewportHeight > 1) {
+    return { width: viewportWidth, height: viewportHeight };
+  }
+
+  const naturalWidth = Number(mirrorImg.naturalWidth || 0);
+  const naturalHeight = Number(mirrorImg.naturalHeight || 0);
+  if (naturalWidth > 1 && naturalHeight > 1) {
+    return { width: naturalWidth, height: naturalHeight };
+  }
+
+  return { width: 1, height: 1 };
+}
+
 function sizeMirror() {
-  const sourceW = mirrorImg.naturalWidth || viewport.width || 1;
-  const sourceH = mirrorImg.naturalHeight || viewport.height || 1;
+  const source = resolveMirrorSourceSize();
+  const sourceW = source.width;
+  const sourceH = source.height;
   const ratio = sourceH / sourceW;
   const availableW = Math.max(240, centerPanel.clientWidth - 44);
   const availableH = Math.max(320, centerPanel.clientHeight - 40);
@@ -2312,6 +3119,11 @@ function sizeMirror() {
   if (selectedUid) updateHighlight(selectedUid);
 }
 
+mirrorImg.addEventListener('load', () => {
+  sizeMirror();
+  if (selectedUid) updateHighlight(selectedUid);
+});
+
 mirrorStage.addEventListener('click', e => {
   if (suppressNextClick) {
     suppressNextClick = false;
@@ -2319,8 +3131,9 @@ mirrorStage.addEventListener('click', e => {
   }
 
   const point = mirrorEventPoint(e);
-  if (recording) setBusy(true);
-  send({ type: 'click', x: point.x, y: point.y, record: recording });
+  const performTap = mirrorMode === 'interact' && !recording;
+  if (recording || performTap) setBusy(true);
+  send({ type: 'click', x: point.x, y: point.y, record: recording, perform: performTap });
 });
 
 mirrorStage.addEventListener('wheel', e => {
@@ -2597,6 +3410,22 @@ document.querySelectorAll('#code-lang-tabs .code-tab').forEach(btn => {
   });
 });
 
+if (codeScriptCopyBtn) {
+  codeScriptCopyBtn.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    const text = codeBlock.textContent || '';
+    const copied = await copyText(text);
+    if (!copied) return;
+    codeScriptCopyBtn.classList.add('copied');
+    codeScriptCopyBtn.title = 'Copied';
+    clearTimeout(codeScriptCopyBtn._copyResetTimer);
+    codeScriptCopyBtn._copyResetTimer = setTimeout(() => {
+      codeScriptCopyBtn.classList.remove('copied');
+      codeScriptCopyBtn.title = 'Copy script';
+    }, 1200);
+  });
+}
+
 // ── Code block ────────────────────────────────────────────────────────────
 function updateCodeBlock() {
   // Generate code client-side from steps for display; actual export goes server-side
@@ -2758,6 +3587,37 @@ composerAddBtn.addEventListener('click', () => {
   closeStepComposer();
 });
 
+// ── Direct Actions ────────────────────────────────────────────────────────
+function runSelectedElementTap() {
+  if (!activeSelector) return;
+  showDeviceStatus('Tapping selected element...', 'pending');
+  setBusy(true);
+  send({ type: 'direct_action', action: 'tap', selector: activeSelector });
+}
+
+function runSelectedElementFill() {
+  if (!activeSelector || !isFillableSelectedNode()) return;
+  showDeviceStatus('Filling selected element...', 'pending');
+  setBusy(true);
+  send({
+    type: 'direct_action',
+    action: 'fill',
+    selector: activeSelector,
+    value: elementFillInput.value
+  });
+}
+
+inspectModeBtn.addEventListener('click', () => setMirrorMode('inspect'));
+interactModeBtn.addEventListener('click', () => setMirrorMode('interact'));
+elementTapBtn.addEventListener('click', runSelectedElementTap);
+elementFillBtn.addEventListener('click', runSelectedElementFill);
+elementFillInput.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || elementFillBtn.disabled) return;
+  event.preventDefault();
+  runSelectedElementFill();
+});
+setMirrorMode('inspect');
+
 // ── Record & Export ────────────────────────────────────────────────────────
 recordBtn.addEventListener('click', () => send({ type: 'record_toggle' }));
 
@@ -2823,21 +3683,77 @@ launchAppBtn.addEventListener('click', () => {
 });
 
 installAppBtn.addEventListener('click', async () => {
-  const file = appUploadInput.files && appUploadInput.files[0];
-  if (!file) return showDeviceStatus('Choose an APK, IPA, or app bundle', 'error');
+  const spec = deviceInstallSpec(currentDevice);
+  let selection;
+  try {
+    selection = pendingInstallSelection || createInstallSelectionFromFiles(appUploadInput.files, spec);
+  } catch (error) {
+    return showDeviceStatus((error && error.message) || spec.invalidMessage, 'error');
+  }
+  if (!selection) return showDeviceStatus(spec.emptyMessage, 'error');
   closeDeviceMenu();
   setBusy(true);
   try {
-    const response = await fetch('/api/upload-app?filename=' + encodeURIComponent(file.name), {
-      method: 'POST',
-      body: file
-    });
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
+    await uploadInstallSelection(selection);
+    appUploadInput.value = '';
+    clearPendingInstallSelection();
   } catch (error) {
     setBusy(false);
     showDeviceStatus((error && error.message) || String(error), 'error');
+  }
+});
+
+appUploadInput.addEventListener('change', () => {
+  const spec = deviceInstallSpec(currentDevice);
+  try {
+    const selection = createInstallSelectionFromFiles(appUploadInput.files, spec);
+    if (!selection) {
+      clearPendingInstallSelection();
+      return;
+    }
+    setPendingInstallSelection(selection);
+    appUploadInput.value = '';
+  } catch (error) {
+    appUploadInput.value = '';
+    clearPendingInstallSelection();
+    showDeviceStatus((error && error.message) || spec.invalidMessage, 'error');
+  }
+});
+
+['dragenter', 'dragover'].forEach((eventName) => {
+  appUploadRow.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    appUploadRow.classList.add('drag-active');
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  });
+});
+
+['dragleave', 'dragend'].forEach((eventName) => {
+  appUploadRow.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    appUploadRow.classList.remove('drag-active');
+  });
+});
+
+appUploadRow.addEventListener('drop', async (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  appUploadRow.classList.remove('drag-active');
+  const spec = deviceInstallSpec(currentDevice);
+  try {
+    const selection = await createInstallSelectionFromDrop(event.dataTransfer, spec);
+    if (!selection) {
+      throw new Error(spec.emptyMessage);
+    }
+    appUploadInput.value = '';
+    setPendingInstallSelection(selection);
+  } catch (error) {
+    clearPendingInstallSelection();
+    showDeviceStatus((error && error.message) || spec.invalidMessage, 'error');
   }
 });
 

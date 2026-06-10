@@ -139,6 +139,20 @@ describe('native agent client', () => {
           error: {
             code: 'NOT_IMPLEMENTED',
             message: `${request.method} is not implemented`
+          },
+          diagnostics: {
+            matchingCandidates: 2,
+            actionability: {
+              failed: 'visible',
+              visible: false,
+              enabled: true
+            }
+          },
+          timing: {
+            totalMs: 42,
+            agentMs: 39,
+            nativeLookupMs: 20,
+            hostRoundTrips: 1
           }
         }
       };
@@ -161,7 +175,23 @@ describe('native agent client', () => {
         state: 'visible'
       }
     })).rejects.toMatchObject({
-      code: 'NOT_IMPLEMENTED'
+      code: 'NOT_IMPLEMENTED',
+      details: {
+        diagnostics: {
+          matchingCandidates: 2,
+          actionability: {
+            failed: 'visible',
+            visible: false,
+            enabled: true
+          }
+        },
+        timing: {
+          totalMs: 42,
+          agentMs: 39,
+          nativeLookupMs: 20,
+          hostRoundTrips: 1
+        }
+      }
     } satisfies Partial<AsturError>);
   });
 

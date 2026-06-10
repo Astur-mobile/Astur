@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs';
-import { copyFile, mkdir, unlink } from 'node:fs/promises';
+import { copyFile, mkdir, stat, unlink } from 'node:fs/promises';
 import { get as httpGet } from 'node:http';
 import { get as httpsGet } from 'node:https';
 import { basename, dirname, join } from 'node:path';
@@ -11,12 +11,13 @@ import type {
   NativeAgentConfig,
   NormalizedAsturAutomationConfig,
   NormalizedCapabilities,
-  NormalizedNativeAgentConfig
+  NormalizedNativeAgentConfig,
+  PlatformName
 } from '@astur/protocol';
 import { AsturError } from './errors.js';
 
 export function normalizeCapabilities(config: AsturConfig): NormalizedCapabilities {
-  const automation = normalizeAutomation(config.automation, config.agent);
+  const automation = normalizeAutomation(config.platform, config.automation, config.agent);
   const agent = normalizeAgent(config.agent, automation);
 
   return {
@@ -43,7 +44,10 @@ export async function materializeCapabilities(
 
   const path = capabilities.app.downloadPath ?? defaultDownloadPath(capabilities.app.url, capabilities.artifactsDir);
   await mkdir(dirname(path), { recursive: true });
-  await downloadApp(capabilities.app.url, path);
+  const alreadyDownloaded = await stat(path).then(() => true).catch(() => false);
+  if (!alreadyDownloaded) {
+    await downloadApp(capabilities.app.url, path);
+  }
 
   return {
     ...capabilities,
@@ -67,12 +71,14 @@ function normalizeApp(app: AsturConfig['app']): AppUnderTest | undefined {
 }
 
 function normalizeAutomation(
+  platform: PlatformName,
   automation: AsturAutomationConfig | undefined,
   agent: NativeAgentConfig | undefined
 ): NormalizedAsturAutomationConfig {
-  const engine = automation?.engine ?? agentModeToEngine(agent?.mode) ?? 'agent';
-  const commandTimeoutMs = automation?.commandTimeoutMs ?? agent?.commandTimeout ?? 10_000;
-  const startupTimeoutMs = automation?.startupTimeoutMs ?? agent?.launchTimeout ?? 15_000;
+  const defaults = defaultAutomationForPlatform(platform);
+  const engine = automation?.engine ?? agentModeToEngine(agent?.mode) ?? defaults.engine;
+  const commandTimeoutMs = automation?.commandTimeoutMs ?? agent?.commandTimeout ?? defaults.commandTimeoutMs;
+  const startupTimeoutMs = automation?.startupTimeoutMs ?? agent?.launchTimeout ?? defaults.startupTimeoutMs;
 
   return {
     engine,
@@ -89,6 +95,25 @@ function normalizeAutomation(
       enabled: automation?.timings?.enabled ?? true,
       slowCommandThresholdMs: automation?.timings?.slowCommandThresholdMs ?? 1_000
     }
+  };
+}
+
+function defaultAutomationForPlatform(platform: PlatformName): Pick<
+  NormalizedAsturAutomationConfig,
+  'engine' | 'commandTimeoutMs' | 'startupTimeoutMs'
+> {
+  if (platform === 'ios') {
+    return {
+      engine: 'agent',
+      commandTimeoutMs: 15_000,
+      startupTimeoutMs: 60_000
+    };
+  }
+
+  return {
+    engine: 'agent',
+    commandTimeoutMs: 20_000,
+    startupTimeoutMs: 30_000
   };
 }
 

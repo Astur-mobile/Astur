@@ -13,8 +13,8 @@ describe('normalizeCapabilities', () => {
       keyboard: {
         dismiss: 'auto'
       },
-      automation: defaultAutomation(),
-      agent: defaultAgent()
+      automation: defaultAndroidAutomation(),
+      agent: defaultAndroidAgent()
     });
   });
 
@@ -40,8 +40,8 @@ describe('normalizeCapabilities', () => {
       keyboard: {
         dismiss: 'auto'
       },
-      automation: defaultAutomation(),
-      agent: defaultAgent()
+      automation: defaultIosAutomation(),
+      agent: defaultIosAgent()
     });
   });
 
@@ -166,13 +166,13 @@ describe('normalizeCapabilities', () => {
   });
 });
 
-function defaultAutomation() {
+function defaultAndroidAutomation() {
   return {
     engine: 'agent',
     transport: 'auto',
     legacyFallback: 'never',
-    commandTimeoutMs: 10_000,
-    startupTimeoutMs: 15_000,
+    commandTimeoutMs: 20_000,
+    startupTimeoutMs: 30_000,
     strictLocators: true,
     snapshot: {
       mode: 'on-failure',
@@ -185,13 +185,44 @@ function defaultAutomation() {
   };
 }
 
-function defaultAgent() {
+function defaultAndroidAgent() {
   return {
     mode: 'required',
     install: true,
     endpoint: undefined,
-    launchTimeout: 15_000,
-    commandTimeout: 10_000,
+    launchTimeout: 30_000,
+    commandTimeout: 20_000,
+    legacyFallback: 'never',
+    transport: 'auto'
+  };
+}
+
+function defaultIosAutomation() {
+  return {
+    engine: 'agent',
+    transport: 'auto',
+    legacyFallback: 'never',
+    commandTimeoutMs: 15_000,
+    startupTimeoutMs: 60_000,
+    strictLocators: true,
+    snapshot: {
+      mode: 'on-failure',
+      cacheTtlMs: 200
+    },
+    timings: {
+      enabled: true,
+      slowCommandThresholdMs: 1_000
+    }
+  };
+}
+
+function defaultIosAgent() {
+  return {
+    mode: 'required',
+    install: true,
+    endpoint: undefined,
+    launchTimeout: 60_000,
+    commandTimeout: 15_000,
     legacyFallback: 'never',
     transport: 'auto'
   };

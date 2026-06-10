@@ -1,9 +1,11 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const outputDir = resolve(root, 'docs-site/src/content/docs');
+const imagesSourceDir = resolve(root, 'docs/images');
+const imagesTargetDir = resolve(root, 'docs-site/public/images');
 
 const pages = [
   {
@@ -97,6 +99,23 @@ for (const page of pages) {
   ].join('\n');
 
   await writeFile(targetPath, `${frontmatter}${body}`, 'utf8');
+}
+
+// Mirror docs/images into the site's public/ so `/images/<name>` references in
+// the synced markdown resolve on the built site.
+if (await pathExists(imagesSourceDir)) {
+  await rm(imagesTargetDir, { recursive: true, force: true });
+  await mkdir(imagesTargetDir, { recursive: true });
+  await cp(imagesSourceDir, imagesTargetDir, { recursive: true });
+}
+
+async function pathExists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function stripFirstHeading(markdown) {

@@ -374,7 +374,7 @@ Examples:
 - Multiple Android emulators: boot each AVD and give each project a unique \`device.id\`, such as \`emulator-5554\` and \`emulator-5556\`.
 - Android + iOS: this wizard already generates separate projects when both platforms are selected.
 
-Current alpha limitation: Astur does not yet auto-reserve devices. If two parallel projects select the same device, they can interfere with each other. Keep \`workers\` aligned with the number of available devices.
+Astur reserves each configured device per Playwright worker and fails fast if another worker tries to control the same target. Keep \`workers\` aligned with the number of available devices, and set \`workers: 1\` inside every project that maps to one physical device.
 
 ## Flutter Apps
 

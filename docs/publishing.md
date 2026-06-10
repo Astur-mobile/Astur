@@ -150,3 +150,55 @@ Before publishing, verify:
 - unit tests and branch coverage for changed driver/agent paths are updated
 - npm package metadata includes author, license, exports, types, files, and publish access
 - the release workflow is first tested with `npm publish --dry-run` or a `next` prerelease
+
+## Repository Layout
+
+Astur is split across the `Astur-mobile` GitHub organization so the docs site can
+deploy and monetize independently and examples track the published packages, not
+the monorepo checkout:
+
+| Repository | Role | Publishes |
+| --- | --- | --- |
+| `Astur-mobile/Astur` | Library monorepo (packages + release pipeline) | npm (the only publishing repo) |
+| `Astur-mobile/astur-demoApp` | Expo/React Native demo app | the demo `.app` / `.apk` / `.ipa` artifacts the docs reference |
+| `Astur-mobile/examples` | Example Playwright projects | nothing; depends on published `astur-mobile` + `@astur/test` |
+| `Astur-mobile/astur-docs` | Astro/Starlight docs site | the docs site (own deploy + sponsorship CTA) |
+
+`docs/*.md` in this repo stays the source of truth; the docs repo syncs them with
+`docs-site/scripts/sync-docs.mjs`. Examples in this repo use
+`npm --prefix .. exec astur-mobile` for local development, but published examples
+must use the plain `npx astur-mobile …` form so they work against the npm
+release.
+
+## Brand, Copyright, and Anti-Theft
+
+The license stays **Apache-2.0** — the same choice as Playwright, Appium, and
+Selenium (WebdriverIO and Cypress use MIT). A permissive license is the
+industry norm for automation tooling and is the most adoption-friendly, but it
+**cannot** stop others from using or forking the work commercially. Those
+projects do not protect their work with the license; they protect it with
+**trademark + open core**, and Astur does the same:
+
+- **Trademark** the "Astur" name and logo (registered or common-law). Forks may
+  reuse the code but must use their own name. Governed by
+  [`TRADEMARK.md`](../TRADEMARK.md); Apache-2.0 explicitly grants no trademark
+  rights.
+- **`NOTICE`** carries the copyright and the trademark clause and ships in every
+  package.
+- **Contributor License Agreement** (CLA bot) so the project retains ownership
+  and relicensing rights over outside contributions.
+- Keep source repositories **private**; publish compiled `dist`. The iOS Swift
+  XCUITest agent necessarily ships as source (Xcode compiles it on the user's
+  Mac), so trademark + license are its protection.
+- **npm provenance** (`id-token: write`) cryptographically ties each package to
+  the GitHub build, preventing impersonated releases.
+
+## Monetization
+
+- **Open core (the Cypress model):** the client libraries stay free Apache-2.0;
+  a proprietary **Astur Cloud** (device farm, parallel orchestration, reporting
+  dashboards) is sold separately and is not covered by the open-source license.
+- **Sponsorship:** GitHub Sponsors via `.github/FUNDING.yml` (Stripe Connect
+  onboarding required), optionally Open Collective or Polar.sh surfaced on the
+  docs site. Add `FUNDING.yml` to each public repo so the Sponsor button appears
+  everywhere.

@@ -1,3 +1,4 @@
+.vscode
 node_modules/
 dist/
 *.tsbuildinfo
@@ -13,10 +14,26 @@ DerivedData/
 docs-site/.astro/
 docs-site/dist/
 docs-site/src/content/docs/*.md
+docs-site/public/images/
 agents/android-uiautomator/build/
 agents/ios-xctest-agent/build/
+
+# Xcode per-user state (not shared)
+xcuserdata/
+*.xcuserstate
 packages/android-agent/.gradle/
 packages/android-agent/build/
+
+# Local Claude Code state
+.claude/
+
+# Org profile staging file (the real copy lives in the Astur-mobile/.github repo)
+/ORG-PROFILE-README.md
+
+# Large demo-app binaries. Host these in Astur-mobile/astur-demoApp, not the code repo.
+assets/Astur.app/
+assets/*.ipa
+assets/*.simulator.zip
 
 # Internal/local architecture drafts. Keep docs/architecture.md public and user-facing.
 *.local.md

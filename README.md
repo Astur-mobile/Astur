@@ -16,7 +16,7 @@ Astur is an npm-first open source project. It uses native platform control paths
 
 This repository is the first implementation scaffold. The Android driver can discover devices, boot configured emulators, download or install APKs, launch already-installed apps, capture screenshots, record native video, and open mobile web URLs. The default interaction path is the Kotlin UIAutomator native agent, with the old ADB/XML path retained as an explicit fallback mode.
 
-The iOS driver can run diagnostics, list simulators, install and launch simulator apps, terminate apps, capture screenshots, and bootstrap the bundled Swift XCUITest agent for native element lookup, waits, actions, gestures, and keyboard commands.
+The iOS driver can run diagnostics, list simulators and USB-connected real devices, install and launch apps through `simctl` or `devicectl`, terminate apps, capture screenshots, and bootstrap the bundled Swift XCUITest agent for native element lookup, waits, actions, gestures, orientation, and keyboard commands. Real iOS devices require an Apple signing team for the XCUITest runner and an app signed for the device.
 
 Both platform drivers support endpoint-based native agent transport wiring (`use.astur.agent.endpoint` or `ASTUR_ANDROID_AGENT_ENDPOINT` / `ASTUR_IOS_AGENT_ENDPOINT`). Astur defaults to the native-agent engine and starts one Astur session per Playwright worker. The example fixture isolates specs with a lightweight terminate + launch cycle instead of reinstalling the native agent or clearing app data every spec. `automation.engine: 'auto'` is available as a migration setting when legacy fallback is still needed.
 
@@ -24,16 +24,15 @@ Both platform drivers support endpoint-based native agent transport wiring (`use
 
 - Rich on-device actionability diagnostics in agent responses (multiple-match details, candidate snapshots, and structured failure context), especially for Android strict-locator failures.
 - End-to-end CI jobs that enforce `agent.mode: 'required'` for both Android and iOS paths.
-- Real-device iOS signing and transport validation.
-- Automatic device reservation across parallel workers.
+- Cloud/device-farm execution beyond the BrowserStack scaffold.
+- CI jobs that exercise signed real iOS devices in addition to simulator coverage.
 
 ## Next Best Steps
 
 1. Expand Android and iOS agent diagnostics and selector parity.
-2. Add device reservation so parallel workers cannot target the same device.
-3. Add cross-platform contract tests that validate protocol parity across Android and iOS agents.
-4. Add smoke E2E tests that run with `agent.mode: 'required'` in CI.
-5. Validate real-device iOS execution behind signing-aware configuration.
+2. Add cross-platform contract tests that validate protocol parity across Android and iOS agents.
+3. Add smoke E2E tests that run with `agent.mode: 'required'` in CI.
+4. Add signing-aware real-device jobs where CI hardware is available.
 
 See [Roadmap](docs/roadmap.md) for a structured implementation sequence.
 
