@@ -33,5 +33,14 @@
     "@astur-mobile/protocol": "0.1.0-beta.0",
     "@types/ws": "^8.18.1",
     "ws": "^8.21.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Astur-mobile/Astur.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://astur-mobile.github.io/Astur/",
+  "bugs": {
+    "url": "https://github.com/Astur-mobile/Astur/issues"
   }
 }

@@ -16,11 +16,22 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b"
   },
   "dependencies": {
     "@astur-mobile/cli": "0.1.0-beta.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Astur-mobile/Astur.git",
+    "directory": "packages/create-astur"
+  },
+  "homepage": "https://astur-mobile.github.io/Astur/",
+  "bugs": {
+    "url": "https://github.com/Astur-mobile/Astur/issues"
   }
 }
