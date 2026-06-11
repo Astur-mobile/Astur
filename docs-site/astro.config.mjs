@@ -36,6 +36,15 @@ export default defineConfig({
       ],
       head: [
         {
+          // Google Search Console site verification (URL-prefix property:
+          // https://astur-mobile.github.io/Astur/).
+          tag: 'meta',
+          attrs: {
+            name: 'google-site-verification',
+            content: 'xDL9eh0Yh1N4JPlASZFae51ssZwswCoXpx5MqOeVgSE'
+          }
+        },
+        {
           tag: 'script',
           content: "try{if(!localStorage.getItem('starlight-theme'))localStorage.setItem('starlight-theme','light')}catch{}"
         },
@@ -57,7 +66,8 @@ export default defineConfig({
             { label: 'Overview', slug: 'index' },
             { label: 'Why Astur', slug: 'why-astur' },
             { label: 'Getting Started', slug: 'getting-started' },
-            { label: 'Inspector And Codegen', slug: 'inspector' }
+            { label: 'Inspector And Codegen', slug: 'inspector' },
+            { label: 'Demo App', slug: 'demo-app' }
           ]
         },
         {

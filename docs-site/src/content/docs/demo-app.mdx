@@ -1,0 +1,85 @@
+---
+title: "Demo App"
+description: "Tour the Astur demo app — each screen exercises one automation capability, and ships ready to run on Android and iOS."
+---
+
+import homeImg from './images/demo-home.png';
+import loginImg from './images/demo-login.png';
+import formsImg from './images/demo-forms.png';
+import swipeImg from './images/demo-swipe.png';
+import dragImg from './images/demo-drag.png';
+import webImg from './images/demo-web.png';
+
+The **Astur Demo App** (`com.astur.demo`) is a small native app whose only job is to give automation a stable, predictable target. Every screen demonstrates one capability — tap, scroll, swipe, drag, form input, file upload, and hybrid WebView — with fixed test ids so locators stay reliable across runs and platforms.
+
+It is the same app the runnable suites drive, so the screenshots below map one-to-one to the specs in the [astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate) starter (and the in-repo [`examples/`](https://github.com/Astur-mobile/astur-boilerplate)).
+
+## What each screen demonstrates
+
+<div class="astur-demo-grid not-content">
+  <figure>
+    <img src={homeImg.src} alt="Demo home screen with hero card, coverage list, and bottom navigation." />
+    <figcaption><strong>Home</strong> — app shell, menu, and permissions. Scroll down to the Tap Laboratory to exercise <strong>single tap, double tap, and long press</strong> against live counters.</figcaption>
+  </figure>
+  <figure>
+    <img src={loginImg.src} alt="Credentials screen with email and password fields, sign in, and biometrics." />
+    <figcaption><strong>Login</strong> — <strong>text entry, field validation, alerts, and biometrics</strong>. Fill the inputs, dismiss the keyboard, and submit.</figcaption>
+  </figure>
+  <figure>
+    <img src={formsImg.src} alt="Input controls screen with text field, slider, switch, and checkbox." />
+    <figcaption><strong>Forms</strong> — <strong>text input, switch, checkbox, slider drag, dropdown, and media/file upload</strong> in one screen.</figcaption>
+  </figure>
+  <figure>
+    <img src={swipeImg.src} alt="Capability carousel screen showing a horizontal card carousel." />
+    <figcaption><strong>Swipe</strong> — <strong>horizontal swipe</strong> across the carousel, then <strong>vertical scroll</strong> to reach a hidden panel.</figcaption>
+  </figure>
+  <figure>
+    <img src={dragImg.src} alt="Drag and drop screen with a four-tile puzzle of the Astur icon." />
+    <figcaption><strong>Drag &amp; Drop</strong> — <strong>drag gestures</strong>. Rebuild the Astur icon by dragging each tile into its slot.</figcaption>
+  </figure>
+  <figure>
+    <img src={webImg.src} alt="Web Lab screen showing a native WebView with DOM targets." />
+    <figcaption><strong>Web Lab</strong> — <strong>hybrid WebView</strong>: switch into the web context, drive DOM locators, submit a web form, and upload inside the WebView.</figcaption>
+  </figure>
+</div>
+
+## Where to get it
+
+The builds ship with the boilerplate and in this repo's `assets/`:
+
+- **Android:** `assets/astur.demo.android.apk`
+- **iOS simulator:** `assets/astur.demo.ios.simulator.zip` (unzip to `assets/Astur.app`)
+- **iOS real device:** `assets/astur.demo.ios.ipa`
+
+## Run targets
+
+The same specs run on four targets. Astur installs the demo app on first run and auto-installs its own agent, so the only prerequisite is a visible device.
+
+| Target | Visible via | What you need |
+| --- | --- | --- |
+| **Android emulator** | `adb devices` (e.g. `emulator-5554`) | A booted AVD. Nothing else — Astur installs the APK and its agent. |
+| **Android real device** | `adb devices` | USB debugging enabled and the device authorized. Same auto-install path. |
+| **iOS simulator** | `xcrun simctl list devices booted` | A booted simulator and the unzipped `Astur.app`. |
+| **iOS real device** | `xcrun devicectl list devices` | A trusted, Developer-Mode device, the `.ipa`, and `ASTUR_IOS_DEVELOPMENT_TEAM` set so the XCUITest agent can be signed. |
+
+Try it through the Inspector without writing a test:
+
+```bash
+# Android emulator
+npx astur-mobile codegen --android --device emulator-5554 \
+  --app ./assets/astur.demo.android.apk --app-id com.astur.demo
+
+# iOS simulator
+npx astur-mobile codegen --ios --simulator \
+  --app ./assets/Astur.app --app-id com.astur.demo
+```
+
+Or run the full feature suite from the [astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate) starter:
+
+```bash
+npx astur-mobile test --config android-native/playwright.config.ts
+```
+
+:::note[Android WebView]
+The Web Lab DOM tab needs WebView debugging enabled in the app build. The bundled demo APK ships with it on; for your own app, enable `WebView.setWebContentsDebuggingEnabled(true)` so Astur can attach to the DOM.
+:::

@@ -1599,3 +1599,36 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Demo app screenshot gallery: phone shots laid out in a responsive grid */
+.astur-demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.astur-demo-grid figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.astur-demo-grid img {
+  width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+  border: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-gray-7);
+}
+
+.astur-demo-grid figcaption {
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--sl-color-gray-2);
+}
+
+.astur-demo-grid figcaption strong {
+  color: var(--sl-color-white);
+}
