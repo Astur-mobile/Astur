@@ -63,7 +63,14 @@ jobs:
           # Sigstore transparency-log error (TLOG_CREATE_ENTRY_ERROR / 409).
           publish() {
             for attempt in 1 2 3; do
-              if npm publish -w "$1" --access public --provenance --tag "${{ inputs.tag }}"; then
+              out=$(npm publish -w "$1" --access public --provenance --tag "${{ inputs.tag }}" 2>&1)
+              status=$?
+              echo "$out"
+              if [ $status -eq 0 ]; then return 0; fi
+              # Idempotent: a version already on the registry is fine (lets a
+              # re-run finish a partial release without bumping the version).
+              if echo "$out" | grep -qiE "cannot publish over|previously published"; then
+                echo "::notice::$1 already published at this version — skipping"
                 return 0
               fi
               echo "::warning::publish $1 failed (attempt $attempt) — retrying in 20s"
