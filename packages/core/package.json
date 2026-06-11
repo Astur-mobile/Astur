@@ -1,7 +1,26 @@
 {
   "name": "@astur-mobile/core",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "Core Astur runtime, sessions, locators, and auto-waiting.",
+  "keywords": [
+    "astur",
+    "mobile",
+    "mobile-automation",
+    "mobile-testing",
+    "android",
+    "ios",
+    "playwright",
+    "appium",
+    "automation",
+    "testing",
+    "test-automation",
+    "e2e",
+    "end-to-end",
+    "qa",
+    "quality-assurance",
+    "locators",
+    "auto-waiting"
+  ],
   "license": "Apache-2.0",
   "author": "Amr Salem",
   "type": "module",
@@ -23,7 +42,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/protocol": "0.1.0-beta.2"
+    "@astur-mobile/protocol": "0.1.0-beta.3"
   },
   "repository": {
     "type": "git",

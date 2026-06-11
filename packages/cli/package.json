@@ -1,7 +1,27 @@
 {
   "name": "@astur-mobile/cli",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "Astur command line interface.",
+  "keywords": [
+    "astur",
+    "mobile",
+    "mobile-automation",
+    "mobile-testing",
+    "android",
+    "ios",
+    "playwright",
+    "appium",
+    "automation",
+    "testing",
+    "test-automation",
+    "e2e",
+    "end-to-end",
+    "qa",
+    "quality-assurance",
+    "cli",
+    "codegen",
+    "inspector"
+  ],
   "license": "Apache-2.0",
   "author": "Amr Salem",
   "type": "module",
@@ -27,10 +47,10 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/android": "0.1.0-beta.2",
-    "@astur-mobile/core": "0.1.0-beta.2",
-    "@astur-mobile/ios": "0.1.0-beta.2",
-    "@astur-mobile/protocol": "0.1.0-beta.2",
+    "@astur-mobile/android": "0.1.0-beta.3",
+    "@astur-mobile/core": "0.1.0-beta.3",
+    "@astur-mobile/ios": "0.1.0-beta.3",
+    "@astur-mobile/protocol": "0.1.0-beta.3",
     "@types/ws": "^8.18.1",
     "ws": "^8.21.0"
   },

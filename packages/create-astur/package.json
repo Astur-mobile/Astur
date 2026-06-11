@@ -1,7 +1,27 @@
 {
   "name": "create-astur",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "Create an Astur project scaffold.",
+  "keywords": [
+    "astur",
+    "mobile",
+    "mobile-automation",
+    "mobile-testing",
+    "android",
+    "ios",
+    "playwright",
+    "appium",
+    "automation",
+    "testing",
+    "test-automation",
+    "e2e",
+    "end-to-end",
+    "qa",
+    "quality-assurance",
+    "create-astur",
+    "scaffold",
+    "starter"
+  ],
   "license": "Apache-2.0",
   "author": "Amr Salem",
   "type": "module",
@@ -23,7 +43,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/cli": "0.1.0-beta.2"
+    "@astur-mobile/cli": "0.1.0-beta.3"
   },
   "repository": {
     "type": "git",
