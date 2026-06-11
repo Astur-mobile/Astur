@@ -1,0 +1,51 @@
+name: Promote dist-tag
+
+# Point an npm dist-tag (default: latest) at an already-published version of all
+# public packages. Useful because we publish prereleases to the `next` tag, so
+# `latest` (what the npm page and bare `npm i` resolve to) must be moved on
+# purpose.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published version to point the tag at (e.g. 0.1.0-beta.1)
+        required: true
+        type: string
+      tag:
+        description: dist-tag to set
+        required: true
+        default: latest
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    name: Set dist-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Set dist-tag on all packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for name in \
+            @astur-mobile/protocol \
+            @astur-mobile/core \
+            @astur-mobile/android \
+            @astur-mobile/ios \
+            @astur-mobile/test \
+            @astur-mobile/cli \
+            astur-mobile \
+            create-astur; do
+            echo "::group::$name@${{ inputs.version }} -> ${{ inputs.tag }}"
+            npm dist-tag add "$name@${{ inputs.version }}" "${{ inputs.tag }}"
+            echo "::endgroup::"
+          done
