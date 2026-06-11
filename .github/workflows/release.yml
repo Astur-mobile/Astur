@@ -59,14 +59,19 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          # Disable errexit: publish() handles failures itself, and we must not
+          # let a single non-zero `npm publish` (e.g. an already-published
+          # version) abort the whole loop before later packages are tried.
+          set +e
           # Retry each publish — npm provenance occasionally hits a transient
           # Sigstore transparency-log error (TLOG_CREATE_ENTRY_ERROR / 409).
           publish() {
             for attempt in 1 2 3; do
-              out=$(npm publish -w "$1" --access public --provenance --tag "${{ inputs.tag }}" 2>&1)
-              status=$?
+              if out=$(npm publish -w "$1" --access public --provenance --tag "${{ inputs.tag }}" 2>&1); then
+                echo "$out"
+                return 0
+              fi
               echo "$out"
-              if [ $status -eq 0 ]; then return 0; fi
               # Idempotent: a version already on the registry is fine (lets a
               # re-run finish a partial release without bumping the version).
               if echo "$out" | grep -qiE "cannot publish over|previously published"; then
@@ -79,11 +84,8 @@ jobs:
             echo "::error::publish $1 failed after 3 attempts"
             return 1
           }
-          publish packages/protocol
-          publish packages/core
-          publish packages/android
-          publish packages/ios
-          publish packages/test
-          publish packages/cli
-          publish packages/astur-mobile
-          publish packages/create-astur
+          rc=0
+          for pkg in protocol core android ios test cli astur-mobile create-astur; do
+            publish "packages/$pkg" || rc=1
+          done
+          exit $rc
