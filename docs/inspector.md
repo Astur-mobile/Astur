@@ -10,7 +10,7 @@ Unlike generic WebDriver/Appium inspectors, Astur Inspector is built around Astu
 
 The result is a more dynamic authoring loop: inspect, interact, record, edit the generated step, switch device, launch another installed app, and continue without changing tools.
 
-![The Astur Inspector: device mirror in the centre, the live UI tree on the right, and ranked locators with element details on the left.](/images/inspector-ios-simulator.png)
+![The Astur Inspector: device mirror in the centre, the live UI tree on the right, and ranked locators with element details on the left.](./images/inspector-ios-simulator.png)
 
 Start it with:
 
@@ -40,7 +40,7 @@ The `Controls` button contains device and app actions:
 - clear app data/cache where supported
 - rotate, refresh, lock/unlock, dismiss keyboard, and Android navigation actions
 
-![The Controls panel: launch/install an app, grant or revoke permissions, clear data/cache, and the device action row.](/images/inspector-controls.png)
+![The Controls panel: launch/install an app, grant or revoke permissions, clear data/cache, and the device action row.](./images/inspector-controls.png)
 
 iOS app launch from `Controls` also rebinds the XCUITest agent to the entered bundle id, so the UI tree and native interactions start working for that app.
 
@@ -57,11 +57,11 @@ Click `Record`, then interact with the mirrored screen.
 
 Each interaction lands in the **Recording Steps** tab as an editable action + locator row:
 
-![The Recording Steps tab listing recorded tap actions with their generated locators.](/images/inspector-recording-steps.png)
+![The Recording Steps tab listing recorded tap actions with their generated locators.](./images/inspector-recording-steps.png)
 
 The **Code** tab turns those steps into a ready-to-run `@astur-mobile/test` spec (toggle TypeScript or JavaScript, then copy):
 
-![The Code tab showing the exported @astur-mobile/test spec generated from the recorded steps.](/images/inspector-generated-code.png)
+![The Code tab showing the exported @astur-mobile/test spec generated from the recorded steps.](./images/inspector-generated-code.png)
 
 Exported code is intentionally plain:
 

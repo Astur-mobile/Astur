@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const outputDir = resolve(root, 'docs-site/src/content/docs');
 const imagesSourceDir = resolve(root, 'docs/images');
-const imagesTargetDir = resolve(root, 'docs-site/public/images');
+const imagesTargetDir = resolve(root, 'docs-site/src/content/docs/images');
 
 const pages = [
   {
@@ -101,8 +101,9 @@ for (const page of pages) {
   await writeFile(targetPath, `${frontmatter}${body}`, 'utf8');
 }
 
-// Mirror docs/images into the site's public/ so `/images/<name>` references in
-// the synced markdown resolve on the built site.
+// Mirror docs/images alongside the synced markdown (in the content dir) so the
+// relative `./images/<name>` references resolve and Astro optimizes them with
+// the correct base path (works under a project-pages base like /Astur/).
 if (await pathExists(imagesSourceDir)) {
   await rm(imagesTargetDir, { recursive: true, force: true });
   await mkdir(imagesTargetDir, { recursive: true });

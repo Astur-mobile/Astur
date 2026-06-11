@@ -1150,6 +1150,28 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
 :root[data-theme="light"] .quantum-footer {
   border-top-color: rgba(15, 23, 42, 0.06);
 }
+/* Prevent the code/terminal panels from overflowing their column (esp. on
+   mobile): let containers shrink below content width and scroll internally. */
+.control-deck-section,
+.control-deck-wrapper,
+.cyber-terminal-mock,
+.quantum-code-section,
+.generated-code-card {
+  min-width: 0;
+  max-width: 100%;
+}
+.terminal-body,
+.generated-code-body {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.gradient-headline,
+.section-headline,
+.futuristic-tagline,
+.section-description {
+  overflow-wrap: break-word;
+}
+
 /* Support / Ko-fi button in the footer */
 .astur-support-footer {
   display: flex;

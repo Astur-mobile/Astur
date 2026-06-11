@@ -1,7 +1,7 @@
 # Astur
 
-[![npm: astur-mobile](https://img.shields.io/npm/v/astur-mobile?logo=npm&label=astur-mobile&color=cb3837)](https://www.npmjs.com/package/astur-mobile)
-[![npm: @astur-mobile/test](https://img.shields.io/npm/v/@astur-mobile/test?logo=npm&label=%40astur-mobile%2Ftest&color=cb3837)](https://www.npmjs.com/package/@astur-mobile/test)
+[![npm: astur-mobile](https://img.shields.io/npm/v/astur-mobile/next?logo=npm&label=astur-mobile&color=cb3837)](https://www.npmjs.com/package/astur-mobile)
+[![npm: @astur-mobile/test](https://img.shields.io/npm/v/@astur-mobile/test/next?logo=npm&label=%40astur-mobile%2Ftest&color=cb3837)](https://www.npmjs.com/package/@astur-mobile/test)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-supported-3DDC84?logo=android&logoColor=white)](docs/android.md)
 [![iOS](https://img.shields.io/badge/iOS-supported-black?logo=apple&logoColor=white)](docs/ios.md)
@@ -66,8 +66,10 @@ npx astur-mobile test
 
 ## Documentation
 
-User guides live in [`docs/`](docs/) and are published as a documentation site
-from the [astur-docs](https://github.com/Astur-mobile/astur-docs) repository.
+Full documentation site: **https://astur-mobile.github.io/Astur/**
+
+The source guides live in [`docs/`](docs/) and are published to the site above
+via the [`Docs`](.github/workflows/docs.yml) workflow.
 
 ## Example Test
 

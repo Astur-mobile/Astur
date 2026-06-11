@@ -59,11 +59,24 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm publish -w packages/protocol --access public --provenance --tag "${{ inputs.tag }}"
-          npm publish -w packages/core --access public --provenance --tag "${{ inputs.tag }}"
-          npm publish -w packages/android --access public --provenance --tag "${{ inputs.tag }}"
-          npm publish -w packages/ios --access public --provenance --tag "${{ inputs.tag }}"
-          npm publish -w packages/test --access public --provenance --tag "${{ inputs.tag }}"
-          npm publish -w packages/cli --access public --provenance --tag "${{ inputs.tag }}"
-          npm publish -w packages/astur-mobile --access public --provenance --tag "${{ inputs.tag }}"
-          npm publish -w packages/create-astur --access public --provenance --tag "${{ inputs.tag }}"
+          # Retry each publish — npm provenance occasionally hits a transient
+          # Sigstore transparency-log error (TLOG_CREATE_ENTRY_ERROR / 409).
+          publish() {
+            for attempt in 1 2 3; do
+              if npm publish -w "$1" --access public --provenance --tag "${{ inputs.tag }}"; then
+                return 0
+              fi
+              echo "::warning::publish $1 failed (attempt $attempt) — retrying in 20s"
+              sleep 20
+            done
+            echo "::error::publish $1 failed after 3 attempts"
+            return 1
+          }
+          publish packages/protocol
+          publish packages/core
+          publish packages/android
+          publish packages/ios
+          publish packages/test
+          publish packages/cli
+          publish packages/astur-mobile
+          publish packages/create-astur

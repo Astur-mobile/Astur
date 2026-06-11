@@ -11,7 +11,7 @@ Astur bootstraps the bundled agent automatically. Users should not build or inst
 
 When everything is wired up, `codegen` streams a live device mirror, the full UI tree, and ready-to-paste locators:
 
-![Astur Inspector running against an iOS simulator: live device mirror in the centre, the XCUITest UI tree on the right, and generated locators on the left.](/images/inspector-ios-simulator.png)
+![Astur Inspector running against an iOS simulator: live device mirror in the centre, the XCUITest UI tree on the right, and generated locators on the left.](./images/inspector-ios-simulator.png)
 
 ## Preconditions At A Glance
 
