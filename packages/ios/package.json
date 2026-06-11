@@ -1,6 +1,6 @@
 {
   "name": "@astur-mobile/ios",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "iOS driver for Astur using simctl, devicectl, and an XCUITest agent boundary.",
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -24,8 +24,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/core": "0.1.0-beta.1",
-    "@astur-mobile/protocol": "0.1.0-beta.1"
+    "@astur-mobile/core": "0.1.0-beta.2",
+    "@astur-mobile/protocol": "0.1.0-beta.2"
   },
   "repository": {
     "type": "git",
