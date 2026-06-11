@@ -10,7 +10,6 @@
   <a href="https://www.npmjs.com/package/@astur-mobile/test"><img src="https://img.shields.io/npm/v/@astur-mobile/test.svg?color=0A1730&label=npm" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/@astur-mobile/test"><img src="https://img.shields.io/npm/dm/@astur-mobile/test.svg?color=24C6B7&label=downloads" alt="npm downloads"></a>
   <a href="https://github.com/Astur-mobile/Astur/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@astur-mobile/test.svg?color=0A1730" alt="license"></a>
-  <a href="https://ko-fi.com/asturmobile"><img src="https://img.shields.io/badge/sponsor-Ko--fi-FF5E5B?logo=kofi&logoColor=white" alt="Sponsor on Ko-fi"></a>
 </p>
 
 <p align="center">
