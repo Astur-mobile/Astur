@@ -121,6 +121,15 @@
   color: inherit;
 }
 
+/* Search modal results: Starlight colors result titles with
+   `color: var(--sl-color-white)`, but our :root pins that token to #ffffff
+   (unlayered, so it overrides Starlight's layered light-mode value). That makes
+   the titles white-on-white and invisible in light mode. Restore Starlight's
+   intended high-contrast light value, scoped to the search modal only. */
+:root[data-theme="light"] #starlight__search {
+  --sl-color-white: hsl(224, 10%, 10%);
+}
+
 /* Social icons (e.g. the GitHub link). Starlight's default hover sets the color
    to --sl-color-white, which is literally white in light mode and disappears
    against the light header. Keep it a readable accent on hover/focus instead. */
@@ -1625,10 +1634,16 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
 
 .astur-demo-grid figcaption {
   font-size: 0.85rem;
-  line-height: 1.35;
+  line-height: 1.45;
+  text-align: left;
+  text-wrap: pretty;
   color: var(--sl-color-gray-2);
 }
 
+/* Use a theme-safe high-contrast token, not --sl-color-white: our :root pins
+   that to #ffffff, so the bold labels would render white-on-white (invisible)
+   in light mode and leave gaps that make the captions look misaligned. */
 .astur-demo-grid figcaption strong {
-  color: var(--sl-color-white);
+  color: var(--sl-color-text);
+  font-weight: 600;
 }

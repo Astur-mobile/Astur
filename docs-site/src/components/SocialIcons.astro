@@ -1,0 +1,70 @@
+---
+// Extends Starlight's default header social icons with:
+//  - an npm icon linking to the @astur-mobile/test package
+//  - a GitHub star count, fetched at build time, shown only when >= 1
+//    (so a private repo, a 0-star repo, or a failed fetch render nothing).
+import Default from '@astrojs/starlight/components/SocialIcons.astro';
+
+const npmHref = 'https://www.npmjs.com/package/@astur-mobile/test';
+const repository = process.env.GITHUB_REPOSITORY ?? 'Astur-mobile/Astur';
+
+let stars = 0;
+try {
+  const headers: Record<string, string> = { 'User-Agent': 'astur-docs' };
+  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  const res = await fetch(`https://api.github.com/repos/${repository}`, { headers });
+  if (res.ok) {
+    const data = await res.json();
+    stars = Number(data?.stargazers_count) || 0;
+  }
+} catch {
+  stars = 0;
+}
+
+const compactStars = stars >= 1000 ? `${(stars / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(stars);
+---
+
+<Default {...Astro.props} />
+
+<a href={npmHref} rel="me" class="sl-flex astur-social" aria-label="@astur-mobile/test on npm">
+  <span class="sr-only">npm</span>
+  <svg viewBox="0 0 24 24" width="1.25rem" height="1.25rem" fill="currentColor" aria-hidden="true">
+    <path d="M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z"/>
+  </svg>
+</a>
+
+{stars > 0 && (
+  <a
+    href={`https://github.com/${repository}/stargazers`}
+    class="sl-flex astur-social astur-stars"
+    aria-label={`${stars} ${stars === 1 ? 'star' : 'stars'} on GitHub`}
+  >
+    <svg viewBox="0 0 16 16" width="1rem" height="1rem" fill="currentColor" aria-hidden="true">
+      <path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/>
+    </svg>
+    <span class="astur-stars-count">{compactStars}</span>
+  </a>
+)}
+
+<style>
+  @layer starlight.core {
+    .astur-social {
+      color: var(--sl-color-text-accent);
+      padding: 0.5em;
+      margin: -0.5em;
+      align-items: center;
+    }
+    .astur-social:hover {
+      color: var(--sl-color-white);
+    }
+    .astur-stars {
+      gap: 0.3em;
+      padding-inline: 0.5em;
+    }
+    .astur-stars-count {
+      font-size: var(--sl-text-sm);
+      font-weight: 600;
+      line-height: 1;
+    }
+  }
+</style>

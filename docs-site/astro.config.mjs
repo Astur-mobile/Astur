@@ -57,7 +57,8 @@ export default defineConfig({
       ],
       customCss: ['./src/styles/astur.css'],
       components: {
-        Footer: './src/components/Footer.astro'
+        Footer: './src/components/Footer.astro',
+        SocialIcons: './src/components/SocialIcons.astro'
       },
       sidebar: [
         {
