@@ -490,7 +490,7 @@ await device.getByLabel('Login').tap();
 await expect(device.getByText('Credentials')).toBeVisible();
 ```
 
-WebView screens should use the browser DOM. In `@astur-mobile/test`, request a WebView handle after navigating the native app to a WebView screen:
+On Android, WebView screens can be driven through the browser DOM. In `@astur-mobile/test`, request a WebView handle after navigating the native app to a WebView screen:
 
 ```ts
 import { expect, test } from '@astur-mobile/test';
@@ -507,7 +507,7 @@ test('webview content', async ({ device, webview }) => {
 });
 ```
 
-`device.contexts()` lists native and WebView contexts. Android WebView DOM control uses Chrome DevTools Protocol, so the app must enable WebView debugging. Native mode remains available for navigation bars, system buttons, permissions, and other OS or app chrome outside the WebView.
+`device.contexts()` lists native and WebView contexts. WebView DOM control is **Android-only today**: it uses Chrome DevTools Protocol, so the app must enable WebView debugging. On iOS, `webview()` throws `WEBVIEW_NOT_SUPPORTED` — drive WebView screens with native locators there instead. Native mode remains available on both platforms for navigation bars, system buttons, permissions, and other OS or app chrome outside the WebView.
 
 ## App And Device Management
 

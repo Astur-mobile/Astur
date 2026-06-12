@@ -39,7 +39,7 @@ It is the same app the runnable suites drive, so the screenshots below map one-t
   </figure>
   <figure>
     <img src={webImg.src} alt="Web Lab screen showing a native WebView with DOM targets." />
-    <figcaption><strong>Web Lab</strong> — <strong>hybrid WebView</strong>: switch into the web context, drive DOM locators, submit a web form, and upload inside the WebView.</figcaption>
+    <figcaption><strong>Web Lab</strong> — <strong>hybrid WebView</strong> (DOM automation is Android-only today): switch into the web context, drive DOM locators, submit a web form, and upload inside the WebView.</figcaption>
   </figure>
 </div>
 
@@ -80,6 +80,8 @@ Or run the full feature suite from the [astur-boilerplate](https://github.com/As
 npx astur-mobile test --config android-native/playwright.config.ts
 ```
 
-:::note[Android WebView]
-The Web Lab DOM tab needs WebView debugging enabled in the app build. The bundled demo APK ships with it on; for your own app, enable `WebView.setWebContentsDebuggingEnabled(true)` so Astur can attach to the DOM.
+:::note[WebView DOM is Android-only today]
+WebView DOM automation currently works on **Android only**. The app must enable WebView debugging — `WebView.setWebContentsDebuggingEnabled(true)` — which exposes the Chrome DevTools Protocol socket Astur attaches to. The bundled demo APK ships with it on.
+
+On **iOS**, the Web Lab screen renders and you can drive it with native locators, but DOM attachment is not supported yet — `webview()` throws `WEBVIEW_NOT_SUPPORTED`. (WKWebView uses Apple's Web Inspector rather than CDP, and would require the app to set `WKWebView.isInspectable = true` on iOS 16.4+.)
 :::

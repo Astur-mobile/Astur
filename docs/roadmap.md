@@ -23,6 +23,8 @@ Simple Playwright-style test API
 - Deeper strict-locator reporting, including ranked candidate lists for every selector strategy, is still being expanded.
 - Richer device-pool scheduling for cloud/device-farm targets is still planned.
 - Real iOS Inspector/codegen needs a compact native-tree stream so broad XCTest snapshots do not block the live tree on larger screens.
+- Fluent relative/filter locators (`.filter({ hasText, has })`, `.nth`/`.first`/`.last`, `.locator(child)`) are not implemented yet. Anchored matching today is written manually via `device.tree()` + `flattenTree` + bounds geometry.
+- No raw native selector escape hatch for cases the semantic-tree match cannot express (iOS NSPredicate / class chain, Android UiSelector child/descendant chains). The `xpath` strategy is currently reserved and throws on both platforms, so it is not a usable fallback today.
 
 ## Next Best Steps (In Order)
 
@@ -45,6 +47,10 @@ Simple Playwright-style test API
 5. CI enforcement and migration
 - Keep the required-agent smoke workflow green on self-hosted Android/iOS runners.
 - Keep fallback paths for local development until agent suites are stable enough to make the agent path mandatory everywhere.
+
+6. Locator ergonomics
+- Add a fluent relative API on `MobileLocator` (`.filter({ hasText, has })`, `.nth`/`.first`/`.last`, `.locator(child)`) implemented against the cached semantic tree, so anchored locators no longer need manual `flattenTree` + geometry. Higher leverage, no native change required.
+- Add an opt-in raw escape hatch (`by.native({ ios, android })`) routed straight to the agents — NSPredicate / class chain on iOS, UiSelector on Android — for the rare case the tree match cannot express. Decide whether to finish or formally drop the reserved `xpath` strategy as part of this.
 
 ## End-User Experience Goal
 

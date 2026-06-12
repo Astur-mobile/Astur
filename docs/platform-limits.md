@@ -72,5 +72,6 @@ Technical limits:
 - System alerts are limited by XCTest visibility. If XCTest cannot query a system sheet reliably, Astur cannot promise a stable cross-version automation surface for it.
 - Direct per-app data/cache clearing is not exposed by public iOS tooling; the reliable reset path is uninstall and reinstall from an app path.
 - Real-device lock/unlock, permission mutation, and video recording are not exposed reliably through Apple's public local tooling. Real-device tests can still attach screenshots through the XCUITest agent.
+- WebView (WKWebView) DOM automation is not supported yet. WebView screens and their controls work through XCUITest as native UI, but Astur cannot attach to the in-app web DOM on iOS, so `webview()` returns `WEBVIEW_NOT_SUPPORTED`. (Android in-app WebView DOM works through Chrome DevTools Protocol when the app enables WebView debugging.)
 
 The source in `agents/ios-xctest-agent/` is the bundled Swift XCUITest agent. It binds to the target bundle id, reads the accessibility tree, performs native gestures and element actions, and returns compact JSON to the Node.js runtime. It solves iOS UI-tree and action execution; it does not bypass Apple's signing, provisioning, or system UI restrictions.

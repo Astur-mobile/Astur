@@ -30,19 +30,51 @@ Plain `npx astur-mobile codegen --ios` defaults the iOS bundle id to `com.astur.
 
 ## Header Controls
 
-The current-device chip in the header shows the selected device. Click it to switch to another online Android device or booted iOS simulator without restarting the Inspector.
+The header has two controls: the current-device chip and the `Controls` button.
 
-The `Controls` button contains device and app actions:
+### Switching Devices
+
+The device chip shows the active device. Click it to open the device list and switch to another device without restarting the Inspector — across kinds and platforms: an Android emulator, a real Android device, an iOS simulator, or a real iOS device.
+
+![The device switcher: the active-device chip and a list of switchable Android and iOS devices, each tagged with its kind.](./images/inspector-device-switcher.png)
+
+When you switch, Astur fully tears down the current device session **before** attaching the next one, so two native sessions never run at the same time (which otherwise doubles memory — two XCUITest runners, each holding a simulator, or two Android agents). The mirror briefly shows `Preparing device…` while the new device attaches.
+
+Your original launch arguments carry to the new device when they still apply:
+
+- the **app id** (bundle id / package) carries across the same platform, including iOS simulator ↔ real device
+- the **`--app` artifact** only carries when it matches the target: `.apk` for Android, a simulator `.app` for an iOS simulator, a signed `.ipa` for a real iOS device
+
+#### Switching limitations
+
+- **iOS simulator ↔ real device** keeps the bundle id but not the app file — a simulator `.app` cannot be installed on a real device (it needs a signed `.ipa`), and vice versa. If the app is already installed on the target, the switch attaches to it; otherwise the switch cannot attach.
+- **Cross-platform switches** (Android ↔ iOS) drop the app artifact entirely and inspect the device's current state, because `.apk` and `.app`/`.ipa` are not interchangeable.
+- **Failed switches are non-destructive.** If Astur cannot attach to the chosen device, it re-attaches to the device you were on and reports `Switch to <device> failed: … — stayed on <previous>`, so the session stays usable instead of stranding you on a closed agent.
+- **Real iOS devices** still require Apple signing, Developer Mode, and the app installed/signed for the device. The Inspector cannot create a signed build from a simulator `.app`; start a real-device session with `--ios --real --app <signed.ipa>` for full real-device control.
+
+### Controls
+
+The `Controls` button contains device, app, and session actions:
 
 - install an APK, a simulator `.app`, or a real-device `.ipa`
 - launch an installed app by package name or bundle id
 - grant or revoke permissions
 - clear app data/cache where supported
 - rotate, refresh, lock/unlock, dismiss keyboard, and Android navigation actions
+- **terminate the session** (Session row — see below)
 
-![The Controls panel: launch/install an app, grant or revoke permissions, clear data/cache, and the device action row.](./images/inspector-controls.png)
+![The Controls panel: app launch/install, permissions, data and cache, the device action row, and the Session section with Terminate.](./images/inspector-controls.png)
 
 iOS app launch from `Controls` also rebinds the XCUITest agent to the entered bundle id, so the UI tree and native interactions start working for that app.
+
+### Terminating a Session
+
+The **Terminate session** button (Controls → Session) ends the Inspector cleanly and reclaims all resources. After you confirm, Astur:
+
+- closes the device session — stopping the native agent / XCUITest runner so host memory is released, and
+- **powers off the emulator or simulator** so the virtual device stops consuming memory.
+
+Real devices are left running — Astur does not power off hardware you own. The Inspector then shows a `Session terminated` overlay and the `codegen` process exits.
 
 ## Recording
 
