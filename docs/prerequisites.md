@@ -125,11 +125,12 @@ USB-connected real devices normally communicate through Xcode's CoreDevice tunne
 - Android native automation defaults to the bundled Kotlin UIAutomator agent for locator lookup, waits, actions, gestures, keyboard control, and UI-tree inspection.
 - Android still uses ADB for lifecycle tasks such as discovery, install, launch, log capture, screenshots, video, and port forwarding.
 - Android legacy ADB/UIAutomator XML fallback remains available during migration, but it is not the preferred hot path.
-- Android Chrome/WebView automation is planned.
+- Android in-app WebView DOM automation works through Chrome DevTools Protocol when the app enables WebView debugging (`setWebContentsDebuggingEnabled(true)`).
 - iOS simulator and real-device native element automation work through the bundled Swift XCUITest agent.
 - iOS simulators use `simctl` for lifecycle helpers; real devices use `devicectl`.
 - Real iOS devices require signing the XCUITest runner with `ASTUR_IOS_DEVELOPMENT_TEAM`.
 - Real iOS permissions, direct cache/data clearing, lock/unlock, and video recording remain limited by Apple's public tooling. Use reinstall reset and screenshots where those APIs are unavailable. If native video is enabled for a real iOS run, Astur records a skipped-video attachment instead of failing the test.
+- iOS WebView (WKWebView) DOM automation is not supported yet. Native locators work on WebView screens, but DOM attachment is Android-only today (`webview()` returns `WEBVIEW_NOT_SUPPORTED` on iOS).
 
 ## Optional Native-Agent Endpoint Prerequisites
 
