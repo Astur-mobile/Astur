@@ -29,7 +29,8 @@ export type ServerEvent =
   | { type: 'selection'; uid: string; node: UiNode; suggestions: LocatorSuggestion[] }
   | { type: 'step'; index: number; action: string; locator: string; value?: string; assertion?: AssertionKind; gesture?: SwipeGesture; point?: Coordinates }
   | { type: 'steps'; steps: RecordingStep[] }
-  | { type: 'status'; message: string };
+  | { type: 'status'; message: string }
+  | { type: 'terminated'; message: string };
 
 export type AssertionKind = 'visible' | 'text' | 'containsText' | 'value' | 'label' | 'type';
 export type InspectorDeviceAction =
@@ -58,7 +59,8 @@ export type ClientEvent =
   | { type: 'direct_action'; action: InspectorDirectActionKind; selector: ElementSelector; value?: string }
   | { type: 'device_action'; action: InspectorDeviceAction }
   | { type: 'clear_steps' }
-  | { type: 'export'; lang: 'typescript' | 'javascript' };
+  | { type: 'export'; lang: 'typescript' | 'javascript' }
+  | { type: 'terminate_session' };
 
 export type InspectorAppActionKind =
   | 'launch'
@@ -107,6 +109,12 @@ export interface RecordingStep {
 export interface InspectorSessionBinding {
   device: DeviceInfo;
   inspector: InspectorSession;
+  /**
+   * Set when a requested switch could not be honored but the session recovered
+   * onto another (usually the previous) device. The server rebinds to the
+   * returned device and shows this as an error, instead of "Switched to ...".
+   */
+  notice?: string;
 }
 
 // ─── Server options ───────────────────────────────────────────────────────────
@@ -136,6 +144,12 @@ export interface InspectorServerOptions {
   listDevices?: () => Promise<DeviceInfo[]>;
   /** Switch the active inspector session to another device. */
   switchDevice?: (deviceId: string) => Promise<InspectorSessionBinding>;
+  /**
+   * Terminate the inspector session: close the active device session (kill the
+   * native agent / XCUITest runner so host memory is released) and power off
+   * the emulator/simulator. Real devices are left running.
+   */
+  terminateSession?: () => Promise<void>;
 }
 
 export interface InspectorServerHandle {
@@ -648,13 +662,44 @@ export function startInspectorServer(
               logoDataUri
             });
             await syncInspectorState();
-            broadcast({ type: 'status', message: `Action OK: Switched to ${activeDevice.name}` });
+            if (binding.notice) {
+              broadcast({ type: 'status', message: `Action Error: ${binding.notice}` });
+            } else {
+              broadcast({ type: 'status', message: `Action OK: Switched to ${activeDevice.name}` });
+            }
           } catch (error) {
             ws.send(JSON.stringify({
               type: 'status',
               message: `Action Error: Device switch failed: ${formatActionError(error)}`
             }));
           }
+          break;
+        }
+
+        case 'terminate_session': {
+          if (!options.terminateSession) {
+            ws.send(JSON.stringify({ type: 'status', message: 'Action Error: Terminate is unavailable in this session.' }));
+            break;
+          }
+
+          broadcast({ type: 'status', message: 'Action Pending: Terminating session...' });
+          try {
+            await options.terminateSession();
+          } catch (error) {
+            broadcast({
+              type: 'status',
+              message: `Action Error: Terminate failed: ${formatActionError(error)}`
+            });
+            break;
+          }
+
+          broadcast({
+            type: 'terminated',
+            message: 'Session terminated. The device session was closed and any emulator/simulator was shut down. You can close this tab.'
+          });
+          // Let the terminated event flush to clients, then stop the CLI — the
+          // inspector cannot continue once its device session is gone.
+          setTimeout(() => process.exit(0), 300);
           break;
         }
 
@@ -1896,6 +1941,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .device-menu-actions{display:flex;flex-wrap:wrap;gap:6px}
 .device-action-btn{padding:5px 10px;border-radius:var(--radius);border:1px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;background:var(--surface2);color:var(--text)}
 .device-action-btn:hover{border-color:var(--accent);color:var(--accent-hover)}
+.device-action-btn.danger{color:var(--red);border-color:#4a1414}
+.device-action-btn.danger:hover{border-color:var(--red);color:var(--red);background:rgba(248,81,73,.08)}
+.device-action-btn.danger:disabled{opacity:.55;cursor:not-allowed}
+#terminated-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(7,17,31,.82);backdrop-filter:blur(4px)}
+#terminated-overlay .terminated-card{max-width:420px;margin:24px;padding:28px 32px;border-radius:12px;border:1px solid var(--border);background:var(--surface);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+#terminated-overlay h2{margin:0 0 10px;font-size:18px;color:var(--text)}
+#terminated-overlay p{margin:0;font-size:13px;line-height:1.5;color:var(--text-muted)}
 .device-action-btn.icon{width:32px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center}
 .device-action-btn.icon svg{width:15px;height:15px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .device-row{display:flex;gap:6px;align-items:center}
@@ -2070,6 +2122,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
           </div>
         </div>
         ${renderInspectorDeviceActionMenu(device)}
+        <div class="device-menu-section">
+          <div class="device-menu-label">Session</div>
+          <div class="device-row">
+            <button type="button" class="device-action-btn danger" id="terminate-session-btn">Terminate session</button>
+          </div>
+          <div class="device-help">Closes the device session and powers off the emulator/simulator to free memory. Real devices stay on.</div>
+        </div>
       </div>
     </div>
     <button id="record-btn" title="Toggle recording">Record</button>
@@ -2284,6 +2343,7 @@ const grantPermissionBtn = $('grant-permission-btn');
 const revokePermissionBtn = $('revoke-permission-btn');
 const clearDataBtn = $('clear-data-btn');
 const clearCacheBtn = $('clear-cache-btn');
+const terminateSessionBtn = $('terminate-session-btn');
 const main = $('main');
 const leftColumnSplitter = $('left-column-splitter');
 const rightColumnSplitter = $('right-column-splitter');
@@ -2317,6 +2377,25 @@ function connectWs() {
 
 function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function sessionTerminated(message) {
+  // The server exits on purpose after terminating, so stop the auto-reconnect
+  // loop (otherwise the socket close handler would spam "Reconnecting…").
+  if (ws) { try { ws.onclose = null; ws.close(); } catch (e) { /* ignore */ } }
+  if (document.getElementById('terminated-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'terminated-overlay';
+  const card = document.createElement('div');
+  card.className = 'terminated-card';
+  const heading = document.createElement('h2');
+  heading.textContent = 'Session terminated';
+  const body = document.createElement('p');
+  body.textContent = message;
+  card.appendChild(heading);
+  card.appendChild(body);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
 }
 
 // ── Server event handler ───────────────────────────────────────────────────
@@ -2413,6 +2492,10 @@ function handleServerEvent(ev) {
       else if (ev.message.startsWith('Action OK: ')) { showDeviceStatus(ev.message.slice(11), 'success'); }
       else if (ev.message.startsWith('Action Error: ')) { showDeviceStatus(ev.message.slice(14), 'error'); }
       setBusy(false);
+      break;
+
+    case 'terminated':
+      sessionTerminated(ev.message || 'Session terminated.');
       break;
 
     case 'gesture_ack':
@@ -3789,6 +3872,14 @@ revokePermissionBtn.addEventListener('click', () => {
   closeDeviceMenu();
   setBusy(true);
   send({ type: 'app_action', action: 'revokePermission', identifier, permission });
+});
+
+terminateSessionBtn.addEventListener('click', () => {
+  if (!confirm('Terminate this inspector session?\\n\\nThe device session will be closed and any emulator or simulator will be powered off. Real devices stay on.')) return;
+  closeDeviceMenu();
+  terminateSessionBtn.disabled = true;
+  terminateSessionBtn.textContent = 'Terminating…';
+  send({ type: 'terminate_session' });
 });
 
 document.addEventListener('click', () => {

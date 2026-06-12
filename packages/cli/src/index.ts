@@ -170,6 +170,28 @@ async function codegen(args: string[]): Promise<void> {
     printCodegenPreparation(selected, config);
     let device: AsturDevice;
     let selectedDevice = selected;
+    // The --app / --app-id launch args were provided for the platform the
+    // session started on. They cannot carry across an Android<->iOS switch:
+    // artifact extensions differ (.apk vs .app/.ipa) and app-id namespaces
+    // differ. Remember the original platform so switchDevice only re-applies
+    // them on a same-platform switch.
+    const appArgsPlatform = selected.platform;
+    // Build the config for a device we switch or revive to, re-applying the
+    // launch args correctly: keep --app-id only on the same platform (bundle
+    // id / package is platform-specific but the same across simulator and real
+    // device), and keep --app only when its artifact (.apk/.app/.ipa) matches
+    // the target — otherwise an incompatible install would fail the switch.
+    const buildSwitchConfig = (target: DeviceInfo): AsturConfig => {
+      const sameAppPlatform = target.platform === appArgsPlatform;
+      return buildCodegenConfig(target, {
+        ...parsed,
+        platform: target.platform,
+        deviceId: target.id,
+        appPath: sameAppPlatform && appPathMatchesDevice(parsed.appPath, target) ? parsed.appPath : undefined,
+        appId: sameAppPlatform ? parsed.appId : undefined,
+        launch: false
+      });
+    };
     try {
       device = await createCodegenDevice(runtime, config, {
         forceIosAppInstall: selectedDevice.platform === 'ios' && Boolean(parsed.appPath)
@@ -219,28 +241,65 @@ async function codegen(args: string[]): Promise<void> {
         listDevices: () => runtime.listDevices(),
         switchDevice: async (deviceId) => {
           const devices = await runtime.listDevices();
-          const next = selectCodegenDevice(devices, deviceId, parsed.deviceKind);
+          const next = selectCodegenDevice(devices, deviceId);
           if (!next) {
             throw new Error(`No ready device found for ${deviceId}.`);
           }
 
-          const nextConfig = buildCodegenConfig(next, {
-            ...parsed,
-            platform: next.platform,
-            deviceId: next.id,
-            launch: false
-          });
-          const nextDevice = await createCodegenDevice(runtime, nextConfig, {
-            forceIosAppInstall: next.platform === 'ios' && hasConfiguredAppPath(nextConfig)
-          });
+          const nextConfig = buildSwitchConfig(next);
+
+          // Fully tear down the current device session BEFORE attaching the
+          // next one, so two native-agent sessions never run at once (on iOS
+          // two XCUITest runners, each holding a simulator). close() terminates
+          // the runner/agent and releases ports, so only one session is live.
           const previousDevice = device;
-          device = nextDevice;
-          selectedDevice = next;
+          const previousSelected = selectedDevice;
           await previousDevice.close().catch(() => undefined);
-          return {
-            device: next,
-            inspector: nextDevice.inspector(codegenInspectorOptions(next))
-          };
+
+          try {
+            const nextDevice = await createCodegenDevice(runtime, nextConfig, {
+              forceIosAppInstall: next.platform === 'ios' && hasConfiguredAppPath(nextConfig)
+            });
+            device = nextDevice;
+            selectedDevice = next;
+            return {
+              device: next,
+              inspector: nextDevice.inspector(codegenInspectorOptions(next))
+            };
+          } catch (switchError) {
+            // The target failed to attach — e.g. an unsigned/incompatible build
+            // on a real device, or the app is not installed there. The previous
+            // session was already closed to keep memory bounded, so re-attach to
+            // it instead of leaving the inspector polling a dead agent. The
+            // failure is surfaced via `notice`, but the session stays usable on
+            // the device that was working.
+            try {
+              const revivedConfig = buildSwitchConfig(previousSelected);
+              const revived = await createCodegenDevice(runtime, revivedConfig, {
+                forceIosAppInstall: previousSelected.platform === 'ios' && hasConfiguredAppPath(revivedConfig)
+              });
+              device = revived;
+              selectedDevice = previousSelected;
+              return {
+                device: previousSelected,
+                inspector: revived.inspector(codegenInspectorOptions(previousSelected)),
+                notice: `Switch to ${next.name} failed: ${switchError instanceof Error ? switchError.message : String(switchError)} — stayed on ${previousSelected.name}.`
+              };
+            } catch {
+              // Could not revive the previous device either; report the
+              // original failure to the caller.
+              throw switchError;
+            }
+          }
+        },
+        terminateSession: async () => {
+          // "Terminate session" button: fully reclaim resources. Close the
+          // active device session first (kills the native agent / XCUITest
+          // runner and releases the device, freeing host memory), then power
+          // off the virtual device so nothing keeps draining memory. Real
+          // devices are left running.
+          await device.close().catch(() => undefined);
+          await shutdownVirtualDevice(selectedDevice);
         },
         onListen: (port) => {
           const url = `http://localhost:${port}`;
@@ -647,7 +706,19 @@ function selectCodegenDevice(
   const matchesKind = (device: DeviceInfo) => !deviceKind || device.kind === deviceKind;
 
   if (deviceId) {
-    return devices.find((device) => device.id === deviceId && matchesKind(device) && isSelectable(device));
+    // An explicit device id is the most specific intent, so it ignores the
+    // launch-time --simulator/--real/--emulator kind filter. Without this the
+    // inspector could not switch across kinds/platforms: switching from an iOS
+    // simulator to an online Android emulator failed with "No ready device
+    // found", because the pinned 'simulator' kind rejected the emulator.
+    // Selectability is based on the target's own kind — a shutdown iOS
+    // simulator can still be chosen (Astur boots it); other kinds must be
+    // online/booted.
+    return devices.find(
+      (device) =>
+        device.id === deviceId &&
+        (isReady(device) || (device.kind === 'simulator' && device.state === 'shutdown'))
+    );
   }
 
   return devices.find((device) => matchesKind(device) && isReady(device))
@@ -853,6 +924,46 @@ function hasConfiguredAppPath(config: AsturConfig): boolean {
   return typeof config.app === 'string'
     ? config.app.length > 0
     : Boolean(config.app?.path);
+}
+
+function appPathMatchesDevice(appPath: string | undefined, device: DeviceInfo): boolean {
+  // The install artifact differs by target: Android uses .apk; an iOS simulator
+  // uses a simulator-built .app; a real iOS device needs a signed .ipa. A path
+  // built for one target must not be installed on another — e.g. a simulator
+  // .app cannot be installed on a real iPhone.
+  if (!appPath) {
+    return false;
+  }
+  const lower = appPath.toLowerCase();
+  if (device.platform === 'android') {
+    return lower.endsWith('.apk');
+  }
+  if (device.kind === 'real') {
+    return lower.endsWith('.ipa');
+  }
+  return lower.endsWith('.app');
+}
+
+function shutdownVirtualDevice(info: DeviceInfo): Promise<void> {
+  // Power off virtual devices so their memory is fully reclaimed when a session
+  // is terminated. Real devices are never powered off by Astur.
+  if (info.kind === 'emulator') {
+    return runDeviceCommand('adb', ['-s', info.id, 'emu', 'kill']);
+  }
+  if (info.kind === 'simulator') {
+    return runDeviceCommand('xcrun', ['simctl', 'shutdown', info.id]);
+  }
+  return Promise.resolve();
+}
+
+function runDeviceCommand(command: string, args: string[]): Promise<void> {
+  // Best-effort: resolve regardless of outcome so a missing binary or an
+  // already-shutdown device never throws out of the terminate path.
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { stdio: 'ignore' });
+    child.on('error', () => resolve());
+    child.on('close', () => resolve());
+  });
 }
 
 function defaultCodegenAppId(platform: PlatformName): string | undefined {
