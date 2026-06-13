@@ -120,7 +120,7 @@ Astur signs and starts the bundled XCUITest runner automatically, but Apple requ
 
 USB-connected real devices normally communicate through Xcode's CoreDevice tunnel. Keep `ASTUR_IOS_AGENT_HOST` unset unless you intentionally need the phone to connect to a specific Mac network address.
 
-## Current Alpha Limits
+## Current Beta Limits
 
 - Android native automation defaults to the bundled Kotlin UIAutomator agent for locator lookup, waits, actions, gestures, keyboard control, and UI-tree inspection.
 - Android still uses ADB for lifecycle tasks such as discovery, install, launch, log capture, screenshots, video, and port forwarding.

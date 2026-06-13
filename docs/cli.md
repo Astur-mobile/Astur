@@ -95,7 +95,7 @@ Generated files:
 
 Existing files are not overwritten.
 
-BrowserStack config is scaffolded for the expected environment variables, but cloud execution is not implemented in the current alpha. Local emulator, simulator, and real-device paths are runnable today.
+BrowserStack config is scaffolded for the expected environment variables, but cloud execution is not implemented in the current beta. Local emulator, simulator, and real-device paths are runnable today.
 
 ## `test`
 
@@ -130,7 +130,7 @@ npx astur-mobile codegen --ios --simulator --app ./MyApp.app --app-id com.exampl
 npx astur-mobile codegen --ios --real --device <device-udid> --app ./MyApp.ipa --app-id com.example.myapp
 ```
 
-Current alpha behavior:
+Current beta behavior:
 
 - auto-selects an online/booted device (or uses `--device`)
 - optionally installs/launches app when `--app` and/or `--app-id` are provided
