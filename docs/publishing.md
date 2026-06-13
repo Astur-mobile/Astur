@@ -47,7 +47,7 @@ Initial public packages:
 Native agent packaging decision:
 
 - keep `@astur-mobile/test` and `astur-mobile` as the only packages users normally install
-- publish native agent assets inside the platform packages for the alpha: Android APKs under `@astur-mobile/android/assets/agent` and the simulator XCUITest project under `@astur-mobile/ios/assets/ios-xctest-agent`
+- publish native agent assets inside the platform packages for the beta: Android APKs under `@astur-mobile/android/assets/agent` and the simulator XCUITest project under `@astur-mobile/ios/assets/ios-xctest-agent`
 - make platform drivers resolve packaged agent assets first, then fall back to monorepo source paths for local development
 - keep separate `@astur-mobile/android-agent` or `@astur-mobile/ios-agent` packages as a future option only if agent assets need independent release cadence
 

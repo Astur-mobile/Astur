@@ -3,7 +3,10 @@
   --sl-color-accent-low: #dff8f5;
   --sl-color-accent: #0f8f86;
   --sl-color-accent-high: #063d48;
-  --sl-color-white: #ffffff;
+  /* Do NOT pin --sl-color-white here. Starlight makes it theme-aware (white in
+     dark mode, near-black in light mode) and uses it for table-header text, the
+     mobile menu button, search-result titles, social icons, and TOC links.
+     Pinning it to #ffffff turns all of those white-on-white in light mode. */
   --sl-content-width: 50rem;
   --sl-text-5xl: 4.5rem;
 }
@@ -121,18 +124,8 @@
   color: inherit;
 }
 
-/* Search modal results: Starlight colors result titles with
-   `color: var(--sl-color-white)`, but our :root pins that token to #ffffff
-   (unlayered, so it overrides Starlight's layered light-mode value). That makes
-   the titles white-on-white and invisible in light mode. Restore Starlight's
-   intended high-contrast light value, scoped to the search modal only. */
-:root[data-theme="light"] #starlight__search {
-  --sl-color-white: hsl(224, 10%, 10%);
-}
-
-/* Social icons (e.g. the GitHub link). Starlight's default hover sets the color
-   to --sl-color-white, which is literally white in light mode and disappears
-   against the light header. Keep it a readable accent on hover/focus instead. */
+/* Social icons (e.g. the GitHub link): use the brand accent on hover/focus in
+   light mode instead of Starlight's default hover color. */
 :root[data-theme="light"] .social-icons a {
   color: #4f6279;
 }
@@ -142,9 +135,8 @@
   color: #0f8f86;
 }
 
-/* Right-sidebar "On this page" table of contents links hit the same
-   white-on-hover rule and vanish in light mode. Force a visible accent for the
-   hover, focus, and current-entry states. */
+/* Right-sidebar "On this page" table of contents: use the brand accent for the
+   hover, focus, and current-entry states in light mode. */
 :root[data-theme="light"] .right-sidebar a:hover,
 :root[data-theme="light"] starlight-toc a:hover,
 :root[data-theme="light"] starlight-toc a:focus-visible {
@@ -1640,9 +1632,8 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
   color: var(--sl-color-gray-2);
 }
 
-/* Use a theme-safe high-contrast token, not --sl-color-white: our :root pins
-   that to #ffffff, so the bold labels would render white-on-white (invisible)
-   in light mode and leave gaps that make the captions look misaligned. */
+/* Use --sl-color-text for the bold labels so they track the theme in both
+   light and dark mode. */
 .astur-demo-grid figcaption strong {
   color: var(--sl-color-text);
   font-weight: 600;
