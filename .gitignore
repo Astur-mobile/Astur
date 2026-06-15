@@ -34,9 +34,11 @@ AGENTS.md
 # Org profile staging file (the real copy lives in the Astur-mobile/.github repo)
 /ORG-PROFILE-README.md
 
-# Large demo-app binaries. The iOS simulator app ships zipped (unzip to assets/Astur.app).
-# The unpacked .app bundle and the real-device .ipa are kept out of the repo.
+# Large demo-app binaries. The iOS simulator apps ship zipped (unzip to
+# assets/Astur.app and assets/Runner.app). The unpacked .app bundles and the
+# real-device .ipa are kept out of the repo.
 assets/Astur.app/
+assets/Runner.app/
 assets/*.ipa
 
 # Internal/local architecture drafts. Keep docs/architecture.md public and user-facing.

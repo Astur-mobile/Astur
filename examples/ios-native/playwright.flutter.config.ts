@@ -3,12 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@astur-mobile/test';
 
 // Flutter validation config for iOS simulator: points the probe/suite at the
-// genuine Flutter build of the demo app (Runner.app from the asturapp flutter
-// branch). Used to validate native Flutter automation support on iOS.
+// Flutter build of the demo app. Defaults to the local committed asset
+// (assets/Runner.app, extracted from astur.demo.ios.simulator_flutter.zip),
+// matching the React Native config's assets/Astur.app. Override with
+// ASTUR_IOS_APP_PATH to point at a different Runner.app (e.g. a fresh build).
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const appPath =
-  process.env.ASTUR_IOS_APP_PATH ??
-  '/Users/amr.salem/Desktop/asturapp/build/ios/iphonesimulator/Runner.app';
+const appPath = process.env.ASTUR_IOS_APP_PATH ?? resolve(repoRoot, 'assets/Runner.app');
 const deviceName = process.env.ASTUR_IOS_DEVICE_NAME ?? 'iPhone 16';
 
 export default defineConfig({
