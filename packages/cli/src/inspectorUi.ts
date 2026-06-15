@@ -839,8 +839,20 @@ function renderInspectorHtml(payload: InspectorUiPayload): string {
       const mirrorEmpty = document.getElementById('mirrorEmpty');
       const highlightBox = document.getElementById('highlightBox');
       const mirrorStage = document.getElementById('mirrorStage');
+      const phoneShell = document.querySelector('.phone-shell');
       const recordToggleBtn = document.getElementById('recordToggleBtn');
       const recordBadge = document.getElementById('recordBadge');
+
+      // Match the device frame to the screenshot's orientation. The shell is
+      // portrait by default; when the device rotates, the screenshot comes back
+      // landscape and we flip the frame's cap dimensions so the image fits a
+      // landscape-shaped frame instead of being squeezed into a portrait one.
+      function applyDeviceOrientation() {
+        if (!phoneShell || !mirrorImage.naturalWidth || !mirrorImage.naturalHeight) return;
+        const landscape = mirrorImage.naturalWidth > mirrorImage.naturalHeight;
+        phoneShell.style.width = landscape ? 'min(100%, 720px)' : 'min(100%, 340px)';
+        phoneShell.style.height = landscape ? 'min(100%, 360px)' : 'min(100%, 720px)';
+      }
 
       if (payload.screenshotDataUri) {
         mirrorImage.src = payload.screenshotDataUri;
@@ -849,6 +861,7 @@ function renderInspectorHtml(payload: InspectorUiPayload): string {
       }
 
       mirrorImage.addEventListener('load', () => {
+        applyDeviceOrientation();
         renderSelection();
       });
 
