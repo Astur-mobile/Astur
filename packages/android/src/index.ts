@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
 import { get as httpGet } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
   AppUnderTest,
@@ -53,6 +53,9 @@ import {
 } from '@astur-mobile/core';
 import { run, runText, spawnCommand, spawnDetached } from './command.js';
 import { parseUiAutomatorXml } from './uiautomatorXml.js';
+import { FlutterProcess } from './flutter/process.js';
+import { FlutterVmService } from './flutter/vmService.js';
+import { isFlutterApk } from './flutter/detect.js';
 
 export interface AndroidDriverOptions {
   adbPath?: string;
@@ -84,6 +87,14 @@ interface AndroidNativeAgentRuntime {
   hostPort?: number;
   packageName?: string;
   process?: ChildProcess;
+}
+
+interface FlutterRuntime {
+  process: FlutterProcess;
+  vm?: FlutterVmService;
+  started: boolean;
+  /** Foreground component captured at first launch, used to re-foreground after a hot restart. */
+  component?: { packageName: string; activity: string };
 }
 
 export function createAndroidDriver(options: AndroidDriverOptions = {}): AndroidDriver {
@@ -214,9 +225,57 @@ export class AndroidDriver implements PlatformDriver {
       });
     }
 
-    const nativeAgent = await this.resolveNativeAgent(resolvedCapabilities, device);
+    const flutter = await this.resolveFlutterRuntime(resolvedCapabilities, device);
+    // Flutter on Android is driven through the Dart VM service, not the native
+    // UIAutomator agent (Flutter does not publish its tree to accessibility), so
+    // skip agent bootstrap when a Flutter app is detected.
+    const nativeAgent = flutter ? undefined : await this.resolveNativeAgent(resolvedCapabilities, device);
 
-    return new AndroidSession(this.adbPath, device, resolvedCapabilities, nativeAgent);
+    return new AndroidSession(this.adbPath, device, resolvedCapabilities, nativeAgent, flutter);
+  }
+
+  private async resolveFlutterRuntime(
+    capabilities: NormalizedCapabilities,
+    device: DeviceInfo
+  ): Promise<FlutterRuntime | undefined> {
+    const rawAppPath = capabilities.app?.path;
+    if (!rawAppPath || !(await isFlutterApk(rawAppPath))) {
+      return undefined;
+    }
+    // `flutter run` is spawned with cwd = the Flutter project dir, so a relative
+    // --app would be resolved against the wrong directory. Pin it to an absolute
+    // path (relative to the caller's cwd, which is where isFlutterApk just read it).
+    const appPath = resolve(rawAppPath);
+
+    const rawProjectPath = process.env.ASTUR_FLUTTER_PROJECT;
+    if (!rawProjectPath) {
+      throw new AsturError(
+        'FLUTTER_PROJECT_REQUIRED',
+        'Detected a Flutter Android app, which Astur drives through the Dart VM service. Set ASTUR_FLUTTER_PROJECT to the Flutter app source directory so Astur can launch it with the Dart compiler attached. (Flutter does not expose its widget tree to UIAutomator, so the native-agent path cannot see it.)',
+        { appPath }
+      );
+    }
+
+    // Resolve to an absolute path (relative values are resolved against the
+    // caller's cwd, not wherever `flutter run` is later spawned) and verify it
+    // exists, so a mistyped or missing source dir fails clearly here rather than
+    // as an opaque `flutter run` error.
+    const projectPath = resolve(rawProjectPath);
+    if (!existsSync(join(projectPath, 'pubspec.yaml'))) {
+      throw new AsturError(
+        'FLUTTER_PROJECT_NOT_FOUND',
+        `ASTUR_FLUTTER_PROJECT does not point at a Flutter app source directory (no pubspec.yaml at ${projectPath}). Set it to the Flutter project root.`,
+        { projectPath, rawProjectPath }
+      );
+    }
+
+    const process_ = new FlutterProcess({
+      projectPath,
+      apkPath: appPath,
+      deviceId: device.id,
+      flutterPath: process.env.ASTUR_FLUTTER_PATH
+    });
+    return { process: process_, started: false };
   }
 
   private async resolveNativeAgent(
@@ -476,20 +535,91 @@ class AndroidSession implements PlatformSession {
   };
   private readonly forwardedWebViewPorts = new Set<number>();
 
+  private readonly flutter?: FlutterRuntime;
+
   constructor(
     adbPath: string,
     deviceInfo: DeviceInfo,
     capabilities: NormalizedCapabilities,
-    nativeAgentRuntime?: AndroidNativeAgentRuntime
+    nativeAgentRuntime?: AndroidNativeAgentRuntime,
+    flutter?: FlutterRuntime
   ) {
     this.adbPath = adbPath;
     this.deviceInfo = deviceInfo;
     this.capabilities = capabilities;
     this.nativeAgentRuntime = nativeAgentRuntime;
     this.nativeAgent = nativeAgentRuntime?.client;
+    this.flutter = flutter;
+  }
+
+  /** Starts the Flutter app via `flutter run` on first launch, hot-restarts on subsequent ones. */
+  private async launchFlutter(): Promise<void> {
+    const flutter = this.flutter!;
+    if (!flutter.started) {
+      const url = await flutter.process.start();
+      flutter.vm = new FlutterVmService({ url });
+      await flutter.vm.connect();
+      flutter.started = true;
+      // `flutter run` leaves the app in the foreground; capture its component so
+      // later resets can bring it back to the front (see below).
+      flutter.component = await this.detectForegroundComponent().catch(() => undefined);
+      return;
+    }
+    await flutter.process.hotRestart();
+    // Hot restart re-runs main() in place but does NOT foreground the app. Test
+    // resets tap the home button first, so without this the app stays behind the
+    // launcher: the VM service still reads its (background) widget tree, but taps
+    // and gestures land on the launcher. Reorder the existing task to the front
+    // (no relaunch, which would detach `flutter run`). Do this BEFORE reattaching
+    // so the view is attached and reports a non-zero size — a backgrounded
+    // Flutter view can report 0x0, which would stall reattach's readiness wait.
+    await this.foregroundFlutterApp(flutter.component);
+    // Hot restart spins up a fresh Dart isolate; rebind so tree reads don't run
+    // against the dead one (which returns an empty tree -> app-shell timeouts).
+    await flutter.vm?.reattach();
+  }
+
+  /** Reads the currently focused app component (package/activity) from the platform. */
+  private async detectForegroundComponent(): Promise<{ packageName: string; activity: string } | undefined> {
+    const parse = (text: string): { packageName: string; activity: string } | undefined => {
+      const match =
+        text.match(/Resumed(?:Activity)?[^\n]*\{[^}]*\s([A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)/) ??
+        text.match(/mCurrentFocus=Window\{[^}]*\s([A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)/);
+      if (!match) {
+        return undefined;
+      }
+      const [, packageName, rawActivity] = match;
+      const activity = rawActivity.startsWith('.') ? `${packageName}${rawActivity}` : rawActivity;
+      return { packageName, activity };
+    };
+
+    return (
+      parse(await this.adbText(['shell', 'dumpsys', 'activity', 'activities']).catch(() => '')) ??
+      parse(await this.adbText(['shell', 'dumpsys', 'window']).catch(() => ''))
+    );
+  }
+
+  /** Brings the (already-running) Flutter app's task back to the foreground without relaunching it. */
+  private async foregroundFlutterApp(component?: { packageName: string; activity: string }): Promise<void> {
+    if (!component) {
+      return;
+    }
+    await this.adb([
+      'shell',
+      'am',
+      'start',
+      '--activity-reorder-to-front',
+      '-n',
+      `${component.packageName}/${component.activity}`
+    ]).catch(() => undefined);
   }
 
   async close(): Promise<void> {
+    if (this.flutter) {
+      await this.flutter.vm?.dispose().catch(() => undefined);
+      await this.flutter.process.stop().catch(() => undefined);
+    }
+
     if (this.recording) {
       await this.stopRecording().catch(() => undefined);
     }
@@ -513,6 +643,11 @@ class AndroidSession implements PlatformSession {
   }
 
   async installApp(path: string): Promise<void> {
+    // In Flutter mode the app is installed (and signature conflicts resolved) by
+    // `flutter run` when the session launches, so skip the adb install here.
+    if (this.flutter) {
+      return;
+    }
     await this.adb(['install', '-r', path]);
   }
 
@@ -531,6 +666,11 @@ class AndroidSession implements PlatformSession {
   async launchApp(options: LaunchOptions = {}): Promise<void> {
     if (options.url) {
       await this.openWeb(options.url);
+      return;
+    }
+
+    if (this.flutter) {
+      await this.launchFlutter();
       return;
     }
 
@@ -561,6 +701,12 @@ class AndroidSession implements PlatformSession {
   }
 
   async terminateApp(): Promise<void> {
+    // In Flutter mode the `flutter run` process owns the app lifecycle; a hard
+    // force-stop would detach it. Resets re-run main() via hot restart on the
+    // next launchApp() instead, so terminate is a no-op here.
+    if (this.flutter) {
+      return;
+    }
     const packageName = this.resolvePackageName();
     await this.adb(['shell', 'am', 'force-stop', packageName]);
   }
@@ -656,6 +802,10 @@ class AndroidSession implements PlatformSession {
   }
 
   async getTree(): Promise<MobileElementSnapshot> {
+    if (this.flutter?.vm) {
+      return this.flutter.vm.getTree();
+    }
+
     const command = await this.tryNativeCommand('tree.get');
     if (command.ok) {
       return command.result;

@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://astur-mobile.github.io/Astur/">
+    <img src="https://astur-mobile.github.io/Astur/brand/astur-logo.png" alt="Astur" width="360">
+  </a>
+</p>
+
 # Android Native Example
 
 This example expects:
@@ -110,3 +116,37 @@ test('webview DOM', async ({ app, webview }) => {
 ```
 
 Android WebView DOM control requires WebView debugging to be enabled by the app. Native interactions still use `device.find(...)`; WebView DOM interactions use `web.page`.
+
+## Flutter build of the demo app
+
+The same specs run against the **Flutter** build of the demo app via a dedicated config. On Android, Astur auto-detects the Flutter APK and reads the live widget tree through the **Dart VM service** (see the [Flutter & React Native guide](https://astur-mobile.github.io/Astur/frameworks/)).
+
+This example expects:
+
+- the Flutter demo APK at `assets/astur.demo.android_flutter.apk` (a **debug** build)
+- the `flutter` CLI on `PATH` (or `ASTUR_FLUTTER_PATH`)
+- `ASTUR_FLUTTER_PROJECT` set to the Flutter app source directory (the folder with `pubspec.yaml`)
+
+```bash
+# Android (Dart VM service driver)
+ASTUR_FLUTTER_PROJECT=/path/to/flutter-app npm run test:android:flutter
+
+# one spec
+ASTUR_FLUTTER_PROJECT=/path/to/flutter-app \
+  npm run test:android:flutter:spec -- android-native/login.test.ts
+
+# codegen / inspector against the Flutter APK
+ASTUR_FLUTTER_PROJECT=/path/to/flutter-app npm run codegen:android:flutter
+```
+
+The iOS Flutter config (`ios-native/playwright.flutter.config.ts`) drives the Flutter `Runner.app` through XCUITest; unzip `assets/astur.demo.ios.simulator_flutter.zip` into `assets/` first. Some specs that depend on native pickers or fine-grained drag are environment-sensitive on the Flutter build — see the guide's limitations.
+
+## Sponsor
+
+Astur is open source and built in the open. If it saves your team time, consider supporting development:
+
+<p>
+  <a href="https://ko-fi.com/asturmobile"><img src="https://img.shields.io/badge/Ko--fi-Support%20Astur-FF5E5B?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
+  &nbsp;
+  <a href="https://github.com/sponsors/Astur-mobile"><img src="https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
+</p>

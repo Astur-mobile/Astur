@@ -60,7 +60,8 @@ export type ClientEvent =
   | { type: 'device_action'; action: InspectorDeviceAction }
   | { type: 'clear_steps' }
   | { type: 'export'; lang: 'typescript' | 'javascript' }
-  | { type: 'terminate_session' };
+  | { type: 'terminate_session' }
+  | { type: 'release_session' };
 
 export type InspectorAppActionKind =
   | 'launch'
@@ -150,6 +151,12 @@ export interface InspectorServerOptions {
    * the emulator/simulator. Real devices are left running.
    */
   terminateSession?: () => Promise<void>;
+  /**
+   * Release the inspector session: close the active device session (kill the
+   * native agent / XCUITest runner) but leave the emulator/simulator running so
+   * it can be reused without a cold boot.
+   */
+  releaseSession?: () => Promise<void>;
 }
 
 export interface InspectorServerHandle {
@@ -703,6 +710,31 @@ export function startInspectorServer(
           break;
         }
 
+        case 'release_session': {
+          if (!options.releaseSession) {
+            ws.send(JSON.stringify({ type: 'status', message: 'Action Error: Release is unavailable in this session.' }));
+            break;
+          }
+
+          broadcast({ type: 'status', message: 'Action Pending: Releasing session...' });
+          try {
+            await options.releaseSession();
+          } catch (error) {
+            broadcast({
+              type: 'status',
+              message: `Action Error: Release failed: ${formatActionError(error)}`
+            });
+            break;
+          }
+
+          broadcast({
+            type: 'terminated',
+            message: 'Session released. The device session was closed; the emulator/simulator was left running. You can close this tab.'
+          });
+          setTimeout(() => process.exit(0), 300);
+          break;
+        }
+
         case 'app_action': {
           if (!options.performAppAction) {
             ws.send(JSON.stringify({ type: 'status', message: 'Action Error: App actions are unavailable in this session.' }));
@@ -1042,7 +1074,12 @@ export function startInspectorServer(
     }
 
     function scheduleTree(): void {
-      const interval = clients.size === 0
+      // Back off hard when the tree read keeps failing/timing out — e.g. XCUITest
+      // stalling on a heavy WebView snapshot. Retrying every interval just piles
+      // commands onto an already-stuck agent; poll slowly until it recovers (a
+      // successful read resets consecutiveTreeErrors and snaps back to base).
+      const stalled = consecutiveTreeErrors >= 3;
+      const interval = clients.size === 0 || stalled
         ? maxIdleIntervalMs
         : nextPollInterval(baseTreeIntervalMs, treeIdleStreak, maxIdleIntervalMs);
       treeTimer = setTimeout(async () => {
@@ -2124,10 +2161,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         ${renderInspectorDeviceActionMenu(device)}
         <div class="device-menu-section">
           <div class="device-menu-label">Session</div>
-          <div class="device-row">
-            <button type="button" class="device-action-btn danger" id="terminate-session-btn">Terminate session</button>
+          <div class="device-menu-actions">
+            <button type="button" class="device-action-btn icon" id="release-session-btn" title="Release session" aria-label="Release session">${iconSvg('<path d="M5 17h14"/><path d="M12 4 5 13h14z"/>')}</button>
+            <button type="button" class="device-action-btn icon danger" id="terminate-session-btn" title="Terminate session" aria-label="Terminate session">${iconSvg('<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>')}</button>
           </div>
-          <div class="device-help">Closes the device session and powers off the emulator/simulator to free memory. Real devices stay on.</div>
+          <div class="device-help"><strong>Release</strong> closes the device session but leaves the emulator/simulator running for reuse. <strong>Terminate</strong> also powers it off to free memory. Real devices stay on.</div>
         </div>
       </div>
     </div>
@@ -2196,7 +2234,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <div id="right-panel">
       <!-- Tree -->
       <div id="tree-panel">
-        <div class="panel-header">UI Tree <span id="tree-badge" style="font-weight:400;color:var(--text-muted)"></span></div>
+        <div class="panel-header" style="display:flex;align-items:center;gap:8px">
+          <span>UI Tree</span>
+          <span id="tree-badge" style="font-weight:400;color:var(--text-muted)"></span>
+          <button type="button" class="device-action-btn icon" id="tree-refresh-btn" title="Refresh UI tree" aria-label="Refresh UI tree" style="margin-left:auto;width:26px;height:24px">${inspectorDeviceActionIcon('tree.refresh')}</button>
+        </div>
         <div id="tree-search-row">
           <input id="tree-search" type="search" placeholder="Search element…"/>
         </div>
@@ -2273,6 +2315,13 @@ let activeTab = 'code';
 let currentDevice = ${JSON.stringify(toBootstrapDevice(device))};
 let devices = [currentDevice];
 let busyCount = 0;
+let busyWatchdog = null;
+// Hard ceiling on how long the "Running action…" overlay may stay up. If the
+// device/agent stops responding (e.g. XCUITest stalls while snapshotting a heavy
+// WebView), no status ever comes back and the overlay would otherwise spin
+// forever, bricking the session. The watchdog force-clears it so the user can
+// keep working (switch screens, terminate, etc.).
+const BUSY_WATCHDOG_MS = 15000;
 let socketConnected = false;
 let hasFrame = false;
 let hasTree = false;
@@ -2344,6 +2393,8 @@ const revokePermissionBtn = $('revoke-permission-btn');
 const clearDataBtn = $('clear-data-btn');
 const clearCacheBtn = $('clear-cache-btn');
 const terminateSessionBtn = $('terminate-session-btn');
+const releaseSessionBtn = $('release-session-btn');
+const treeRefreshBtn = $('tree-refresh-btn');
 const main = $('main');
 const leftColumnSplitter = $('left-column-splitter');
 const rightColumnSplitter = $('right-column-splitter');
@@ -2548,6 +2599,25 @@ function toggleDeviceSwitcher() {
 
 function setBusy(active) {
   busyCount = Math.max(0, busyCount + (active ? 1 : -1));
+  if (busyWatchdog) {
+    clearTimeout(busyWatchdog);
+    busyWatchdog = null;
+  }
+  if (busyCount > 0) {
+    busyWatchdog = setTimeout(onBusyWatchdogExpired, BUSY_WATCHDOG_MS);
+  }
+  updateDeviceReadiness();
+}
+
+// Fires when an action's overlay has been up too long with no response. Clears
+// the overlay and tells the user the session is still live so they can recover
+// (common when a native+web hybrid screen leaves XCUITest mid-snapshot).
+function onBusyWatchdogExpired() {
+  busyWatchdog = null;
+  if (busyCount === 0) return;
+  busyCount = 0;
+  releaseGestureLock();
+  showDeviceStatus('Action timed out — the device is slow to respond (a heavy web view can stall the UI tree). The session is still live; try again or switch screens.', 'error');
   updateDeviceReadiness();
 }
 
@@ -3168,16 +3238,23 @@ function renderDetails(node) {
 
 // ── Mirror click ───────────────────────────────────────────────────────────
 function resolveMirrorSourceSize() {
-  const viewportWidth = Number(viewport.width || 0);
-  const viewportHeight = Number(viewport.height || 0);
-  if (viewportWidth > 1 && viewportHeight > 1) {
-    return { width: viewportWidth, height: viewportHeight };
-  }
-
+  // Size the stage to the screenshot's own pixels first: those are exactly what
+  // gets drawn, and the image is sized with explicit width/height (no
+  // object-fit), so any aspect-ratio mismatch stretches it. On rotation the
+  // landscape frame arrives a tick before the tree's viewport updates — if we
+  // trusted the (still portrait) viewport here, the landscape image would be
+  // squeezed into a portrait stage. Fall back to the viewport, then a square,
+  // until the first frame has loaded.
   const naturalWidth = Number(mirrorImg.naturalWidth || 0);
   const naturalHeight = Number(mirrorImg.naturalHeight || 0);
   if (naturalWidth > 1 && naturalHeight > 1) {
     return { width: naturalWidth, height: naturalHeight };
+  }
+
+  const viewportWidth = Number(viewport.width || 0);
+  const viewportHeight = Number(viewport.height || 0);
+  if (viewportWidth > 1 && viewportHeight > 1) {
+    return { width: viewportWidth, height: viewportHeight };
   }
 
   return { width: 1, height: 1 };
@@ -3878,8 +3955,21 @@ terminateSessionBtn.addEventListener('click', () => {
   if (!confirm('Terminate this inspector session?\\n\\nThe device session will be closed and any emulator or simulator will be powered off. Real devices stay on.')) return;
   closeDeviceMenu();
   terminateSessionBtn.disabled = true;
-  terminateSessionBtn.textContent = 'Terminating…';
+  releaseSessionBtn.disabled = true;
   send({ type: 'terminate_session' });
+});
+
+releaseSessionBtn.addEventListener('click', () => {
+  if (!confirm('Release this inspector session?\\n\\nThe device session will be closed, but the emulator or simulator will stay running so it can be reused without a cold boot.')) return;
+  closeDeviceMenu();
+  releaseSessionBtn.disabled = true;
+  terminateSessionBtn.disabled = true;
+  send({ type: 'release_session' });
+});
+
+treeRefreshBtn.addEventListener('click', () => {
+  showDeviceStatus('Refreshing UI tree...', 'pending');
+  send({ type: 'device_action', action: 'tree.refresh' });
 });
 
 document.addEventListener('click', () => {

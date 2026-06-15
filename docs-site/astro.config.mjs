@@ -77,6 +77,7 @@ export default defineConfig({
             { label: 'Prerequisites', slug: 'prerequisites' },
             { label: 'Android', slug: 'android' },
             { label: 'iOS', slug: 'ios' },
+            { label: 'Flutter & React Native', slug: 'frameworks' },
             { label: 'Configuration', slug: 'configuration' },
             { label: 'Troubleshooting', slug: 'troubleshooting' }
           ]

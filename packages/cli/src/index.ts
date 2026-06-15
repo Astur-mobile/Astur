@@ -301,6 +301,13 @@ async function codegen(args: string[]): Promise<void> {
           await device.close().catch(() => undefined);
           await shutdownVirtualDevice(selectedDevice);
         },
+        releaseSession: async () => {
+          // "Release session" button: close the active device session (kills the
+          // native agent / XCUITest runner / Flutter run process, freeing host
+          // memory) but leave the emulator/simulator running so it can be reused
+          // without a cold boot.
+          await device.close().catch(() => undefined);
+        },
         onListen: (port) => {
           const url = `http://localhost:${port}`;
           console.log(`\n${colors.bold('device')}   ${selectedDevice.platform} ${selectedDevice.name} (${selectedDevice.id})`);

@@ -62,6 +62,7 @@ Astur still uses platform tools where they are the right tool:
 - Android lifecycle: `adb` installs apps, launches packages, captures screenshots, records video, and gathers logs.
 - iOS lifecycle: `simctl`, `devicectl`, and `xcodebuild` manage simulators, app install/launch, screenshots, and the XCUITest runner.
 - Element interaction: native Android and iOS agents perform lookup, waits, taps, fills, drags, swipes, and keyboard commands.
+- Flutter (Android): when a Flutter APK is detected, Astur reads the live widget tree through the **Dart VM service** instead of UIAutomator, while ADB still handles lifecycle and gestures. See [Frameworks: Flutter & React Native](./frameworks/).
 
 <div class="astur-split">
   <section>

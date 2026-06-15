@@ -217,21 +217,18 @@ export class HomePage {
   }
 
   async revealTapLaboratory(): Promise<void> {
-    if (!isIos(this.device)) {
-      await this.tapLabCard.scrollIntoView({ direction: 'down', maxScrolls: 5 });
-      return;
-    }
-
-    // iOS-specific: the tap counters render in a row just below the tap target.
-    // It is not enough for the target to be "visible" — it must have room
-    // beneath it in the viewport so the counters are on screen too, because
-    // iosTapLabCounters() only reads counters that the tree reports as visible.
-    // Do NOT simplify this to a plain scrollIntoView: that leaves the counters
-    // clipped at the bottom edge and the counter read fails.
+    // The tap counters render in a row just below the tap target. It is not
+    // enough for the target to be "visible" — it must have room beneath it in the
+    // viewport so the counters are on screen too (and the target sits clear of the
+    // bottom navigation bar so taps land on it). This matters on iOS and on the
+    // Flutter Android driver alike, which only expose on-screen nodes — a plain
+    // scrollIntoView(card) leaves the counters off screen and the target under the
+    // nav bar. (On native Android the off-screen counters are already in the tree,
+    // so this just scrolls a little further, harmlessly.)
     const viewport = await this.device.viewport();
-    const bottomLimit = viewport.y + viewport.height - 140;
+    const bottomLimit = viewport.y + viewport.height - 180;
 
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
       const target = await this.tapTarget.snapshot({ timeout: 400 }).catch(() => undefined);
       if (target?.visible && target.bounds.y + target.bounds.height <= bottomLimit) {
         return;

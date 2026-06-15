@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://astur-mobile.github.io/Astur/">
+    <img src="https://astur-mobile.github.io/Astur/brand/astur-logo.png" alt="Astur" width="360">
+  </a>
+</p>
+
 # Astur Documentation
 
 This documentation is organized as a learning path from first install to advanced architecture and reliability work.
@@ -56,3 +62,13 @@ Outcome:
 3. Add artifacts and assertions for reliability diagnostics.
 4. Keep the default native-agent engine for new projects.
 5. Use `automation.engine: 'auto'` only when migrating older fallback-based suites.
+
+## Sponsor
+
+Astur is open source and built in the open. If it saves your team time, consider supporting development:
+
+<p>
+  <a href="https://ko-fi.com/asturmobile"><img src="https://img.shields.io/badge/Ko--fi-Support%20Astur-FF5E5B?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
+  &nbsp;
+  <a href="https://github.com/sponsors/Astur-mobile"><img src="https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
+</p>

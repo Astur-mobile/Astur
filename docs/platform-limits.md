@@ -29,23 +29,27 @@ Current state:
 
 ## Flutter
 
-Astur can automate Flutter apps as native mobile apps without Appium or a Flutter-specific third-party driver, as long as the app exposes usable native accessibility/semantics data.
+Astur automates Flutter apps without Appium or a Flutter-specific third-party driver. See [Frameworks: Flutter & React Native](./frameworks/) for the full setup guide; the boundaries are summarized here.
 
-What works today:
+On **Android**, Astur attaches to the **Dart VM service** and reads the live Flutter **widget tree** (Semantics identifier, text, label, value, bounds) — not just the accessibility layer.
 
-- launch/install the Flutter app like any APK or `.app`
-- locate visible text/semantics labels exposed to UIAutomator or XCUITest
-- tap, fill, swipe, drag, long-press, and press system keys at the native layer
-- use screenshots and native video artifacts
+What works today (Android, Dart VM service):
 
-What is not implemented today:
+- auto-detect a Flutter APK, launch it, and hot-restart between tests
+- inspect the nested widget tree in the live inspector and codegen
+- `getById` (Semantics identifier), `getByText`, `getByLabel`
+- tap, double tap, long press, fill (with `toHaveValue`), swipe
+- orientation, screenshots, native video artifacts
 
-- direct Flutter widget tree inspection
-- Dart VM service integration
-- lookup by Flutter `ValueKey` unless that key is surfaced as native accessibility data
-- Flutter driver protocol support
+Requirements and limits:
 
-For reliable Flutter automation, add stable semantics labels/accessibility identifiers to widgets that tests need to find.
+- requires a **debug/profile** APK (the VM service is absent in release builds)
+- requires **`ASTUR_FLUTTER_PROJECT`** (the Flutter app source dir) and the `flutter` CLI on `PATH` (or `ASTUR_FLUTTER_PATH`)
+- only **on-screen** widgets appear in the tree — scroll a target into view first
+- **native UI outside Flutter** (system permission dialogs, the native photo/file picker, share sheets) is not visible to the Dart VM service
+- fine-grained drag onto custom pan widgets via synthetic input can be imprecise
+
+On **iOS**, there is no Dart VM service driver yet: Flutter apps are read through the XCUITest accessibility tree, so coverage depends on the `Semantics` the app exposes to iOS accessibility. Add stable semantics identifiers to widgets that tests need to find.
 
 ## iOS
 
