@@ -22,13 +22,25 @@ const SEP = '';
 // Single-line Dart expression (the debug expression compiler rejects multi-line
 // bodies). Walks the element tree depth-first and emits one row per node that
 // carries an identifier, text, or label and has laid-out bounds.
+//
+// It skips subtrees that aren't actually painted so the tree matches what's on
+// screen. This matters most for IndexedStack (the common "keep every tab
+// mounted" pattern): it lays out ALL children at the same on-screen rect but
+// paints only the active one — without skipping, every screen's widgets show up
+// at once, overlapping, and most aren't interactable. Offstage / Visibility /
+// Opacity(0) similarly hide content (e.g. a closed drawer's backdrop).
 const EXTRACT_EXPR =
   '(){' +
   'final sb=StringBuffer();' +
   'final view=WidgetsBinding.instance.platformDispatcher.views.first;' +
   'final dpr=view.devicePixelRatio;final sw=view.physicalSize.width;final sh=view.physicalSize.height;' +
   'void visit(Element el){' +
-  'final wd=el.widget;final ro=el.renderObject;' +
+  'final wd=el.widget;' +
+  'if(wd is Offstage && wd.offstage)return;' +
+  'if(wd is Visibility && !wd.visible)return;' +
+  'if(wd is Opacity && wd.opacity==0.0)return;' +
+  'if(wd is IndexedStack){final idx=wd.index??0;int ci=0;el.visitChildren((c){if(ci==idx)visit(c);ci++;});return;}' +
+  'final ro=el.renderObject;' +
   'String? sid;String? lbl;String? txt;' +
   'if(wd is Semantics){final p=wd.properties;if(p.identifier!=null)sid=p.identifier;if(p.label!=null)lbl=p.label;}' +
   'if(wd is Text && wd.data!=null)txt=wd.data;' +
@@ -36,11 +48,13 @@ const EXTRACT_EXPR =
   'final o=ro.localToGlobal(Offset.zero);' +
   'if(o.dx.isFinite && o.dy.isFinite){' +
   'final x=(o.dx*dpr).round();final y=(o.dy*dpr).round();final w=(ro.size.width*dpr).round();final h=(ro.size.height*dpr).round();' +
-  'final vis=(w>0 && h>0 && x+w>0 && y+h>0 && x<sw && y<sh)?1:0;' +
+  'final on=(w>0 && h>0 && x+w>0 && y+h>0 && x<sw && y<sh);' +
+  'if(on){' +
   'sb.write(sid??"");sb.writeCharCode(1);sb.write(txt??"");sb.writeCharCode(1);sb.write(lbl??"");sb.writeCharCode(1);' +
   'sb.write(wd.runtimeType.toString());sb.writeCharCode(1);' +
   'sb.write(x.toString());sb.writeCharCode(1);sb.write(y.toString());sb.writeCharCode(1);' +
-  'sb.write(w.toString());sb.writeCharCode(1);sb.write(h.toString());sb.writeCharCode(1);sb.write(vis.toString());sb.writeCharCode(10);' +
+  'sb.write(w.toString());sb.writeCharCode(1);sb.write(h.toString());sb.writeCharCode(1);sb.write("1");sb.writeCharCode(10);' +
+  '}' +
   '}}' +
   'el.visitChildren(visit);' +
   '}' +
