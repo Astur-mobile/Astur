@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
 import { get as httpGet } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
   AppUnderTest,
@@ -236,17 +236,34 @@ export class AndroidDriver implements PlatformDriver {
     capabilities: NormalizedCapabilities,
     device: DeviceInfo
   ): Promise<FlutterRuntime | undefined> {
-    const appPath = capabilities.app?.path;
-    if (!appPath || !(await isFlutterApk(appPath))) {
+    const rawAppPath = capabilities.app?.path;
+    if (!rawAppPath || !(await isFlutterApk(rawAppPath))) {
       return undefined;
     }
+    // `flutter run` is spawned with cwd = the Flutter project dir, so a relative
+    // --app would be resolved against the wrong directory. Pin it to an absolute
+    // path (relative to the caller's cwd, which is where isFlutterApk just read it).
+    const appPath = resolve(rawAppPath);
 
-    const projectPath = process.env.ASTUR_FLUTTER_PROJECT;
-    if (!projectPath) {
+    const rawProjectPath = process.env.ASTUR_FLUTTER_PROJECT;
+    if (!rawProjectPath) {
       throw new AsturError(
         'FLUTTER_PROJECT_REQUIRED',
         'Detected a Flutter Android app, which Astur drives through the Dart VM service. Set ASTUR_FLUTTER_PROJECT to the Flutter app source directory so Astur can launch it with the Dart compiler attached. (Flutter does not expose its widget tree to UIAutomator, so the native-agent path cannot see it.)',
         { appPath }
+      );
+    }
+
+    // Resolve to an absolute path (relative values are resolved against the
+    // caller's cwd, not wherever `flutter run` is later spawned) and verify it
+    // exists, so a mistyped or missing source dir fails clearly here rather than
+    // as an opaque `flutter run` error.
+    const projectPath = resolve(rawProjectPath);
+    if (!existsSync(join(projectPath, 'pubspec.yaml'))) {
+      throw new AsturError(
+        'FLUTTER_PROJECT_NOT_FOUND',
+        `ASTUR_FLUTTER_PROJECT does not point at a Flutter app source directory (no pubspec.yaml at ${projectPath}). Set it to the Flutter project root.`,
+        { projectPath, rawProjectPath }
       );
     }
 

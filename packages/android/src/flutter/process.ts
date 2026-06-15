@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { AsturError } from '@astur-mobile/core';
 
@@ -28,10 +29,18 @@ export interface FlutterProcessOptions {
 const VM_URI_PATTERN = /A Dart VM Service[^\n]*available at:\s*(http:\/\/127\.0\.0\.1:\d+\/[A-Za-z0-9_=-]+\/)/;
 
 export function resolveFlutterPath(explicit?: string): string {
+  const home = homedir();
   const candidates = [
     explicit,
     process.env.ASTUR_FLUTTER_PATH,
-    process.env.FLUTTER_ROOT ? join(process.env.FLUTTER_ROOT, 'bin', 'flutter') : undefined
+    process.env.FLUTTER_ROOT ? join(process.env.FLUTTER_ROOT, 'bin', 'flutter') : undefined,
+    // Common install locations, so the tool usually works without ASTUR_FLUTTER_PATH
+    // even when `flutter` isn't on the (often minimal) PATH of an npm-script shell.
+    join(home, 'development', 'flutter', 'bin', 'flutter'),
+    join(home, 'flutter', 'bin', 'flutter'),
+    join(home, 'fvm', 'default', 'bin', 'flutter'),
+    '/opt/homebrew/bin/flutter',
+    '/usr/local/bin/flutter'
   ].filter((value): value is string => Boolean(value));
 
   for (const candidate of candidates) {
@@ -39,7 +48,7 @@ export function resolveFlutterPath(explicit?: string): string {
       return candidate;
     }
   }
-  // Fall back to PATH resolution.
+  // Last resort: rely on PATH resolution (start() reports a clear error if missing).
   return 'flutter';
 }
 
@@ -80,6 +89,37 @@ export class FlutterProcess {
     });
     this.child = child;
 
+    // Convert a spawn failure (e.g. flutter not found) into a clear AsturError
+    // instead of an unhandled 'error' event that crashes the process.
+    const spawnFailure = new Promise<never>((_, reject) => {
+      child.once('error', (err: NodeJS.ErrnoException) => {
+        const hint =
+          err.code === 'ENOENT'
+            ? ` Could not find the Flutter tool at '${this.options.flutterPath}'. Install Flutter and add it to PATH, or set ASTUR_FLUTTER_PATH to the flutter binary.`
+            : '';
+        reject(
+          new AsturError('FLUTTER_LAUNCH_FAILED', `Failed to launch 'flutter run'.${hint}`, {
+            flutterPath: this.options.flutterPath,
+            code: err.code,
+            cause: err.message
+          })
+        );
+      });
+      // If `flutter run` exits before the VM service appears (e.g. a failed
+      // install — insufficient storage, signature mismatch), fail fast with the
+      // real output instead of waiting out the launch timeout. After start()
+      // resolves this rejection is harmless (Promise.race has already settled).
+      child.once('exit', (code, signal) => {
+        reject(
+          new AsturError(
+            'FLUTTER_RUN_EXITED',
+            `'flutter run' exited before the app exposed its Dart VM service (code ${code ?? signal}). This usually means the install or launch failed — check the device has free storage and the APK is a debug build.`,
+            { code, signal, tail: this.stdoutBuffer.slice(-1500) }
+          )
+        );
+      });
+    });
+
     const onChunk = (data: Buffer) => {
       const text = data.toString();
       this.stdoutBuffer += text;
@@ -90,11 +130,14 @@ export class FlutterProcess {
     child.stdout.on('data', onChunk);
     child.stderr.on('data', onChunk);
 
-    const httpUri = await this.waitForOutput(
-      VM_URI_PATTERN,
-      this.options.launchTimeoutMs,
-      'Timed out waiting for the Flutter app to start and expose its Dart VM service.'
-    );
+    const httpUri = await Promise.race([
+      this.waitForOutput(
+        VM_URI_PATTERN,
+        this.options.launchTimeoutMs,
+        'Timed out waiting for the Flutter app to start and expose its Dart VM service.'
+      ),
+      spawnFailure
+    ]);
     // http://127.0.0.1:PORT/TOKEN/  ->  ws://127.0.0.1:PORT/TOKEN/ws
     this.vmWsUrl = `${httpUri.replace(/^http:/, 'ws:')}ws`;
     return this.vmWsUrl;
