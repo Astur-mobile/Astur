@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://astur-mobile.github.io/Astur/">
+    <img src="https://astur-mobile.github.io/Astur/brand/astur-logo.png" alt="Astur" width="360">
+  </a>
+</p>
+
 # Astur
 
 [![npm: astur-mobile](https://img.shields.io/npm/v/astur-mobile/next?logo=npm&label=astur-mobile&color=cb3837)](https://www.npmjs.com/package/astur-mobile)
@@ -203,6 +209,16 @@ packages/
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). To report a
 vulnerability, follow [SECURITY.md](SECURITY.md) (please don't open a public
 issue for security problems).
+
+## Sponsor
+
+Astur is open source and built in the open. If it saves your team time, consider supporting development:
+
+<p>
+  <a href="https://ko-fi.com/asturmobile"><img src="https://img.shields.io/badge/Ko--fi-Support%20Astur-FF5E5B?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
+  &nbsp;
+  <a href="https://github.com/sponsors/Astur-mobile"><img src="https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
+</p>
 
 ## License
 

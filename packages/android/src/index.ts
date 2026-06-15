@@ -93,6 +93,8 @@ interface FlutterRuntime {
   process: FlutterProcess;
   vm?: FlutterVmService;
   started: boolean;
+  /** Foreground component captured at first launch, used to re-foreground after a hot restart. */
+  component?: { packageName: string; activity: string };
 }
 
 export function createAndroidDriver(options: AndroidDriverOptions = {}): AndroidDriver {
@@ -558,9 +560,58 @@ class AndroidSession implements PlatformSession {
       flutter.vm = new FlutterVmService({ url });
       await flutter.vm.connect();
       flutter.started = true;
+      // `flutter run` leaves the app in the foreground; capture its component so
+      // later resets can bring it back to the front (see below).
+      flutter.component = await this.detectForegroundComponent().catch(() => undefined);
       return;
     }
     await flutter.process.hotRestart();
+    // Hot restart re-runs main() in place but does NOT foreground the app. Test
+    // resets tap the home button first, so without this the app stays behind the
+    // launcher: the VM service still reads its (background) widget tree, but taps
+    // and gestures land on the launcher. Reorder the existing task to the front
+    // (no relaunch, which would detach `flutter run`). Do this BEFORE reattaching
+    // so the view is attached and reports a non-zero size — a backgrounded
+    // Flutter view can report 0x0, which would stall reattach's readiness wait.
+    await this.foregroundFlutterApp(flutter.component);
+    // Hot restart spins up a fresh Dart isolate; rebind so tree reads don't run
+    // against the dead one (which returns an empty tree -> app-shell timeouts).
+    await flutter.vm?.reattach();
+  }
+
+  /** Reads the currently focused app component (package/activity) from the platform. */
+  private async detectForegroundComponent(): Promise<{ packageName: string; activity: string } | undefined> {
+    const parse = (text: string): { packageName: string; activity: string } | undefined => {
+      const match =
+        text.match(/Resumed(?:Activity)?[^\n]*\{[^}]*\s([A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)/) ??
+        text.match(/mCurrentFocus=Window\{[^}]*\s([A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)/);
+      if (!match) {
+        return undefined;
+      }
+      const [, packageName, rawActivity] = match;
+      const activity = rawActivity.startsWith('.') ? `${packageName}${rawActivity}` : rawActivity;
+      return { packageName, activity };
+    };
+
+    return (
+      parse(await this.adbText(['shell', 'dumpsys', 'activity', 'activities']).catch(() => '')) ??
+      parse(await this.adbText(['shell', 'dumpsys', 'window']).catch(() => ''))
+    );
+  }
+
+  /** Brings the (already-running) Flutter app's task back to the foreground without relaunching it. */
+  private async foregroundFlutterApp(component?: { packageName: string; activity: string }): Promise<void> {
+    if (!component) {
+      return;
+    }
+    await this.adb([
+      'shell',
+      'am',
+      'start',
+      '--activity-reorder-to-front',
+      '-n',
+      `${component.packageName}/${component.activity}`
+    ]).catch(() => undefined);
   }
 
   async close(): Promise<void> {

@@ -35,13 +35,20 @@ const EXTRACT_EXPR =
   'final sb=StringBuffer();' +
   'final view=WidgetsBinding.instance.platformDispatcher.views.first;' +
   'final dpr=view.devicePixelRatio;final sw=view.physicalSize.width;final sh=view.physicalSize.height;' +
-  'void visit(Element el){' +
+  // `cnt` assigns each emitted node a sequential id; `parent` threads the nearest
+  // emitted ancestor's id down the walk so the flat output can be rebuilt into a
+  // tree. Levels that don't emit (no id/text/label) are transparent — their
+  // children attach to the same ancestor — so geometry that reads a card's
+  // subtree (e.g. counters under a tap-lab card) matches the native nested tree.
+  'int cnt=0;' +
+  'void visit(Element el,int parent){' +
   'final wd=el.widget;' +
   'if(wd is Offstage && wd.offstage)return;' +
   'if(wd is Visibility && !wd.visible)return;' +
   'if(wd is Opacity && wd.opacity==0.0)return;' +
   'final ro=el.renderObject;' +
   'String? sid;String? lbl;String? txt;' +
+  'int self=parent;' +
   'if(wd is Semantics){final p=wd.properties;if(p.identifier!=null)sid=p.identifier;if(p.label!=null)lbl=p.label;}' +
   'if(wd is Text && wd.data!=null)txt=wd.data;' +
   'if((sid!=null||txt!=null||lbl!=null) && ro is RenderBox && ro.attached && ro.hasSize){' +
@@ -50,21 +57,29 @@ const EXTRACT_EXPR =
   'final x=(o.dx*dpr).round();final y=(o.dy*dpr).round();final w=(ro.size.width*dpr).round();final h=(ro.size.height*dpr).round();' +
   'final on=(w>0 && h>0 && x+w>0 && y+h>0 && x<sw && y<sh);' +
   'if(on){' +
+  'self=++cnt;' +
   // An id-bearing node that directly wraps a text field (AsturId/Semantics around
   // a TextField -> EditableText) is reported as "TextField" so the inspector
   // recognises it as fillable. The search stops at nested id-bearing Semantics so
   // a container (e.g. screen-login) that merely *contains* inputs isn't flagged.
-  'String kind=wd.runtimeType.toString();' +
-  'if(sid!=null){bool ed=false;void ck(Element c){if(ed)return;final cw=c.widget;if(cw is Semantics && cw.properties.identifier!=null)return;if(cw is EditableText){ed=true;return;}c.visitChildren(ck);}el.visitChildren(ck);if(ed)kind="TextField";}' +
+  'String kind=wd.runtimeType.toString();String val="";' +
+  // Walk into an id-bearing node to (a) classify it as a text field and (b) read
+  // its value. A Material TextField exposes both the typed text (controller.text)
+  // and, when empty, its placeholder (decoration.hintText) — mirroring Android's
+  // native behaviour where an empty EditText reports its hint as text, so
+  // toHaveValue works the same on both builds. EditableText is the universal
+  // fallback (every field type embeds one) for the typed value.
+  'if(sid!=null){bool ed=false;void ck(Element c){if(ed)return;final cw=c.widget;if(cw is Semantics && cw.properties.identifier!=null)return;if(cw is TextField){final t=cw.controller?.text;final hint=cw.decoration?.hintText;val=(t!=null && t.isNotEmpty)?t:(hint??"");ed=true;return;}if(cw is EditableText){val=cw.controller.text;ed=true;return;}c.visitChildren(ck);}el.visitChildren(ck);if(ed)kind="TextField";}' +
+  'sb.write(self.toString());sb.writeCharCode(1);sb.write(parent.toString());sb.writeCharCode(1);' +
   'sb.write(sid??"");sb.writeCharCode(1);sb.write(txt??"");sb.writeCharCode(1);sb.write(lbl??"");sb.writeCharCode(1);' +
   'sb.write(kind);sb.writeCharCode(1);' +
   'sb.write(x.toString());sb.writeCharCode(1);sb.write(y.toString());sb.writeCharCode(1);' +
-  'sb.write(w.toString());sb.writeCharCode(1);sb.write(h.toString());sb.writeCharCode(1);sb.write("1");sb.writeCharCode(10);' +
+  'sb.write(w.toString());sb.writeCharCode(1);sb.write(h.toString());sb.writeCharCode(1);sb.write("1");sb.writeCharCode(1);sb.write(val);sb.writeCharCode(10);' +
   '}' +
   '}}' +
-  'el.visitChildren(visit);' +
+  'el.visitChildren((c){visit(c,self);});' +
   '}' +
-  'visit(WidgetsBinding.instance.rootElement!);' +
+  'visit(WidgetsBinding.instance.rootElement!,0);' +
   'return sb.toString();' +
   '}()';
 
@@ -84,6 +99,13 @@ const READY_EXPR =
 
 interface RpcResult {
   [key: string]: unknown;
+}
+
+/** A parsed extractor row: the snapshot plus the ids used to rebuild nesting. */
+interface ParsedRow {
+  nodeId: number;
+  parentId: number;
+  node: MobileElementSnapshot;
 }
 
 export interface FlutterVmServiceOptions {
@@ -138,21 +160,81 @@ export class FlutterVmService {
       this.ws = ws;
     });
 
-    const vm = await this.call('getVM');
-    const isolates = vm.isolates as Array<{ id: string }> | undefined;
-    if (!isolates?.length) {
-      throw new AsturError('FLUTTER_VM_NO_ISOLATE', 'The Flutter app exposed no Dart isolate over the VM service.');
-    }
-    this.isolateId = isolates[0].id;
-    const isolate = await this.call('getIsolate', { isolateId: this.isolateId });
-    this.rootLibId = (isolate.rootLib as { id?: string } | undefined)?.id;
-    if (!this.rootLibId) {
-      throw new AsturError('FLUTTER_VM_NO_ROOT_LIB', 'The Flutter isolate did not expose a root library for evaluation.');
-    }
+    await this.resolveIsolate();
 
     // Wait for the first frame so the tree walk doesn't race app startup and so
     // we capture a real screen size (physicalSize is 0x0 until the view lays out).
     await this.waitForReady();
+  }
+
+  /**
+   * Re-binds to the isolate created by a hot restart. `flutter run`'s `R` tears
+   * down the running isolate and starts a *new* one. The old isolate lingers in
+   * `getVM` for a moment — and is still readable but FROZEN at its last frame —
+   * so binding to it makes tree reads return stale UI (taps reach the live app
+   * but the tree never reflects them) or, once it dies, an empty tree. Excluding
+   * the pre-restart id is what makes resets land on the live isolate.
+   */
+  async reattach(): Promise<void> {
+    await this.resolveIsolate(this.isolateId);
+    await this.waitForReady();
+  }
+
+  /**
+   * Binds {@link isolateId}/{@link rootLibId} to a live, evaluable isolate.
+   *
+   * When `previousIsolateId` is given (a hot-restart reattach), an isolate with a
+   * *different* id is strongly preferred — that's the replacement; the old one is
+   * the frozen/dying predecessor. We only fall back to the same id after a short
+   * grace window (covers the rare case where a restart reuses the id) so we don't
+   * grab the predecessor before its replacement has registered. Each candidate is
+   * validated with a trivial eval, since a dying isolate can still be listed yet
+   * reject evaluations.
+   */
+  private async resolveIsolate(previousIsolateId?: string): Promise<void> {
+    const deadline = Date.now() + this.readyTimeoutMs;
+    const reuseGraceUntil = Date.now() + 1_500;
+    let lastReason = 'no Dart isolate was reported';
+
+    const tryBind = async (candidates: Array<{ id: string }>): Promise<boolean> => {
+      for (const candidate of candidates) {
+        const isolate = await this.call('getIsolate', { isolateId: candidate.id }).catch(() => undefined);
+        const rootLibId = (isolate?.rootLib as { id?: string } | undefined)?.id;
+        if (!rootLibId) {
+          lastReason = 'the isolate exposed no root library for evaluation';
+          continue;
+        }
+        this.isolateId = candidate.id;
+        this.rootLibId = rootLibId;
+        try {
+          await this.evaluateString(READY_EXPR);
+          return true;
+        } catch {
+          lastReason = 'the candidate isolate did not accept evaluations yet';
+        }
+      }
+      return false;
+    };
+
+    for (;;) {
+      const vm = await this.call('getVM');
+      const isolates = (vm.isolates as Array<{ id: string }> | undefined) ?? [];
+      const fresh = previousIsolateId ? isolates.filter((iso) => iso.id !== previousIsolateId) : isolates;
+
+      if (await tryBind(fresh)) {
+        return;
+      }
+      // No replacement isolate yet: only reconsider the previous id after the
+      // grace window, in case this restart reused it.
+      if (previousIsolateId && fresh.length === 0 && Date.now() >= reuseGraceUntil && (await tryBind(isolates))) {
+        return;
+      }
+
+      if (Date.now() > deadline) {
+        throw new AsturError('FLUTTER_VM_NO_ISOLATE', `Could not bind to the Flutter Dart isolate (${lastReason}).`);
+      }
+      await this.sleep(this.readyPollMs);
+    }
   }
 
   async getTree(): Promise<MobileElementSnapshot> {
@@ -172,14 +254,37 @@ export class FlutterVmService {
     };
   }
 
-  /** Runs the on-device tree walk and parses it into snapshot children. */
+  /**
+   * Runs the on-device tree walk and rebuilds the flat, parent-annotated output
+   * into a nested snapshot tree. Nesting matters because page logic reads a
+   * container's subtree (e.g. the counters under a tap-lab card) — a flat list
+   * would leave every container childless. Rows are emitted in pre-order, so a
+   * parent always precedes its children and the map is fully populated by the
+   * time we wire up links.
+   */
   private async extractChildren(): Promise<MobileElementSnapshot[]> {
     const raw = await this.evaluateStringStable(EXTRACT_EXPR);
-    return raw
+    const rows = raw
       .split('\n')
       .filter((line) => line.length > 0)
       .map((line) => this.parseRow(line))
-      .filter((node): node is MobileElementSnapshot => node !== undefined);
+      .filter((row): row is ParsedRow => row !== undefined);
+
+    const byId = new Map<number, MobileElementSnapshot>();
+    for (const row of rows) {
+      byId.set(row.nodeId, row.node);
+    }
+    const roots: MobileElementSnapshot[] = [];
+    for (const row of rows) {
+      const parent = byId.get(row.parentId);
+      if (parent) {
+        parent.children.push(row.node);
+      } else {
+        // parentId 0 (the synthetic root) or a pruned ancestor → top level.
+        roots.push(row.node);
+      }
+    }
+    return roots;
   }
 
   async dispose(): Promise<void> {
@@ -192,12 +297,12 @@ export class FlutterVmService {
     this.ws = undefined;
   }
 
-  private parseRow(line: string): MobileElementSnapshot | undefined {
+  private parseRow(line: string): ParsedRow | undefined {
     const cols = line.split(SEP);
-    if (cols.length < 9) {
+    if (cols.length < 11) {
       return undefined;
     }
-    const [id, text, label, type, x, y, w, h, vis] = cols;
+    const [nodeId, parentId, id, text, label, type, x, y, w, h, vis, fieldValue] = cols;
     const bounds: Bounds = {
       x: Number.parseInt(x, 10) || 0,
       y: Number.parseInt(y, 10) || 0,
@@ -205,16 +310,22 @@ export class FlutterVmService {
       height: Number.parseInt(h, 10) || 0
     };
     return {
-      id: id || undefined,
-      text: text || undefined,
-      label: label || undefined,
-      value: text || undefined,
-      type: type || 'FlutterWidget',
-      enabled: true,
-      visible: vis === '1',
-      bounds,
-      children: [],
-      platform: 'android'
+      nodeId: Number.parseInt(nodeId, 10) || 0,
+      parentId: Number.parseInt(parentId, 10) || 0,
+      node: {
+        id: id || undefined,
+        text: text || undefined,
+        label: label || undefined,
+        // Text-field value (typed text, or placeholder when empty); falls back to a
+        // Text widget's data so plain labels still expose a value.
+        value: fieldValue || text || undefined,
+        type: type || 'FlutterWidget',
+        enabled: true,
+        visible: vis === '1',
+        bounds,
+        children: [],
+        platform: 'android'
+      }
     };
   }
 
@@ -287,13 +398,21 @@ export class FlutterVmService {
     }
   }
 
-  /** Identity of the laid-out, labelled nodes — present-and-sized, ignoring exact position so animations still settle. */
-  private layoutFingerprint(children: MobileElementSnapshot[]): string {
-    return children
-      .filter((node) => node.bounds.width > 0 && node.bounds.height > 0)
-      .map((node) => `${node.id ?? ''}#${node.text ?? ''}#${node.label ?? ''}`)
-      .sort()
-      .join('|');
+  /** Identity of the laid-out, labelled nodes — present-and-sized, ignoring exact position so animations still settle. Walks the (now nested) tree. */
+  private layoutFingerprint(roots: MobileElementSnapshot[]): string {
+    const parts: string[] = [];
+    const walk = (node: MobileElementSnapshot): void => {
+      if (node.bounds.width > 0 && node.bounds.height > 0) {
+        parts.push(`${node.id ?? ''}#${node.text ?? ''}#${node.label ?? ''}`);
+      }
+      for (const child of node.children) {
+        walk(child);
+      }
+    };
+    for (const root of roots) {
+      walk(root);
+    }
+    return parts.sort().join('|');
   }
 
   /**

@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://astur-mobile.github.io/Astur/">
+    <img src="https://astur-mobile.github.io/Astur/brand/astur-logo.png" alt="Astur" width="360">
+  </a>
+</p>
+
 # iOS XCUITest Agent
 
 iOS native UI automation must run through XCTest/XCUITest. The iOS agent is
@@ -72,3 +78,13 @@ Current platform limits:
 - real-device execution still needs signing, provisioning, trusted-device handling, and real-device transport validation
 - system alerts are limited to what XCTest exposes through stable queries
 - direct per-app data/cache clearing is not available through `simctl`; use uninstall/reinstall reset for simulator clean state
+
+## Sponsor
+
+Astur is open source and built in the open. If it saves your team time, consider supporting development:
+
+<p>
+  <a href="https://ko-fi.com/asturmobile"><img src="https://img.shields.io/badge/Ko--fi-Support%20Astur-FF5E5B?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
+  &nbsp;
+  <a href="https://github.com/sponsors/Astur-mobile"><img src="https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
+</p>

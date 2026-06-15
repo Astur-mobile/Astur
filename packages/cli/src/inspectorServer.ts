@@ -1074,7 +1074,12 @@ export function startInspectorServer(
     }
 
     function scheduleTree(): void {
-      const interval = clients.size === 0
+      // Back off hard when the tree read keeps failing/timing out — e.g. XCUITest
+      // stalling on a heavy WebView snapshot. Retrying every interval just piles
+      // commands onto an already-stuck agent; poll slowly until it recovers (a
+      // successful read resets consecutiveTreeErrors and snaps back to base).
+      const stalled = consecutiveTreeErrors >= 3;
+      const interval = clients.size === 0 || stalled
         ? maxIdleIntervalMs
         : nextPollInterval(baseTreeIntervalMs, treeIdleStreak, maxIdleIntervalMs);
       treeTimer = setTimeout(async () => {
@@ -2310,6 +2315,13 @@ let activeTab = 'code';
 let currentDevice = ${JSON.stringify(toBootstrapDevice(device))};
 let devices = [currentDevice];
 let busyCount = 0;
+let busyWatchdog = null;
+// Hard ceiling on how long the "Running action…" overlay may stay up. If the
+// device/agent stops responding (e.g. XCUITest stalls while snapshotting a heavy
+// WebView), no status ever comes back and the overlay would otherwise spin
+// forever, bricking the session. The watchdog force-clears it so the user can
+// keep working (switch screens, terminate, etc.).
+const BUSY_WATCHDOG_MS = 15000;
 let socketConnected = false;
 let hasFrame = false;
 let hasTree = false;
@@ -2587,6 +2599,25 @@ function toggleDeviceSwitcher() {
 
 function setBusy(active) {
   busyCount = Math.max(0, busyCount + (active ? 1 : -1));
+  if (busyWatchdog) {
+    clearTimeout(busyWatchdog);
+    busyWatchdog = null;
+  }
+  if (busyCount > 0) {
+    busyWatchdog = setTimeout(onBusyWatchdogExpired, BUSY_WATCHDOG_MS);
+  }
+  updateDeviceReadiness();
+}
+
+// Fires when an action's overlay has been up too long with no response. Clears
+// the overlay and tells the user the session is still live so they can recover
+// (common when a native+web hybrid screen leaves XCUITest mid-snapshot).
+function onBusyWatchdogExpired() {
+  busyWatchdog = null;
+  if (busyCount === 0) return;
+  busyCount = 0;
+  releaseGestureLock();
+  showDeviceStatus('Action timed out — the device is slow to respond (a heavy web view can stall the UI tree). The session is still live; try again or switch screens.', 'error');
   updateDeviceReadiness();
 }
 
@@ -3207,16 +3238,23 @@ function renderDetails(node) {
 
 // ── Mirror click ───────────────────────────────────────────────────────────
 function resolveMirrorSourceSize() {
-  const viewportWidth = Number(viewport.width || 0);
-  const viewportHeight = Number(viewport.height || 0);
-  if (viewportWidth > 1 && viewportHeight > 1) {
-    return { width: viewportWidth, height: viewportHeight };
-  }
-
+  // Size the stage to the screenshot's own pixels first: those are exactly what
+  // gets drawn, and the image is sized with explicit width/height (no
+  // object-fit), so any aspect-ratio mismatch stretches it. On rotation the
+  // landscape frame arrives a tick before the tree's viewport updates — if we
+  // trusted the (still portrait) viewport here, the landscape image would be
+  // squeezed into a portrait stage. Fall back to the viewport, then a square,
+  // until the first frame has loaded.
   const naturalWidth = Number(mirrorImg.naturalWidth || 0);
   const naturalHeight = Number(mirrorImg.naturalHeight || 0);
   if (naturalWidth > 1 && naturalHeight > 1) {
     return { width: naturalWidth, height: naturalHeight };
+  }
+
+  const viewportWidth = Number(viewport.width || 0);
+  const viewportHeight = Number(viewport.height || 0);
+  if (viewportWidth > 1 && viewportHeight > 1) {
+    return { width: viewportWidth, height: viewportHeight };
   }
 
   return { width: 1, height: 1 };

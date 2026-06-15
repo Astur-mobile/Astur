@@ -729,6 +729,120 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
   color: #475569;
 }
 
+/* Platforms & Frameworks band */
+.platform-band {
+  max-width: 1100px;
+  margin: 4rem auto 1rem;
+  padding: 0 1.5rem;
+}
+.platform-band-head {
+  text-align: center;
+  max-width: 720px;
+  margin: 0 auto 2.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.platform-band-head .section-description {
+  margin-bottom: 0;
+}
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.1rem;
+}
+.platform-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.55rem;
+  padding: 1.6rem 1.1rem 1.3rem;
+  border-radius: 1.1rem;
+  background: rgba(8, 13, 24, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 18px 50px rgba(2, 8, 23, 0.45);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.platform-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(20, 184, 166, 0.45);
+  box-shadow: 0 24px 60px rgba(2, 8, 23, 0.6);
+}
+:root[data-theme="light"] .platform-card {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+}
+.platform-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+:root[data-theme="light"] .platform-icon {
+  background: rgba(15, 23, 42, 0.03);
+  border-color: rgba(15, 23, 42, 0.07);
+  color: #0f172a;
+}
+.platform-icon svg {
+  width: 36px;
+  height: 36px;
+}
+.platform-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+:root[data-theme="light"] .platform-name {
+  color: #0f172a;
+}
+.platform-note {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+:root[data-theme="light"] .platform-note {
+  color: #475569;
+}
+.platform-tag {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  font-family: monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.4rem;
+  color: var(--cyber-primary);
+  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid rgba(20, 184, 166, 0.25);
+}
+.platform-tag--fw {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.1);
+  border-color: rgba(167, 139, 250, 0.28);
+}
+@media (max-width: 860px) {
+  .platform-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 460px) {
+  .platform-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Control Deck Shell Wrapper */
 .control-deck-wrapper {
   position: relative;

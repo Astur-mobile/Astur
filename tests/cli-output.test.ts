@@ -70,7 +70,8 @@ describe('CLI platform-aware output', () => {
     expect(setup).toContain('## Parallel Testing');
     expect(setup).toContain('Astur reserves each configured device per Playwright worker');
     expect(setup).toContain('## Flutter Apps');
-    expect(setup).toContain('black-box native mobile app');
+    expect(setup).toContain('Dart VM service');
+    expect(setup).toContain('ASTUR_FLUTTER_PROJECT');
   });
 
   it('can scaffold both platforms as separate Playwright projects', () => {

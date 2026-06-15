@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import ObjectiveC
 import UIKit
 import XCTest
 
@@ -160,6 +161,39 @@ final class AsturAgent {
 
     init(bundleIdentifier: String) {
         self.app = XCUIApplication(bundleIdentifier: bundleIdentifier)
+        AsturAgent.disableQuiescenceWaitingOnce()
+    }
+
+    /// Before every query/snapshot, XCUITest waits for the app to become "idle"
+    /// (quiescent). On a hybrid native+web screen a live WebView — or an animating
+    /// keyboard — never reports idle, so that wait runs for tens of seconds and
+    /// stalls the whole agent: a single tree read never returns and the session
+    /// looks frozen. Neutralise the wait (report "idle" immediately) so reads stay
+    /// responsive on native+web screens. This mirrors what WebDriverAgent does to
+    /// make hybrid apps automatable.
+    ///
+    /// Best-effort and safe: it only patches the private hook when the exact
+    /// class+selector exist (otherwise it is a no-op), runs once, and can be turned
+    /// off with ASTUR_IOS_WAIT_FOR_QUIESCENCE=1 if a future XCUITest needs the wait.
+    private static let didDisableQuiescence: Bool = {
+        if ProcessInfo.processInfo.environment["ASTUR_IOS_WAIT_FOR_QUIESCENCE"] == "1" {
+            return false
+        }
+        guard let processClass = NSClassFromString("XCUIApplicationProcess") else {
+            return false
+        }
+        let selector = NSSelectorFromString("waitForQuiescenceIncludingAnimationsIdle:")
+        guard let method = class_getInstanceMethod(processClass, selector) else {
+            return false
+        }
+        // Original signature: -(BOOL)waitForQuiescenceIncludingAnimationsIdle:(BOOL)
+        let replacement: @convention(block) (AnyObject, Bool) -> Bool = { _, _ in true }
+        method_setImplementation(method, imp_implementationWithBlock(replacement))
+        return true
+    }()
+
+    private static func disableQuiescenceWaitingOnce() {
+        _ = didDisableQuiescence
     }
 
     func launchIfNeeded() {
@@ -399,13 +433,14 @@ final class AsturAgent {
     private func buildSnapshotTree(viewport: CGRect) throws -> AsturElementSnapshot {
         let root = try app.snapshot()
         var budget = maxFullTreeNodes
-        return convertSnapshot(root, viewport: viewport, budget: &budget)
+        return convertSnapshot(root, viewport: viewport, budget: &budget, depth: 0)
     }
 
     private func convertSnapshot(
         _ snapshot: XCUIElementSnapshot,
         viewport: CGRect,
-        budget: inout Int
+        budget: inout Int,
+        depth: Int
     ) -> AsturElementSnapshot {
         let frame = snapshot.frame
         let label = snapshot.label.nonEmpty
@@ -414,13 +449,18 @@ final class AsturAgent {
         let visible = !frame.isEmpty && (viewport.isEmpty || frame.intersects(viewport))
 
         var children: [AsturElementSnapshot] = []
-        children.reserveCapacity(snapshot.children.count)
-        for child in snapshot.children {
-            if budget <= 0 {
-                break
+        // Bound recursion depth so a deeply-nested WebView DOM can't explode the
+        // payload (or the converted tree's depth) on hybrid screens; the node
+        // budget caps the total breadth.
+        if depth < maxFullTreeDepth {
+            children.reserveCapacity(snapshot.children.count)
+            for child in snapshot.children {
+                if budget <= 0 {
+                    break
+                }
+                budget -= 1
+                children.append(convertSnapshot(child, viewport: viewport, budget: &budget, depth: depth + 1))
             }
-            budget -= 1
-            children.append(convertSnapshot(child, viewport: viewport, budget: &budget))
         }
 
         return AsturElementSnapshot(
@@ -1587,7 +1627,8 @@ private let defaultWaitIntervalMs = 100  // 100ms (was 250ms) — faster element
 private let defaultLongPressMs = 500  // 500ms (was 800ms) — sufficient for iOS long-press
 private let defaultSwipeMs = 200     // 200ms (was 300ms) — faster swipe gestures
 private let defaultDragMs = 400      // 400ms (was 700ms) — faster drag gestures
-private let maxFullTreeNodes = 1_200 // cap for full-hierarchy snapshot tree payload
+private let maxFullTreeNodes = 1_200 // cap for full-hierarchy snapshot tree payload (breadth)
+private let maxFullTreeDepth = 40     // cap for full-hierarchy snapshot tree depth (bounds deep WebView DOMs)
 private let maxTreeSnapshotChildren = 48
 private let maxTreeSnapshotOtherScan = 16
 private let maxTreeSnapshotOtherPerQuery = 6

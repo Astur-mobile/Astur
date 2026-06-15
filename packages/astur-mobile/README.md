@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://astur-mobile.github.io/Astur/">
+    <img src="https://astur-mobile.github.io/Astur/brand/astur-logo.png" alt="Astur" width="360">
+  </a>
+</p>
+
 # astur-mobile
 
 The [Astur](https://github.com/Astur-mobile/Astur) command-line tool — device-native mobile automation for Android and iOS with Playwright ergonomics and no Appium server.
@@ -19,6 +25,16 @@ You can also run tests from the **VS Code Playwright extension** play button —
 ## Documentation
 
 Full docs: **https://astur-mobile.github.io/Astur/**
+
+## Sponsor
+
+Astur is open source and built in the open. If it saves your team time, consider supporting development:
+
+<p>
+  <a href="https://ko-fi.com/asturmobile"><img src="https://img.shields.io/badge/Ko--fi-Support%20Astur-FF5E5B?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
+  &nbsp;
+  <a href="https://github.com/sponsors/Astur-mobile"><img src="https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
+</p>
 
 ## License
 

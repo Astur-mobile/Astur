@@ -378,9 +378,22 @@ Astur reserves each configured device per Playwright worker and fails fast if an
 
 ## Flutter Apps
 
-Astur can test Flutter apps as a black-box native mobile app without using Appium or a Flutter-specific third-party driver. On Android it reads the UI through UIAutomator/accessibility, and on iOS native element support goes through the XCUITest agent boundary.
+Astur tests Flutter apps without Appium or a Flutter-specific third-party driver.
 
-For reliable Flutter tests, expose stable semantics labels, text, and accessibility identifiers in the app. Astur does not currently inspect the Flutter widget tree, Dart VM service, \`ValueKey\`, or Flutter driver protocol directly.
+**Android** — point \`app.path\` at a **debug** (or profile) Flutter APK. Astur auto-detects it and reads the live **widget tree** through the Dart VM service. Two extra requirements:
+
+- the \`flutter\` CLI on your \`PATH\` (or set \`ASTUR_FLUTTER_PATH\`)
+- \`ASTUR_FLUTTER_PROJECT\` pointing at the Flutter app's **source** directory (the folder with \`pubspec.yaml\`)
+
+\`\`\`bash
+ASTUR_FLUTTER_PROJECT=/path/to/flutter-app npx astur-mobile test
+\`\`\`
+
+Give widgets your tests target a stable \`Semantics(identifier: 'login-email-input')\` so \`getById()\` can find them (\`getByText\` / \`getByLabel\` match \`Text\` and labels). A release APK has no VM service and cannot be driven this way.
+
+**iOS** — Flutter apps are read through the XCUITest accessibility tree; enable semantics in the app so identifiers/labels are exposed.
+
+Full guide: https://astur-mobile.github.io/Astur/frameworks/
 
 ${browserStack ? `## BrowserStack Note
 

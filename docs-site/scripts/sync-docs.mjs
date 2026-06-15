@@ -65,6 +65,13 @@ const pages = [
     order: 8
   },
   {
+    source: 'docs/frameworks.md',
+    target: 'frameworks.md',
+    title: 'Flutter & React Native',
+    description: 'Automate Flutter and React Native apps with Astur — setup, what works, and the limits to plan around.',
+    order: 9
+  },
+  {
     source: 'docs/platform-limits.md',
     target: 'platform-limits.md',
     title: 'Platform Limits',
