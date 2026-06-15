@@ -53,6 +53,9 @@ import {
 } from '@astur-mobile/core';
 import { run, runText, spawnCommand, spawnDetached } from './command.js';
 import { parseUiAutomatorXml } from './uiautomatorXml.js';
+import { FlutterProcess } from './flutter/process.js';
+import { FlutterVmService } from './flutter/vmService.js';
+import { isFlutterApk } from './flutter/detect.js';
 
 export interface AndroidDriverOptions {
   adbPath?: string;
@@ -84,6 +87,12 @@ interface AndroidNativeAgentRuntime {
   hostPort?: number;
   packageName?: string;
   process?: ChildProcess;
+}
+
+interface FlutterRuntime {
+  process: FlutterProcess;
+  vm?: FlutterVmService;
+  started: boolean;
 }
 
 export function createAndroidDriver(options: AndroidDriverOptions = {}): AndroidDriver {
@@ -214,9 +223,40 @@ export class AndroidDriver implements PlatformDriver {
       });
     }
 
-    const nativeAgent = await this.resolveNativeAgent(resolvedCapabilities, device);
+    const flutter = await this.resolveFlutterRuntime(resolvedCapabilities, device);
+    // Flutter on Android is driven through the Dart VM service, not the native
+    // UIAutomator agent (Flutter does not publish its tree to accessibility), so
+    // skip agent bootstrap when a Flutter app is detected.
+    const nativeAgent = flutter ? undefined : await this.resolveNativeAgent(resolvedCapabilities, device);
 
-    return new AndroidSession(this.adbPath, device, resolvedCapabilities, nativeAgent);
+    return new AndroidSession(this.adbPath, device, resolvedCapabilities, nativeAgent, flutter);
+  }
+
+  private async resolveFlutterRuntime(
+    capabilities: NormalizedCapabilities,
+    device: DeviceInfo
+  ): Promise<FlutterRuntime | undefined> {
+    const appPath = capabilities.app?.path;
+    if (!appPath || !(await isFlutterApk(appPath))) {
+      return undefined;
+    }
+
+    const projectPath = process.env.ASTUR_FLUTTER_PROJECT;
+    if (!projectPath) {
+      throw new AsturError(
+        'FLUTTER_PROJECT_REQUIRED',
+        'Detected a Flutter Android app, which Astur drives through the Dart VM service. Set ASTUR_FLUTTER_PROJECT to the Flutter app source directory so Astur can launch it with the Dart compiler attached. (Flutter does not expose its widget tree to UIAutomator, so the native-agent path cannot see it.)',
+        { appPath }
+      );
+    }
+
+    const process_ = new FlutterProcess({
+      projectPath,
+      apkPath: appPath,
+      deviceId: device.id,
+      flutterPath: process.env.ASTUR_FLUTTER_PATH
+    });
+    return { process: process_, started: false };
   }
 
   private async resolveNativeAgent(
@@ -476,20 +516,42 @@ class AndroidSession implements PlatformSession {
   };
   private readonly forwardedWebViewPorts = new Set<number>();
 
+  private readonly flutter?: FlutterRuntime;
+
   constructor(
     adbPath: string,
     deviceInfo: DeviceInfo,
     capabilities: NormalizedCapabilities,
-    nativeAgentRuntime?: AndroidNativeAgentRuntime
+    nativeAgentRuntime?: AndroidNativeAgentRuntime,
+    flutter?: FlutterRuntime
   ) {
     this.adbPath = adbPath;
     this.deviceInfo = deviceInfo;
     this.capabilities = capabilities;
     this.nativeAgentRuntime = nativeAgentRuntime;
     this.nativeAgent = nativeAgentRuntime?.client;
+    this.flutter = flutter;
+  }
+
+  /** Starts the Flutter app via `flutter run` on first launch, hot-restarts on subsequent ones. */
+  private async launchFlutter(): Promise<void> {
+    const flutter = this.flutter!;
+    if (!flutter.started) {
+      const url = await flutter.process.start();
+      flutter.vm = new FlutterVmService({ url });
+      await flutter.vm.connect();
+      flutter.started = true;
+      return;
+    }
+    await flutter.process.hotRestart();
   }
 
   async close(): Promise<void> {
+    if (this.flutter) {
+      await this.flutter.vm?.dispose().catch(() => undefined);
+      await this.flutter.process.stop().catch(() => undefined);
+    }
+
     if (this.recording) {
       await this.stopRecording().catch(() => undefined);
     }
@@ -513,6 +575,11 @@ class AndroidSession implements PlatformSession {
   }
 
   async installApp(path: string): Promise<void> {
+    // In Flutter mode the app is installed (and signature conflicts resolved) by
+    // `flutter run` when the session launches, so skip the adb install here.
+    if (this.flutter) {
+      return;
+    }
     await this.adb(['install', '-r', path]);
   }
 
@@ -531,6 +598,11 @@ class AndroidSession implements PlatformSession {
   async launchApp(options: LaunchOptions = {}): Promise<void> {
     if (options.url) {
       await this.openWeb(options.url);
+      return;
+    }
+
+    if (this.flutter) {
+      await this.launchFlutter();
       return;
     }
 
@@ -561,6 +633,12 @@ class AndroidSession implements PlatformSession {
   }
 
   async terminateApp(): Promise<void> {
+    // In Flutter mode the `flutter run` process owns the app lifecycle; a hard
+    // force-stop would detach it. Resets re-run main() via hot restart on the
+    // next launchApp() instead, so terminate is a no-op here.
+    if (this.flutter) {
+      return;
+    }
     const packageName = this.resolvePackageName();
     await this.adb(['shell', 'am', 'force-stop', packageName]);
   }
@@ -656,6 +734,10 @@ class AndroidSession implements PlatformSession {
   }
 
   async getTree(): Promise<MobileElementSnapshot> {
+    if (this.flutter?.vm) {
+      return this.flutter.vm.getTree();
+    }
+
     const command = await this.tryNativeCommand('tree.get');
     if (command.ok) {
       return command.result;

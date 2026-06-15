@@ -1,0 +1,159 @@
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { AsturError } from '@astur-mobile/core';
+
+/**
+ * Manages the `flutter run` process that backs a Flutter Android session.
+ *
+ * Launching the app through the Flutter tool (rather than `adb am start`) is what
+ * attaches the Dart expression compiler to the VM service, which {@link
+ * FlutterVmService} needs to evaluate the on-device tree walk. The process is
+ * started once per session, hot-restarted for test resets, and stopped on close.
+ */
+
+export interface FlutterProcessOptions {
+  /** Path to the Flutter app's source project (cwd for `flutter run`; required for expression compilation). */
+  projectPath: string;
+  /** Prebuilt debug APK to install/run via `--use-application-binary`. */
+  apkPath: string;
+  /** Target device/emulator id (adb serial). */
+  deviceId: string;
+  /** Resolved `flutter` binary path. */
+  flutterPath?: string;
+  launchTimeoutMs?: number;
+  restartTimeoutMs?: number;
+}
+
+const VM_URI_PATTERN = /A Dart VM Service[^\n]*available at:\s*(http:\/\/127\.0\.0\.1:\d+\/[A-Za-z0-9_=-]+\/)/;
+
+export function resolveFlutterPath(explicit?: string): string {
+  const candidates = [
+    explicit,
+    process.env.ASTUR_FLUTTER_PATH,
+    process.env.FLUTTER_ROOT ? join(process.env.FLUTTER_ROOT, 'bin', 'flutter') : undefined
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  // Fall back to PATH resolution.
+  return 'flutter';
+}
+
+export class FlutterProcess {
+  private child?: ChildProcessWithoutNullStreams;
+  private vmWsUrl?: string;
+  private stdoutBuffer = '';
+  private readonly listeners = new Set<(chunk: string) => void>();
+  private readonly options: Required<Omit<FlutterProcessOptions, 'flutterPath'>> & { flutterPath: string };
+
+  constructor(options: FlutterProcessOptions) {
+    this.options = {
+      projectPath: options.projectPath,
+      apkPath: options.apkPath,
+      deviceId: options.deviceId,
+      flutterPath: resolveFlutterPath(options.flutterPath),
+      launchTimeoutMs: options.launchTimeoutMs ?? 180_000,
+      restartTimeoutMs: options.restartTimeoutMs ?? 60_000
+    };
+  }
+
+  /** Spawns `flutter run` and resolves with the VM service WebSocket URL once the app is attached. */
+  async start(): Promise<string> {
+    if (this.vmWsUrl) {
+      return this.vmWsUrl;
+    }
+
+    const args = [
+      'run',
+      `--use-application-binary=${this.options.apkPath}`,
+      '-d',
+      this.options.deviceId,
+      '--no-devtools'
+    ];
+    const child = spawn(this.options.flutterPath, args, {
+      cwd: this.options.projectPath,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    this.child = child;
+
+    const onChunk = (data: Buffer) => {
+      const text = data.toString();
+      this.stdoutBuffer += text;
+      for (const listener of this.listeners) {
+        listener(text);
+      }
+    };
+    child.stdout.on('data', onChunk);
+    child.stderr.on('data', onChunk);
+
+    const httpUri = await this.waitForOutput(
+      VM_URI_PATTERN,
+      this.options.launchTimeoutMs,
+      'Timed out waiting for the Flutter app to start and expose its Dart VM service.'
+    );
+    // http://127.0.0.1:PORT/TOKEN/  ->  ws://127.0.0.1:PORT/TOKEN/ws
+    this.vmWsUrl = `${httpUri.replace(/^http:/, 'ws:')}ws`;
+    return this.vmWsUrl;
+  }
+
+  /** Hot-restarts the app (re-runs main()) — the fast, clean way to reset state between tests. */
+  async hotRestart(): Promise<void> {
+    const child = this.child;
+    if (!child) {
+      throw new AsturError('FLUTTER_PROCESS_NOT_STARTED', 'Cannot hot-restart: the Flutter process is not running.');
+    }
+    const done = this.waitForOutput(/Restarted application/i, this.options.restartTimeoutMs, 'Timed out waiting for Flutter hot restart.');
+    child.stdin.write('R\n');
+    await done;
+  }
+
+  async stop(): Promise<void> {
+    const child = this.child;
+    this.child = undefined;
+    this.vmWsUrl = undefined;
+    if (!child) {
+      return;
+    }
+    try {
+      child.stdin.write('q\n');
+    } catch {
+      // ignore
+    }
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        resolve();
+      }, 5_000);
+      child.once('exit', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+
+  private waitForOutput(pattern: RegExp, timeoutMs: number, timeoutMessage: string): Promise<string> {
+    const existing = this.stdoutBuffer.match(pattern);
+    if (existing) {
+      return Promise.resolve(existing[1] ?? existing[0]);
+    }
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.listeners.delete(listener);
+        reject(new AsturError('FLUTTER_PROCESS_TIMEOUT', timeoutMessage, { tail: this.stdoutBuffer.slice(-1200) }));
+      }, timeoutMs);
+      const listener = () => {
+        const match = this.stdoutBuffer.match(pattern);
+        if (match) {
+          clearTimeout(timer);
+          this.listeners.delete(listener);
+          resolve(match[1] ?? match[0]);
+        }
+      };
+      this.listeners.add(listener);
+    });
+  }
+}
