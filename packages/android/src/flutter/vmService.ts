@@ -25,10 +25,11 @@ const SEP = '';
 //
 // It skips subtrees that aren't actually painted so the tree matches what's on
 // screen. This matters most for IndexedStack (the common "keep every tab
-// mounted" pattern): it lays out ALL children at the same on-screen rect but
-// paints only the active one — without skipping, every screen's widgets show up
-// at once, overlapping, and most aren't interactable. Offstage / Visibility /
-// Opacity(0) similarly hide content (e.g. a closed drawer's backdrop).
+// mounted" pattern): it wraps every inactive child in an Offstage/Visibility so
+// only the selected screen is shown. Skipping Offstage / Visibility(false) /
+// Opacity(0) subtrees drops those inactive screens (and e.g. a closed drawer's
+// backdrop) — otherwise every screen's widgets show up at once, overlapping and
+// mostly not interactable. Only nodes actually on screen are emitted.
 const EXTRACT_EXPR =
   '(){' +
   'final sb=StringBuffer();' +
@@ -39,7 +40,6 @@ const EXTRACT_EXPR =
   'if(wd is Offstage && wd.offstage)return;' +
   'if(wd is Visibility && !wd.visible)return;' +
   'if(wd is Opacity && wd.opacity==0.0)return;' +
-  'if(wd is IndexedStack){final idx=wd.index??0;int ci=0;el.visitChildren((c){if(ci==idx)visit(c);ci++;});return;}' +
   'final ro=el.renderObject;' +
   'String? sid;String? lbl;String? txt;' +
   'if(wd is Semantics){final p=wd.properties;if(p.identifier!=null)sid=p.identifier;if(p.label!=null)lbl=p.label;}' +
