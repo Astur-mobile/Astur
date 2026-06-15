@@ -50,8 +50,14 @@ const EXTRACT_EXPR =
   'final x=(o.dx*dpr).round();final y=(o.dy*dpr).round();final w=(ro.size.width*dpr).round();final h=(ro.size.height*dpr).round();' +
   'final on=(w>0 && h>0 && x+w>0 && y+h>0 && x<sw && y<sh);' +
   'if(on){' +
+  // An id-bearing node that directly wraps a text field (AsturId/Semantics around
+  // a TextField -> EditableText) is reported as "TextField" so the inspector
+  // recognises it as fillable. The search stops at nested id-bearing Semantics so
+  // a container (e.g. screen-login) that merely *contains* inputs isn't flagged.
+  'String kind=wd.runtimeType.toString();' +
+  'if(sid!=null){bool ed=false;void ck(Element c){if(ed)return;final cw=c.widget;if(cw is Semantics && cw.properties.identifier!=null)return;if(cw is EditableText){ed=true;return;}c.visitChildren(ck);}el.visitChildren(ck);if(ed)kind="TextField";}' +
   'sb.write(sid??"");sb.writeCharCode(1);sb.write(txt??"");sb.writeCharCode(1);sb.write(lbl??"");sb.writeCharCode(1);' +
-  'sb.write(wd.runtimeType.toString());sb.writeCharCode(1);' +
+  'sb.write(kind);sb.writeCharCode(1);' +
   'sb.write(x.toString());sb.writeCharCode(1);sb.write(y.toString());sb.writeCharCode(1);' +
   'sb.write(w.toString());sb.writeCharCode(1);sb.write(h.toString());sb.writeCharCode(1);sb.write("1");sb.writeCharCode(10);' +
   '}' +
