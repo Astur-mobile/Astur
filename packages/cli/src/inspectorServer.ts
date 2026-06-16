@@ -16,6 +16,9 @@ import type {
   MobileElementSnapshot,
   MobileRole,
   SwipeGesture,
+  WebElementSnapshot,
+  WebLocatorDescriptor,
+  WebTreeSnapshot,
 } from '@astur-mobile/protocol';
 
 // ─── WebSocket protocol ───────────────────────────────────────────────────────
@@ -95,6 +98,8 @@ export interface UiNode {
   visible: boolean;
   enabled: boolean;
   bounds: Bounds;
+  /** Set on DOM nodes spliced in from a WebView; carries the web DOM locator. */
+  web?: WebLocatorDescriptor;
 }
 
 export interface RecordingStep {
@@ -202,6 +207,42 @@ export function startInspectorServer(
     let gestureCommandInFlight = false;
     let lastGestureCommandAt = 0;
     const bundleUploads = new Map<string, string>();
+
+    // ── WebView DOM probe ──────────────────────────────────────────────────────
+    // Pulling a WebView's DOM means opening a remote-debugging transport, which is
+    // far heavier than a native tree read — so probe it on its own adaptive cadence
+    // (fast while a WebView is present, slow while absent) and cache the raw DOM.
+    // Each native tree push re-splices the cached DOM against the *current* native
+    // nodes (cheap, in-memory) so coordinates track the live host node.
+    let cachedWebTree: WebTreeSnapshot | undefined;
+    let webProbeNextAt = 0;
+    let webProbeInFlight = false;
+    const WEB_PROBE_PRESENT_MS = 1_500;
+    const WEB_PROBE_ABSENT_MS = 6_000;
+
+    function maybeProbeWebTree(): void {
+      if (!activeInspector.webSnapshot || webProbeInFlight || Date.now() < webProbeNextAt) {
+        return;
+      }
+      webProbeInFlight = true;
+      void (async () => {
+        try {
+          const web = await activeInspector.webSnapshot?.();
+          const had = Boolean(cachedWebTree);
+          cachedWebTree = web ?? undefined;
+          webProbeNextAt = Date.now() + (cachedWebTree ? WEB_PROBE_PRESENT_MS : WEB_PROBE_ABSENT_MS);
+          // Surface a newly found (or newly lost) WebView DOM promptly.
+          if (Boolean(cachedWebTree) !== had) {
+            void pushTree({ reportFirstError: false }).catch(() => undefined);
+          }
+        } catch {
+          cachedWebTree = undefined;
+          webProbeNextAt = Date.now() + WEB_PROBE_ABSENT_MS;
+        } finally {
+          webProbeInFlight = false;
+        }
+      })();
+    }
 
     // ── HTTP server ────────────────────────────────────────────────────────
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -592,8 +633,20 @@ export function startInspectorServer(
         }
 
         case 'direct_action': {
+          // The fill/tap buttons act on the currently selected node. When that is a
+          // spliced WebView DOM node, drive it by its DOM locator (in-page JS)
+          // instead of the native driver.
+          const selectedWebNode = selectedUid
+            ? currentNodes.find((node) => node.uid === selectedUid && node.web)
+            : undefined;
           try {
-            if (event.action === 'fill') {
+            if (selectedWebNode?.web && activeInspector.webAct) {
+              await activeInspector.webAct(
+                selectedWebNode.web,
+                event.action === 'fill' ? 'fill' : 'tap',
+                event.value
+              );
+            } else if (event.action === 'fill') {
               await activeInspector.executeAction({
                 kind: 'fill',
                 selector: event.selector,
@@ -609,7 +662,7 @@ export function startInspectorServer(
             }
 
             await syncInspectorState();
-            broadcast({ type: 'status', message: `Action OK: ${event.action === 'fill' ? 'Filled' : 'Tapped'}` });
+            broadcast({ type: 'status', message: `Action OK: ${event.action === 'fill' ? 'Filled' : 'Tapped'}${selectedWebNode ? ' (web)' : ''}` });
           } catch (error) {
             ws.send(JSON.stringify({
               type: 'status',
@@ -1010,6 +1063,16 @@ export function startInspectorServer(
       try {
         for await (const update of activeInspector.subscribeTree({ maxUpdates: 1 })) {
           const nodes = flattenSnapshot(update.root);
+          // Splice any WebView DOM (cached from the adaptive probe) under its native
+          // host so its elements appear in the tree with real DOM locators.
+          maybeProbeWebTree();
+          if (cachedWebTree) {
+            try {
+              nodes.push(...buildWebNodes(cachedWebTree, nodes));
+            } catch {
+              // Best-effort: never let WebView DOM block the native tree.
+            }
+          }
           const viewport = estimateViewport(nodes);
           currentNodes = nodes;
           currentViewport = viewport;
@@ -1209,6 +1272,107 @@ function flattenNode(node: MobileElementSnapshot, depth: number, uid: string, pa
   };
 }
 
+function webLocatorCode(descriptor: WebLocatorDescriptor): string {
+  switch (descriptor.strategy) {
+    case 'testid': return `device.getByTestId(${JSON.stringify(descriptor.value)})`;
+    case 'id': return `device.getById(${JSON.stringify(descriptor.value)})`;
+    case 'role': return `device.getByRole(${JSON.stringify(descriptor.value)}${descriptor.name ? `, { name: ${JSON.stringify(descriptor.name)} }` : ''})`;
+    case 'text': return `device.getByText(${JSON.stringify(descriptor.value)})`;
+    default: return `device.locator(${JSON.stringify(descriptor.value)})`;
+  }
+}
+
+function webLocatorSuggestion(descriptor: WebLocatorDescriptor): LocatorSuggestion {
+  const code = webLocatorCode(descriptor);
+  // Web actions are routed by the DOM locator (node.web), not this selector, so it
+  // only needs to be a valid placeholder for display/typing.
+  const selector: ElementSelector =
+    descriptor.strategy === 'role' ? { strategy: 'role', value: descriptor.value, name: descriptor.name }
+    : descriptor.strategy === 'text' ? { strategy: 'text', value: descriptor.value }
+    : { strategy: 'id', value: descriptor.value };
+  return { code, selector, score: 0.96, uniqueness: 1, stability: 0.9, readable: code.length <= 88, crossPlatform: true };
+}
+
+function webNodeTitle(node: WebElementSnapshot): string {
+  const tag = node.tag.toLowerCase();
+  const handle = node.testId ? `[testid=${node.testId}]` : node.id ? `#${node.id}` : '';
+  const name = (node.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  return `<${tag}>${handle ? ` ${handle}` : ''}${name ? ` ${name}` : ''}`.trim();
+}
+
+/**
+ * Locate the native node that hosts the WebView surface: the one whose device-px
+ * bounds best match the web viewport scaled by the device pixel ratio. Used to
+ * map DOM (CSS px) coordinates onto the device screen for overlays/hit-testing.
+ */
+function findWebHostNode(web: WebTreeSnapshot, nativeNodes: UiNode[]): UiNode | undefined {
+  const dpr = web.devicePixelRatio || 1;
+  const targetW = web.viewport.width * dpr;
+  const targetH = web.viewport.height * dpr;
+  if (targetW < 8 || targetH < 8) {
+    return undefined;
+  }
+  let best: UiNode | undefined;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const node of nativeNodes) {
+    if (!node.visible || node.bounds.width < 8 || node.bounds.height < 8) {
+      continue;
+    }
+    const dw = Math.abs(node.bounds.width - targetW);
+    const dh = Math.abs(node.bounds.height - targetH);
+    if (dw <= targetW * 0.25 && dh <= targetH * 0.25 && dw + dh < bestScore) {
+      best = node;
+      bestScore = dw + dh;
+    }
+  }
+  return best;
+}
+
+/**
+ * Flatten a WebView DOM snapshot into UiNodes spliced under its native host. DOM
+ * actions run by locator (engine JS), so even when the host can't be matched the
+ * nodes stay browsable/fillable — only the screenshot overlay needs the bounds.
+ */
+function buildWebNodes(web: WebTreeSnapshot, nativeNodes: UiNode[]): UiNode[] {
+  if (!web.root) {
+    return [];
+  }
+  const host = findWebHostNode(web, nativeNodes);
+  const dpr = web.devicePixelRatio || 1;
+  const mapBounds = (b: WebElementSnapshot['bounds']): Bounds =>
+    host
+      ? {
+        x: Math.round(host.bounds.x + b.x * dpr),
+        y: Math.round(host.bounds.y + b.y * dpr),
+        width: Math.round(b.width * dpr),
+        height: Math.round(b.height * dpr)
+      }
+      : { x: 0, y: 0, width: 0, height: 0 };
+
+  const out: UiNode[] = [];
+  const visit = (node: WebElementSnapshot, depth: number, uid: string, parentUid?: string): void => {
+    out.push({
+      uid,
+      parentUid,
+      depth,
+      title: webNodeTitle(node),
+      type: `web:${node.tag.toLowerCase()}`,
+      id: node.id,
+      label: node.name,
+      text: node.role ? undefined : node.name,
+      value: node.value,
+      visible: node.visible,
+      enabled: node.enabled,
+      bounds: mapBounds(node.bounds),
+      web: node.locator
+    });
+    node.children.forEach((child, index) => visit(child, depth + 1, `${uid}/${index}`, uid));
+  };
+
+  visit(web.root, host ? host.depth + 1 : 1, 'web', host?.uid);
+  return out;
+}
+
 function estimateViewport(nodes: UiNode[]): Viewport {
   const root = nodes[0];
   if (root?.bounds && root.bounds.width > 0 && root.bounds.height > 0) {
@@ -1300,6 +1464,10 @@ const INSPECTOR_ROLES: readonly MobileRole[] = [
 ];
 
 function suggestLocatorsForNode(node: UiNode, nodes: UiNode[]): LocatorSuggestion[] {
+  if (node.web) {
+    // DOM nodes carry the in-page best locator; the native ranking doesn't apply.
+    return [webLocatorSuggestion(node.web)];
+  }
   const target = resolveInspectableNode(node, nodes);
   const candidates = buildLocalLocatorCandidates(target);
   const suggestions: LocatorSuggestion[] = [];
@@ -1416,6 +1584,11 @@ function resolveInspectableNode(
   nodes: UiNode[],
   options: { preferActionable?: boolean } = {}
 ): UiNode {
+  // WebView DOM nodes are already their own best target — never re-resolve them to
+  // a native ancestor, or selection/action routing would lose the DOM locator.
+  if (node.web) {
+    return node;
+  }
   const targetIsUsable = hasUsableLocator(node) && !isDecorativeNode(node);
   const targetIsActionable = targetIsUsable && isActionableNode(node);
 

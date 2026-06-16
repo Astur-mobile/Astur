@@ -1,3 +1,8 @@
+import type {
+  WebElementSnapshot,
+  WebLocatorDescriptor,
+  WebTreeSnapshot
+} from '@astur-mobile/protocol';
 import { AsturError } from './errors.js';
 
 /**
@@ -13,41 +18,6 @@ import { AsturError } from './errors.js';
 export interface WebEvaluator {
   evaluate(expression: string): Promise<unknown>;
   dispose(): Promise<void>;
-}
-
-export type WebLocatorStrategy = 'testid' | 'id' | 'role' | 'text' | 'css';
-
-export interface WebLocatorDescriptor {
-  strategy: WebLocatorStrategy;
-  value: string;
-  /** Accessible name, only for the `role` strategy. */
-  name?: string;
-}
-
-export interface WebElementSnapshot {
-  tag: string;
-  id?: string;
-  testId?: string;
-  role?: string;
-  name?: string;
-  value?: string;
-  /** CSS pixels relative to the WebView viewport. */
-  bounds: { x: number; y: number; width: number; height: number };
-  visible: boolean;
-  enabled: boolean;
-  /** The best (most stable) locator Astur would generate for this element. */
-  locator: WebLocatorDescriptor;
-  children: WebElementSnapshot[];
-}
-
-export interface WebTreeSnapshot {
-  /** window.devicePixelRatio — maps CSS px (bounds) to device px for overlays. */
-  devicePixelRatio: number;
-  /** Visual viewport size in CSS px. */
-  viewport: { width: number; height: number };
-  url: string;
-  title: string;
-  root: WebElementSnapshot;
 }
 
 interface BridgeResult {

@@ -7,11 +7,15 @@ import type {
   MobileElementSnapshot,
   MobileRole,
   UiTreeSubscribeOptions,
-  UiTreeUpdate
+  UiTreeUpdate,
+  WebElementAction,
+  WebLocatorDescriptor,
+  WebTreeSnapshot
 } from '@astur-mobile/protocol';
 import { AsturError } from './errors.js';
 import { by, findElements, matches, MobileLocator } from './locator.js';
 import type { PlatformSession } from './session.js';
+import { WebContext } from './webBridge.js';
 import { delay } from './wait.js';
 
 const knownRoles: MobileRole[] = [
@@ -52,6 +56,7 @@ class RuntimeInspectorSession implements InspectorSession {
   private readonly session: PlatformSession;
   private readonly defaultPollIntervalMs: number;
   private revision = 0;
+  private webContextInstance?: WebContext;
 
   constructor(session: PlatformSession, options: RuntimeInspectorSessionOptions) {
     this.session = session;
@@ -177,6 +182,70 @@ class RuntimeInspectorSession implements InspectorSession {
 
       default:
         return assertNever(action);
+    }
+  }
+
+  async webSnapshot(): Promise<WebTreeSnapshot | undefined> {
+    const context = await this.ensureWebContext();
+    if (!context) {
+      return undefined;
+    }
+
+    try {
+      return await context.snapshot();
+    } catch {
+      // The page navigated or the debugging socket dropped — rebuild once.
+      await this.disposeWebContext();
+      const fresh = await this.ensureWebContext();
+      if (!fresh) {
+        return undefined;
+      }
+      try {
+        return await fresh.snapshot();
+      } catch {
+        await this.disposeWebContext();
+        return undefined;
+      }
+    }
+  }
+
+  async webAct(descriptor: WebLocatorDescriptor, action: WebElementAction, value?: string): Promise<void> {
+    const context = await this.ensureWebContext();
+    if (!context) {
+      throw new AsturError('WEBVIEW_NOT_SUPPORTED', 'No inspectable WebView DOM context is available.');
+    }
+
+    const locator = context.locatorFor(descriptor);
+    switch (action) {
+      case 'fill': return locator.fill(value ?? '');
+      case 'clear': return locator.clear();
+      case 'select': return locator.selectOption(value ?? '');
+      case 'tap': return locator.tap();
+      default: return;
+    }
+  }
+
+  private async ensureWebContext(): Promise<WebContext | undefined> {
+    if (!this.session.createWebEvaluator) {
+      return undefined;
+    }
+    if (this.webContextInstance) {
+      return this.webContextInstance;
+    }
+    try {
+      this.webContextInstance = new WebContext(await this.session.createWebEvaluator());
+      return this.webContextInstance;
+    } catch {
+      this.webContextInstance = undefined;
+      return undefined;
+    }
+  }
+
+  private async disposeWebContext(): Promise<void> {
+    const context = this.webContextInstance;
+    this.webContextInstance = undefined;
+    if (context) {
+      await context.close().catch(() => undefined);
     }
   }
 }
