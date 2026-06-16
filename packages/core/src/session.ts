@@ -45,6 +45,7 @@ import { AsturError } from './errors.js';
 import { createInspectorSession, type RuntimeInspectorSessionOptions } from './inspector.js';
 import { preparePointerTargetForKeyboard } from './keyboard.js';
 import { by, findElements, MobileLocator } from './locator.js';
+import { WebContext, type WebEvaluator } from './webBridge.js';
 import { delay } from './wait.js';
 
 export interface PlatformDriver {
@@ -108,6 +109,13 @@ export interface PlatformSession {
   dismissKeyboard?(): Promise<void>;
   listContexts?(): Promise<MobileContextInfo[]>;
   connectWebView?(selector?: WebViewSelector): Promise<WebViewEndpoint>;
+  /**
+   * Opens a transport into a WebView's DOM that ships a JS expression and returns
+   * its JSON value. Powers {@link AsturDevice.webContext}. Platforms back it with
+   * whatever remote-debugging protocol the engine exposes (CDP on Android,
+   * WebKit RWI on iOS) — callers never see the protocol.
+   */
+  createWebEvaluator?(selector?: WebViewSelector): Promise<WebEvaluator>;
 }
 
 export class AsturDevice {
@@ -527,6 +535,23 @@ export class AsturDevice {
     }
 
     return this.session.connectWebView(selector);
+  }
+
+  /**
+   * Opens a {@link WebContext} into a native WebView's DOM — inspect the tree,
+   * generate stable locators, and fill/tap elements — driven entirely by injected
+   * JS over the engine's remote-debugging transport. Works the same across
+   * frameworks (Flutter, React Native) on each platform that exposes the transport.
+   */
+  async webContext(selector?: WebViewSelector): Promise<WebContext> {
+    if (!this.session.createWebEvaluator) {
+      throw new AsturError(
+        'WEBVIEW_NOT_SUPPORTED',
+        `${this.deviceInfo.platform} cannot open WebView DOM contexts yet.`
+      );
+    }
+
+    return new WebContext(await this.session.createWebEvaluator(selector));
   }
 
   async close(): Promise<void> {

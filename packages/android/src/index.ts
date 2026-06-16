@@ -49,8 +49,10 @@ import {
   waitFor,
   type NativeAgentClient,
   type PlatformDriver,
-  type PlatformSession
+  type PlatformSession,
+  type WebEvaluator
 } from '@astur-mobile/core';
+import { CdpWebEvaluator } from './cdpWebEvaluator.js';
 import { run, runText, spawnCommand, spawnDetached } from './command.js';
 import { parseUiAutomatorXml } from './uiautomatorXml.js';
 import { FlutterProcess } from './flutter/process.js';
@@ -1240,6 +1242,39 @@ class AndroidSession implements PlatformSession {
       selector,
       contexts: lastContexts
     });
+  }
+
+  /**
+   * Opens a raw CDP `Runtime.evaluate` transport into a WebView's DOM. This backs
+   * {@link AsturDevice.webContext}: the engine-agnostic JS bridge runs over it, so
+   * the Chromium WebView is driven without Playwright's element model — the same
+   * code path the iOS WebKit transport will mirror.
+   */
+  async createWebEvaluator(selector: WebViewSelector = {}): Promise<WebEvaluator> {
+    const endpoint = await this.connectWebView(selector);
+    const targets = await readDevtoolsTargets(endpoint.cdpUrl).catch((): DevtoolsTarget[] => []);
+    const target = targets.find((candidate) =>
+      candidate.webSocketDebuggerUrl && (!endpoint.context.pageId || candidate.id === endpoint.context.pageId))
+      ?? targets.find((candidate) => candidate.webSocketDebuggerUrl);
+
+    if (!target?.webSocketDebuggerUrl) {
+      throw new AsturError('WEBVIEW_NO_CDP_TARGET', 'The Android WebView exposed no inspectable DevTools page.', {
+        selector,
+        cdpUrl: endpoint.cdpUrl
+      });
+    }
+
+    // The forwarded socket lives on 127.0.0.1:<port> (endpoint.cdpUrl); rewrite the
+    // page's ws URL onto that host:port so it resolves regardless of the host the
+    // WebView advertised.
+    const base = new URL(endpoint.cdpUrl);
+    const wsUrl = new URL(target.webSocketDebuggerUrl);
+    wsUrl.host = base.host;
+    wsUrl.protocol = 'ws:';
+
+    const evaluator = new CdpWebEvaluator(wsUrl.toString());
+    await evaluator.connect();
+    return evaluator;
   }
 
   async getKeyboardState(): Promise<KeyboardState> {
