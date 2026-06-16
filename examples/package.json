@@ -18,6 +18,7 @@
     "test:ios:real": "ASTUR_IOS_DEVICE_KIND=real npm --prefix .. exec astur-mobile -- test --config ./ios-native/playwright.config.ts",
     "test:ios:simulator": "ASTUR_IOS_DEVICE_KIND=simulator npm --prefix .. exec astur-mobile -- test --config ./ios-native/playwright.config.ts",
     "test:ios:flutter": "npm --prefix .. exec astur-mobile -- test --config ./ios-native/playwright.flutter.config.ts",
+    "test:ios:flutter:spec": "npm --prefix .. exec astur-mobile -- test --config ./ios-native/playwright.flutter.config.ts",
     "test:parallel": "npm --prefix .. exec astur-mobile -- test --config ./android-native/playwright.parallel.config.ts",
     "test:parallel:spec": "npm --prefix .. exec astur-mobile -- test --config ./android-native/playwright.parallel.config.ts",
     "codegen:android:emulator": "npm --prefix .. exec astur-mobile -- codegen --android --device emulator-5554 --app ../assets/astur.demo.android.apk --app-id com.astur.demo",

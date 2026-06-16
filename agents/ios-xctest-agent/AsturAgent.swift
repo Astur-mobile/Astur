@@ -817,12 +817,37 @@ final class AsturAgent {
             }
 
             if usesDirectQueryOnly(selector) {
+                // Flutter merges descendant text into a container's accessibility label
+                // on iOS, so an exact `text` match against staticTexts misses text that
+                // only exists as a substring of a merged label (e.g. a card labelled
+                // "ACCOUNT FLOWS\nCredentials\n…"). When the exact match found nothing,
+                // fall back to a substring match over any element's label/value before
+                // giving up. This is additive: apps that expose the text as a discrete
+                // element (React Native, native UIKit) matched above and keep their
+                // exact-match behaviour unchanged.
+                if selector.strategy.lowercased() == "text" {
+                    if let merged = boundedElements(app.descendants(matching: .any), limit: maxFindAllResults)
+                        .first(where: { containsText($0, selector.value) }) {
+                        return merged
+                    }
+                }
                 return nil
             }
         }
 
         return boundedElements(app.descendants(matching: .any), limit: maxFindAllResults)
             .first { matches($0, selector: selector) }
+    }
+
+    /// True when any of the element's text-bearing attributes contains `value`
+    /// (case- and diacritic-insensitive). Used as a Flutter-iOS fallback where text
+    /// is merged into a container's accessibility label rather than a discrete node.
+    private func containsText(_ element: XCUIElement, _ value: String) -> Bool {
+        guard element.exists else {
+            return false
+        }
+        return [element.label, stringValue(element.value), element.placeholderValue]
+            .contains { match($0, value, exact: false) }
     }
 
     private func findAlertElement(_ selector: AsturSelector) -> XCUIElement? {
