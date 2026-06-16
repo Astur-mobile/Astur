@@ -200,15 +200,42 @@ export class MobileLocator {
 
       const match = await this.currentMatch();
       if (match?.visible) {
-        return match;
+        return this.settleAfterScroll(match);
       }
     }
 
-    return this.waitForVisible({
+    return this.settleAfterScroll(await this.waitForVisible({
       ...options,
       message: options.message
         ?? `Timed out scrolling ${direction} to reveal ${formatSelector(this.selector)} after ${maxScrolls} scroll attempts`
-    });
+    }));
+  }
+
+  /**
+   * Waits for the element's bounds to stop moving after a scroll. A scroll gesture
+   * leaves residual momentum: the element can be "visible" while the list is still
+   * decelerating, so its reported bounds keep drifting for a few frames. Returning
+   * (or letting a caller tap) on those mid-flight bounds lands the tap in the wrong
+   * place. Poll until two consecutive reads agree, capped so a continuously
+   * animating neighbour can't hang the call.
+   */
+  private async settleAfterScroll(initial: MobileElementSnapshot): Promise<MobileElementSnapshot> {
+    let previous = initial;
+    const deadline = Date.now() + 1_500;
+
+    while (Date.now() < deadline) {
+      await delay(120);
+      const next = await this.currentMatch();
+      if (!next?.visible) {
+        continue;
+      }
+      if (boundsRoughlyEqual(previous.bounds, next.bounds)) {
+        return next;
+      }
+      previous = next;
+    }
+
+    return previous;
   }
 
   private async currentMatch(): Promise<MobileElementSnapshot | undefined> {
@@ -412,6 +439,14 @@ export function pointInBounds(bounds: Bounds, xRatio: number, yRatio: number): C
     x: Math.round(bounds.x + bounds.width * xRatio),
     y: Math.round(bounds.y + bounds.height * yRatio)
   };
+}
+
+/** Bounds equality with a small tolerance, used to detect when a scroll has stopped drifting. */
+function boundsRoughlyEqual(a: Bounds, b: Bounds, tolerance = 2): boolean {
+  return Math.abs(a.x - b.x) <= tolerance
+    && Math.abs(a.y - b.y) <= tolerance
+    && Math.abs(a.width - b.width) <= tolerance
+    && Math.abs(a.height - b.height) <= tolerance;
 }
 
 function scrollGesture(region: Bounds, direction: ScrollDirection, durationMs: number): SwipeGesture {

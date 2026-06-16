@@ -341,7 +341,16 @@ export class LoginPage {
   async enterCredentials(email: string, password: string): Promise<void> {
     await this.email.fill(email);
     await this.password.fill(password);
-    await this.device.keyboard.dismiss().catch(() => this.device.back());
+    // Dismiss the soft keyboard so the submit button below the form is reachable.
+    // The Flutter driver hides the IME by clearing the Dart primary focus (no Back
+    // press), so this can't pop the route or background the app.
+    await this.device.keyboard.dismiss().catch(() => undefined);
+    // Typing into the password field focuses it and scrolls the form up to keep
+    // it above the soft keyboard, which can push the email field off the top of
+    // the viewport. The Flutter driver only exposes on-screen nodes, so bring the
+    // email field back into view before any value assertion. This is a no-op on
+    // native Android/iOS, where the field is already in the tree.
+    await this.email.scrollIntoView({ direction: 'up', maxScrolls: 4 }).catch(() => undefined);
   }
 
   async signIn(email: string, password: string): Promise<void> {

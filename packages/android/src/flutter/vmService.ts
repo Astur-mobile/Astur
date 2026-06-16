@@ -97,6 +97,13 @@ const READY_EXPR =
   'final idle=(r!=null && WidgetsBinding.instance.schedulerPhase.name=="idle")?1:0;' +
   'return idle.toString()+":"+w.toString()+":"+h.toString();}()';
 
+// Clears the Flutter primary focus, which unfocuses the active text field and
+// asks the engine to hide the soft keyboard. This is the deterministic way to
+// dismiss the IME on the no-agent driver: unlike a Back press, it can never pop
+// a route or background the app, so the widget tree stays intact afterwards.
+const UNFOCUS_EXPR =
+  '(){FocusManager.instance.primaryFocus?.unfocus();return "1";}()';
+
 interface RpcResult {
   [key: string]: unknown;
 }
@@ -285,6 +292,11 @@ export class FlutterVmService {
       }
     }
     return roots;
+  }
+
+  /** Dismisses the soft keyboard by clearing the Flutter primary focus. */
+  async unfocus(): Promise<void> {
+    await this.evaluateStringStable(UNFOCUS_EXPR);
   }
 
   async dispose(): Promise<void> {
