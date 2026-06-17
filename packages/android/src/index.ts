@@ -47,12 +47,12 @@ import {
   delay,
   preparePointerTargetForKeyboard,
   waitFor,
+  CdpWebEvaluator,
   type NativeAgentClient,
   type PlatformDriver,
   type PlatformSession,
   type WebEvaluator
 } from '@astur-mobile/core';
-import { CdpWebEvaluator } from './cdpWebEvaluator.js';
 import { run, runText, spawnCommand, spawnDetached } from './command.js';
 import { parseUiAutomatorXml } from './uiautomatorXml.js';
 import { FlutterProcess } from './flutter/process.js';

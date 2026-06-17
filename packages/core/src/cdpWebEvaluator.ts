@@ -1,4 +1,5 @@
-import { AsturError, type WebEvaluator } from '@astur-mobile/core';
+import { AsturError } from './errors.js';
+import type { WebEvaluator } from './webBridge.js';
 
 interface CdpResponse {
   id?: number;
@@ -27,9 +28,17 @@ export class CdpWebEvaluator implements WebEvaluator {
   private nextId = 1;
   private readonly pending = new Map<number, Pending>();
 
+  /**
+   * @param url            page-level CDP/RWI WebSocket URL.
+   * @param timeoutMs      per-request timeout.
+   * @param enableDomains  domains to `<Domain>.enable` right after connecting.
+   *                       Chromium WebView needs none; WebKit (via iwdp) needs
+   *                       'Runtime' before it will answer Runtime.evaluate.
+   */
   constructor(
     private readonly url: string,
-    private readonly timeoutMs = 10_000
+    private readonly timeoutMs = 10_000,
+    private readonly enableDomains: readonly string[] = []
   ) {}
 
   async connect(): Promise<void> {
@@ -43,6 +52,10 @@ export class CdpWebEvaluator implements WebEvaluator {
       ws.addEventListener('close', () => this.failAll('WebView CDP connection closed.'));
       this.ws = ws;
     });
+
+    for (const domain of this.enableDomains) {
+      await this.send(`${domain}.enable`, {}).catch(() => undefined);
+    }
   }
 
   async evaluate(expression: string): Promise<unknown> {

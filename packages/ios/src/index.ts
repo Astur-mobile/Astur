@@ -44,9 +44,12 @@ import {
   delay,
   type NativeAgentClient,
   type PlatformDriver,
-  type PlatformSession
+  type PlatformSession,
+  type WebEvaluator,
+  type WebViewSelector
 } from '@astur-mobile/core';
 import { run, runText, spawnCommand } from './command.js';
+import { createIwdpEvaluator } from './iwdpWebEvaluator.js';
 
 export interface IosDriverOptions {
   xcrunPath?: string;
@@ -1342,6 +1345,21 @@ class IosSession implements PlatformSession {
     }
 
     await this.simctl(['openurl', this.deviceInfo.id, url]);
+  }
+
+  /**
+   * Opens a WKWebView DOM transport via ios-webkit-debug-proxy (WebKit RWI →
+   * CDP-like). Backs {@link AsturDevice.webContext} on iOS so the same engine-
+   * agnostic bridge that drives Android WebViews drives WKWebViews too. Requires
+   * the app's WKWebView to set `isInspectable = true` (iOS 16.4+).
+   */
+  async createWebEvaluator(selector: WebViewSelector = {}): Promise<WebEvaluator> {
+    return createIwdpEvaluator({
+      udid: this.deviceInfo.id,
+      bundleId: selector.packageName ?? this.capabilities.app?.bundleId ?? this.capabilities.app?.packageName,
+      selector,
+      timeoutMs: selector.timeout
+    });
   }
 
   private canUseNativeAppLifecycle(bundleId: string, method: 'app.launch' | 'app.terminate'): boolean {

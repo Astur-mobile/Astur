@@ -1,5 +1,6 @@
 export * from '@astur-mobile/protocol';
 export * from './agent.js';
+export * from './cdpWebEvaluator.js';
 export * from './config.js';
 export * from './errors.js';
 export * from './inspector.js';
