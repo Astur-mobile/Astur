@@ -749,51 +749,48 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
 .platform-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1.1rem;
+  gap: 2rem 1.25rem;
 }
+/* Borderless tiles: the icon chip is the focal element, no surrounding card. */
 .platform-card {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 0.55rem;
-  padding: 1.6rem 1.1rem 1.3rem;
-  border-radius: 1.1rem;
-  background: rgba(8, 13, 24, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: 0 18px 50px rgba(2, 8, 23, 0.45);
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  box-shadow: none;
+  transition: transform 0.25s ease;
 }
 .platform-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(20, 184, 166, 0.45);
-  box-shadow: 0 24px 60px rgba(2, 8, 23, 0.6);
+  transform: translateY(-5px);
 }
-:root[data-theme="light"] .platform-card {
-  background: #ffffff;
-  border-color: rgba(15, 23, 42, 0.08);
-  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+.platform-card:hover .platform-icon {
+  border-color: rgba(20, 184, 166, 0.45);
+  box-shadow: 0 16px 38px rgba(20, 184, 166, 0.2);
 }
 .platform-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  width: 72px;
+  height: 72px;
+  border-radius: 1.3rem;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: #ffffff;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 :root[data-theme="light"] .platform-icon {
   background: rgba(15, 23, 42, 0.03);
-  border-color: rgba(15, 23, 42, 0.07);
+  border-color: rgba(15, 23, 42, 0.08);
   color: #0f172a;
 }
 .platform-icon svg {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
 }
 .platform-name {
   font-size: 1.05rem;
@@ -808,29 +805,30 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
   font-size: 0.8rem;
   line-height: 1.45;
   color: #94a3b8;
+  max-width: 20ch;
 }
 :root[data-theme="light"] .platform-note {
   color: #475569;
 }
+/* Small centered pill below the label (no longer a corner badge on a box). */
 .platform-tag {
-  position: absolute;
-  top: 0.85rem;
-  right: 0.85rem;
+  order: 3;
+  margin-top: 0.1rem;
   font-family: monospace;
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding: 0.15rem 0.45rem;
-  border-radius: 0.4rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
   color: var(--cyber-primary);
   background: rgba(20, 184, 166, 0.1);
-  border: 1px solid rgba(20, 184, 166, 0.25);
+  border: 1px solid rgba(20, 184, 166, 0.22);
 }
 .platform-tag--fw {
   color: #a78bfa;
   background: rgba(167, 139, 250, 0.1);
-  border-color: rgba(167, 139, 250, 0.28);
+  border-color: rgba(167, 139, 250, 0.26);
 }
 @media (max-width: 860px) {
   .platform-grid {

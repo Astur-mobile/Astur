@@ -130,6 +130,12 @@ This is an Apple XCTest requirement. It is not an Appium or WebDriver dependency
 If the tree is visible but the header briefly says `UI tree refresh delayed`, Astur is keeping the last good tree while the next XCUITest snapshot is still running. The mirror remains usable; the warning should clear after the next successful tree refresh.
 :::
 
+## WebView DOM
+
+When the device has an inspectable in-app WebView, the inspector **splices its DOM into the UI tree** under the native WebView host node. Each web element shows the same stable locator Astur generates for tests (`getByTestId` / `getById` / `getByRole` / `getByText`), and the **Fill** / **Tap** controls drive web elements by their DOM locator — no coordinate guessing.
+
+This reuses `device.webContext()`, so it works for **Flutter and React Native** WebViews on Android (Chromium WebView/CDP) today, and on real iOS devices via `ios-webkit-debug-proxy`. The DOM is probed on a background cadence and never blocks the native tree. See [WebViews (DOM)](./frameworks/#webviews-dom) for setup and the platform support matrix.
+
 ## Platform Limits
 
 Real iOS device execution is supported for USB-connected, trusted devices with Developer Mode enabled. It still needs Apple signing: set `ASTUR_IOS_DEVELOPMENT_TEAM`, use an app signed for the device, and set `ASTUR_IOS_AGENT_HOST` only if the phone cannot reach Astur's auto-detected Mac IP.

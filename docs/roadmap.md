@@ -12,6 +12,8 @@ Simple Playwright-style test API
 
 ## Implemented
 
+- **Flutter on iOS** through the XCUITest accessibility tree (shared demo suite: 6/9 specs on the simulator), with an agent-side substring fallback over Flutter's merged accessibility labels.
+- **WebView DOM control** via `device.webContext()` — an engine-agnostic, inject-JS-over-`evaluate` bridge driving Flutter and React Native WebViews. Android (Chromium/CDP) and real iOS devices (WKWebView via `ios-webkit-debug-proxy`) are supported; the inspector splices the WebView DOM into the UI tree with real locators + fill/tap.
 - Android and iOS agents return structured timing and failure diagnostics through the shared protocol.
 - Actionability failures include selector, candidate snapshot, and visible/enabled/hittable/stability state where the platform exposes it.
 - Host-side `AsturError` keeps native-agent timing and diagnostics instead of dropping them at the transport boundary.
@@ -19,6 +21,8 @@ Simple Playwright-style test API
 
 ## Still Missing
 
+- **iOS Simulator WebView DOM** needs a direct `webinspectord_sim` client — `ios-webkit-debug-proxy` bridges physical devices only, so `device.webContext()` on a simulator currently reports `IOS_WEBVIEW_PROXY_NO_DEVICES`.
+- **Flutter iOS drag-and-drop**: only the first synthetic XCUITest drag in a sequence registers with Flutter's pan recognizer; a multi-step drag injector (real motion events) is needed for parity with the Android Dart VM driver.
 - Default hosted CI cannot run real mobile hardware. Signed iOS and physical Android smoke jobs require self-hosted runners with the matching device labels.
 - Deeper strict-locator reporting, including ranked candidate lists for every selector strategy, is still being expanded.
 - Richer device-pool scheduling for cloud/device-farm targets is still planned.
