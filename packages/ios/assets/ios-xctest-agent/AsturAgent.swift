@@ -164,33 +164,121 @@ final class AsturAgent {
         AsturAgent.disableQuiescenceWaitingOnce()
     }
 
-    /// Before every query/snapshot, XCUITest waits for the app to become "idle"
-    /// (quiescent). On a hybrid native+web screen a live WebView — or an animating
-    /// keyboard — never reports idle, so that wait runs for tens of seconds and
-    /// stalls the whole agent: a single tree read never returns and the session
-    /// looks frozen. Neutralise the wait (report "idle" immediately) so reads stay
-    /// responsive on native+web screens. This mirrors what WebDriverAgent does to
-    /// make hybrid apps automatable.
+    /// Before every query/snapshot AND before/after every synthesized event, XCUITest
+    /// waits for the app to become "idle" (quiescent). A Flutter screen mid-transition
+    /// never reports idle (it renders continuously), so that wait blocks until XCUITest's
+    /// internal idle timeout (~60s) — a single read or tap never returns and, because the
+    /// agent processes one command at a time, the whole session looks frozen. Native
+    /// UIKit / React Native go idle quickly after a transition, which is why they stay
+    /// smooth; Flutter does not.
     ///
-    /// Best-effort and safe: it only patches the private hook when the exact
-    /// class+selector exist (otherwise it is a no-op), runs once, and can be turned
-    /// off with ASTUR_IOS_WAIT_FOR_QUIESCENCE=1 if a future XCUITest needs the wait.
+    /// The original disable patched the legacy selector
+    /// `waitForQuiescenceIncludingAnimationsIdle:` which current Xcode renamed (now
+    /// `…:isPreEvent:`, plus a `…:usingActivity:isPreEvent:` variant the read path uses,
+    /// and the accessibility client's `waitForQuiescenceOnAllForegroundApplicationsAsPreEvent:`),
+    /// so it silently no-opped and quiescence stayed fully active.
+    ///
+    /// Strategy: for READS (`isPreEvent == false`) return immediately — reads never need
+    /// the app to be idle. For EVENTS (`isPreEvent == true`) we cannot skip the wait
+    /// (taps/typing/keyboard-dismiss break without a settle) but we must not block on a
+    /// never-idle Flutter screen, so we cap it with a short bounded settle instead of the
+    /// original unbounded wait. Best-effort: only patches selectors that exist, runs
+    /// once, and can be disabled with ASTUR_IOS_WAIT_FOR_QUIESCENCE=1.
     private static let didDisableQuiescence: Bool = {
         if ProcessInfo.processInfo.environment["ASTUR_IOS_WAIT_FOR_QUIESCENCE"] == "1" {
             return false
         }
-        guard let processClass = NSClassFromString("XCUIApplicationProcess") else {
-            return false
+
+        // Cap for the bounded pre-event wait (see `boundedWaitForQuiescent`). Long enough
+        // that a real settle (keyboard animation, screen transition) completes; short
+        // enough that a never-idle Flutter screen can't stall the agent. Overridable.
+        let eventSettleCapMicros: UInt32 = {
+            if let raw = ProcessInfo.processInfo.environment["ASTUR_IOS_EVENT_SETTLE_CAP_MS"],
+               let ms = UInt32(raw) {
+                return ms * 1_000
+            }
+            return 1_000_000
+        }()
+
+        var patched = 0
+
+        if let processClass = NSClassFromString("XCUIApplicationProcess") {
+            // -(BOOL)waitForQuiescenceIncludingAnimationsIdle:(BOOL)isPreEvent:(BOOL)
+            let twoArg = NSSelectorFromString("waitForQuiescenceIncludingAnimationsIdle:isPreEvent:")
+            if let method = class_getInstanceMethod(processClass, twoArg) {
+                let replacement: @convention(block) (AnyObject, Bool, Bool) -> Bool = { object, _, isPreEvent in
+                    if isPreEvent {
+                        AsturAgent.boundedWaitForQuiescent(object, capMicros: eventSettleCapMicros)
+                    }
+                    return true
+                }
+                method_setImplementation(method, imp_implementationWithBlock(replacement))
+                patched += 1
+            }
+
+            // -(BOOL)waitForQuiescenceIncludingAnimationsIdle:(BOOL)usingActivity:(id)isPreEvent:(BOOL)
+            let threeArg = NSSelectorFromString("waitForQuiescenceIncludingAnimationsIdle:usingActivity:isPreEvent:")
+            if let method = class_getInstanceMethod(processClass, threeArg) {
+                let replacement: @convention(block) (AnyObject, Bool, AnyObject?, Bool) -> Bool = { object, _, _, isPreEvent in
+                    if isPreEvent {
+                        AsturAgent.boundedWaitForQuiescent(object, capMicros: eventSettleCapMicros)
+                    }
+                    return true
+                }
+                method_setImplementation(method, imp_implementationWithBlock(replacement))
+                patched += 1
+            }
+
+            // Legacy single-arg fallback (older Xcode): no isPreEvent flag — treat as a
+            // read and skip (older Xcode + UIKit settle was fast anyway).
+            if patched == 0 {
+                let legacy = NSSelectorFromString("waitForQuiescenceIncludingAnimationsIdle:")
+                if let method = class_getInstanceMethod(processClass, legacy) {
+                    let replacement: @convention(block) (AnyObject, Bool) -> Bool = { _, _ in true }
+                    method_setImplementation(method, imp_implementationWithBlock(replacement))
+                    patched += 1
+                }
+            }
         }
-        let selector = NSSelectorFromString("waitForQuiescenceIncludingAnimationsIdle:")
-        guard let method = class_getInstanceMethod(processClass, selector) else {
-            return false
+
+        // Element reads resolve through the accessibility client, which waits for *all*
+        // foreground apps to quiesce before returning a snapshot — the dominant read-side
+        // stall. Skip for reads. The AX client exposes no idle state of its own, so its
+        // rare pre-event case gets a brief fixed settle.
+        if let axClass = NSClassFromString("XCAXClient_iOS") {
+            let selector = NSSelectorFromString("waitForQuiescenceOnAllForegroundApplicationsAsPreEvent:")
+            if let method = class_getInstanceMethod(axClass, selector) {
+                let replacement: @convention(block) (AnyObject, Bool) -> Bool = { _, isPreEvent in
+                    if isPreEvent {
+                        usleep(300_000)
+                    }
+                    return true
+                }
+                method_setImplementation(method, imp_implementationWithBlock(replacement))
+                patched += 1
+            }
         }
-        // Original signature: -(BOOL)waitForQuiescenceIncludingAnimationsIdle:(BOOL)
-        let replacement: @convention(block) (AnyObject, Bool) -> Bool = { _, _ in true }
-        method_setImplementation(method, imp_implementationWithBlock(replacement))
-        return true
+
+        return patched > 0
     }()
+
+    /// Bounded replacement for XCUITest's unbounded pre-event quiescence wait: returns
+    /// the instant the app process reports `isQuiescent` (a settled screen clears in a
+    /// few ms) or when `capMicros` elapses, so a never-idle Flutter transition cannot
+    /// stall the agent. KVC-based, so it degrades to a plain capped wait if the property
+    /// is unavailable.
+    private static func boundedWaitForQuiescent(_ object: AnyObject, capMicros: UInt32) {
+        let stepMicros: UInt32 = 25_000
+        var elapsed: UInt32 = 0
+        let probe = object as? NSObject
+        while elapsed < capMicros {
+            if let quiescent = probe?.value(forKey: "isQuiescent") as? Bool, quiescent {
+                return
+            }
+            usleep(stepMicros)
+            elapsed &+= stepMicros
+        }
+    }
 
     private static func disableQuiescenceWaitingOnce() {
         _ = didDisableQuiescence
@@ -311,7 +399,7 @@ final class AsturAgent {
             case "element.tap":
                 let selector = try parseSelectorFromParams(command.params)
                 let options = try parseElementActionOptions(command.params.mapValue("options"))
-                try resolveElement(selector, options: options).tap()
+                boundedTap(try resolveElement(selector, options: options))
                 return ok(command.id)
 
             case "element.doubleTap":
@@ -523,21 +611,43 @@ final class AsturAgent {
         clear: Bool
     ) throws {
         let element = try resolveElement(selector, options: options)
-        element.tap()
+        boundedTap(element)
+
+        let secure = element.elementType == .secureTextField
+
+        // Skip the slow clear+type entirely when the field already holds the
+        // target value. Secure fields report a masked value, so always rewrite.
+        if clear && !secure, let current = stringValue(element.value), current == value {
+            return
+        }
 
         if clear {
             clearText(element)
         }
 
-        if options.textInputMode == "paste" || (options.textInputMode != "type" && value.count > 4) {
-            // Default to paste for strings >4 chars — dramatically faster than
-            // character-by-character typeText on real devices.
+        // Field-aware input strategy:
+        //  - explicit "type"/"paste" wins,
+        //  - secure or short values type (paste into secure fields is unreliable,
+        //    and the long-press paste menu costs more than typing a few chars),
+        //  - longer plain values paste (far faster than per-character typeText).
+        let usePaste: Bool
+        switch options.textInputMode {
+        case "paste": usePaste = true
+        case "type": usePaste = false
+        default: usePaste = !secure && value.count > 4
+        }
+
+        if usePaste {
             pasteText(value, into: element)
         } else {
             element.typeText(value)
         }
 
-        if options.keyboard == "auto" {
+        // keyboard:auto policy — leave the keyboard up after typing. The next
+        // action dismisses it only if its target is obstructed (see resolveElement),
+        // so multi-field forms don't pay a dismiss per field. Explicit dismissal is
+        // still available via the keyboard.dismiss command.
+        if options.keyboard == "dismiss" {
             dismissKeyboard()
         }
     }
@@ -625,32 +735,93 @@ final class AsturAgent {
             return
         }
 
+        // Tap a dismissal key only when it is actually hittable. `XCUIElement.tap()` has
+        // an implicit "wait until hittable" that can otherwise spin for the entire command
+        // timeout when the keyboard is slow to settle under host load — the dominant cause
+        // of `keyboard.dismiss` hangs. Probe the first dismissal key that exists with a
+        // bounded hittability wait; if it never becomes hittable, fall back to a tap above
+        // the keyboard (a coordinate tap needs no hittable element, so it cannot hang).
         for title in ["Done", "Return", "Go", "Search", "Next"] {
             let button = keyboard.buttons[title]
             if button.exists {
-                button.tap()
-                return
+                if waitForHittable(button, timeoutMs: 2_000) {
+                    button.tap()
+                    return
+                }
+                break
             }
         }
 
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
     }
 
+    /// Polls `isHittable` up to `timeoutMs`, returning as soon as the element is hittable.
+    /// Bounds XCUITest's otherwise open-ended implicit hittability wait inside `tap()`.
+    private func waitForHittable(_ element: XCUIElement, timeoutMs: Int) -> Bool {
+        let deadline = Date().addingTimeInterval(Double(max(0, timeoutMs)) / 1_000)
+        repeat {
+            if element.isHittable {
+                return true
+            }
+            usleep(50_000)
+        } while Date() < deadline
+        return element.isHittable
+    }
+
     private func resolveElement(_ selector: AsturSelector, options: AsturElementActionOptions) throws -> XCUIElement {
-        guard let element = waitForElementObject(selector, options: options.wait) else {
-            throw AsturAgentFailure(
-                code: "ELEMENT_NOT_FOUND",
-                message: "Could not resolve element before action.",
-                details: locatorFailureDetails(
-                    selector,
-                    state: options.wait.state,
-                    timeoutMs: options.wait.timeoutMs
-                )
-            )
+        guard var element = waitForElementObject(selector, options: options.wait) else {
+            throw elementNotFound(selector, options: options)
+        }
+
+        // keyboard:auto policy — a prior fill may have left the soft keyboard up,
+        // covering this target. Detect that by frame overlap (isHittable lies for
+        // partially-covered controls, after which tap() stalls), dismiss it, and
+        // re-resolve before the actionability checks so we measure the settled frame.
+        if keyboardObscures(element) {
+            dismissKeyboard()
+            guard let refreshed = waitForElementObject(selector, options: options.wait) else {
+                throw elementNotFound(selector, options: options)
+            }
+            element = refreshed
         }
 
         try ensureActionable(element, selector: selector, requirements: options.actionability)
         return element
+    }
+
+    private func elementNotFound(_ selector: AsturSelector, options: AsturElementActionOptions) -> AsturAgentFailure {
+        AsturAgentFailure(
+            code: "ELEMENT_NOT_FOUND",
+            message: "Could not resolve element before action.",
+            details: locatorFailureDetails(
+                selector,
+                state: options.wait.state,
+                timeoutMs: options.wait.timeoutMs
+            )
+        )
+    }
+
+    /// True when the soft keyboard's frame overlaps the element's frame. Frame
+    /// overlap is the reliable obstruction signal; `isHittable` returns true for
+    /// controls only partially covered by the keyboard, and then `tap()` stalls.
+    private func keyboardObscures(_ element: XCUIElement) -> Bool {
+        let keyboard = app.keyboards.firstMatch
+        guard keyboard.exists else { return false }
+        let keyboardFrame = keyboard.frame
+        guard !keyboardFrame.isEmpty else { return false }
+        return element.frame.intersects(keyboardFrame)
+    }
+
+    /// Taps an element without letting XCUITest's implicit hittability wait own the
+    /// whole command timeout: wait briefly for hittability, otherwise fall back to a
+    /// coordinate tap at the element centre (which performs no hittability wait and
+    /// so cannot spin for ~30s).
+    private func boundedTap(_ element: XCUIElement) {
+        if waitForHittable(element, timeoutMs: 2_500) {
+            element.tap()
+        } else {
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
     }
 
     private func ensureActionable(
@@ -806,7 +977,9 @@ final class AsturAgent {
     }
 
     private func findElementObject(_ selector: AsturSelector) -> XCUIElement? {
-        if let query = directQuery(selector) {
+        let query = directQuery(selector)
+
+        if let query {
             let element = query.firstMatch
             if element.exists && matchesName(element, expected: selector.name, exact: selector.exact) {
                 return element
@@ -815,39 +988,37 @@ final class AsturAgent {
             if let alertElement = findAlertElement(selector) {
                 return alertElement
             }
-
-            if usesDirectQueryOnly(selector) {
-                // Flutter merges descendant text into a container's accessibility label
-                // on iOS, so an exact `text` match against staticTexts misses text that
-                // only exists as a substring of a merged label (e.g. a card labelled
-                // "ACCOUNT FLOWS\nCredentials\n…"). When the exact match found nothing,
-                // fall back to a substring match over any element's label/value before
-                // giving up. This is additive: apps that expose the text as a discrete
-                // element (React Native, native UIKit) matched above and keep their
-                // exact-match behaviour unchanged.
-                if selector.strategy.lowercased() == "text" {
-                    if let merged = boundedElements(app.descendants(matching: .any), limit: maxFindAllResults)
-                        .first(where: { containsText($0, selector.value) }) {
-                        return merged
-                    }
-                }
-                return nil
-            }
         }
 
-        return boundedElements(app.descendants(matching: .any), limit: maxFindAllResults)
-            .first { matches($0, selector: selector) }
-    }
-
-    /// True when any of the element's text-bearing attributes contains `value`
-    /// (case- and diacritic-insensitive). Used as a Flutter-iOS fallback where text
-    /// is merged into a container's accessibility label rather than a discrete node.
-    private func containsText(_ element: XCUIElement, _ value: String) -> Bool {
-        guard element.exists else {
-            return false
+        // Text fallback (exact or non-exact). Flutter merges descendant text into a
+        // container's accessibility label on iOS, so the directQuery against
+        // `staticTexts` misses text that only exists as a substring of a merged label
+        // (e.g. a card labelled "ACCOUNT FLOWS\nCredentials\n…"). Resolve it with a
+        // SINGLE predicate `firstMatch` over any element type — one hierarchy snapshot.
+        //
+        // Never enumerate `app.descendants(matching: .any)` element-by-element:
+        // `boundedElements` resolves each `element(boundBy:)` as its own snapshot, so a
+        // miss walks up to `maxFindAllResults` snapshots. Even with quiescence disabled
+        // for reads, that is ~hundreds of snapshots per poll (tens of seconds) and, on a
+        // single-threaded agent, stalls every command queued behind it. A predicate
+        // `firstMatch` is one snapshot regardless of tree size.
+        if selector.strategy.lowercased() == "text" {
+            let predicate = NSPredicate(
+                format: "label CONTAINS[cd] %@ OR value CONTAINS[cd] %@ OR placeholderValue CONTAINS[cd] %@",
+                selector.value, selector.value, selector.value
+            )
+            let merged = app.descendants(matching: .any).matching(predicate).firstMatch
+            return merged.exists ? merged : nil
         }
-        return [element.label, stringValue(element.value), element.placeholderValue]
-            .contains { match($0, value, exact: false) }
+
+        // Non-text fallback: scan only the already-scoped `directQuery` results (a typed
+        // or predicate-filtered query materialises just its own matches — a small set),
+        // never the whole `.any` tree. Nothing to scan when there is no resolvable query
+        // (xpath/coordinates) or the strategy is direct-query-only.
+        guard let query, !usesDirectQueryOnly(selector) else {
+            return nil
+        }
+        return boundedElements(query, limit: maxFindAllResults).first { matches($0, selector: selector) }
     }
 
     private func findAlertElement(_ selector: AsturSelector) -> XCUIElement? {

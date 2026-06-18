@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@astur-mobile/test';
 
 // Flutter validation config for the iOS simulator: runs the same shared demo-app
-// suite as the React Native iOS config (examples/android-native/*.test.ts),
+// suite as the React Native iOS config (examples/specs/*.test.ts),
 // pointed at the Flutter build of the demo app instead. iOS reads the Flutter app
 // through the XCUITest accessibility tree, so no `flutter run` / Dart VM service
 // is needed — only the built simulator app.
@@ -21,8 +21,11 @@ import { defineConfig } from '@astur-mobile/test';
 //    with Flutter's pan recognizer (verified: piece 1 places, pieces 2-4 receive
 //    the drag but do not move), so the four-piece solve cannot complete. The same
 //    suite passes on the Flutter Android driver, which injects real motion events.
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const appPath = process.env.ASTUR_IOS_APP_PATH ?? resolve(repoRoot, 'assets/Runner.app');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+// Resolve ASTUR_IOS_APP_PATH against the repo root (consistent with the RN iOS
+// config), so scripts pass a repo-relative path like `assets/Runner.app`. An
+// absolute override is honored as-is by resolve().
+const appPath = resolve(repoRoot, process.env.ASTUR_IOS_APP_PATH ?? 'assets/Runner.app');
 const bundleId = process.env.ASTUR_IOS_BUNDLE_ID ?? 'com.astur.demo';
 const deviceId = process.env.ASTUR_IOS_DEVICE_ID;
 const deviceName = process.env.ASTUR_IOS_DEVICE_NAME ?? 'iPhone 16';
@@ -31,7 +34,7 @@ const device = deviceId
   : { kind: 'simulator' as const, name: deviceName };
 
 export default defineConfig({
-  testDir: resolve(repoRoot, 'examples/android-native'),
+  testDir: resolve(repoRoot, 'examples/specs'),
   testMatch: [
     'login.test.ts',
     'forms.test.ts',

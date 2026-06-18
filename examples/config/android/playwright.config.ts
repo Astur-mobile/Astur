@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@astur-mobile/test';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const androidAgentMode = readAndroidAgentMode();
 
 function readAndroidAgentMode(): 'auto' | 'required' | 'off' | undefined {
@@ -14,7 +14,7 @@ function readAndroidAgentMode(): 'auto' | 'required' | 'off' | undefined {
 }
 
 export default defineConfig({
-  testDir: '.',
+  testDir: resolve(repoRoot, 'examples/specs'),
   timeout: 240_000,
   fullyParallel: false,
   workers: 1,

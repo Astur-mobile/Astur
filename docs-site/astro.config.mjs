@@ -88,6 +88,7 @@ export default defineConfig({
             { label: 'CLI', slug: 'cli' },
             { label: 'Architecture', slug: 'architecture' },
             { label: 'Platform Limits', slug: 'platform-limits' },
+            { label: 'Release Notes', slug: 'release-notes' },
             { label: 'Roadmap', slug: 'roadmap' }
           ]
         }

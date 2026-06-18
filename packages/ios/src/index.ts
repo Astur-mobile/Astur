@@ -1356,6 +1356,7 @@ class IosSession implements PlatformSession {
   async createWebEvaluator(selector: WebViewSelector = {}): Promise<WebEvaluator> {
     return createIwdpEvaluator({
       udid: this.deviceInfo.id,
+      deviceKind: this.deviceInfo.kind,
       bundleId: selector.packageName ?? this.capabilities.app?.bundleId ?? this.capabilities.app?.packageName,
       selector,
       timeoutMs: selector.timeout

@@ -293,7 +293,7 @@ Device state helpers map to Android keyguard and power commands:
 
 Android system keys accept friendly names such as `BACK`, `HOME`, `ENTER`, `MENU`, `APP_SWITCH`, `RECENTS`, `VOLUME_UP`, and `VOLUME_DOWN`. Raw Android key codes such as `KEYCODE_BACK` or numeric values still work.
 
-The Android example suite is split by functionality under `examples/android-native`: `login.test.ts`, `forms.test.ts`, `forms-slider.test.ts`, `media-upload.test.ts`, `tap-laboratory.test.ts`, `swipe.test.ts`, `drag-and-drop.test.ts`, and `webview.test.ts`. They share the `fixtures.ts` app fixture and the single page-object file at `pages/astur-demo-app.page.ts`.
+The Android example suite is split by functionality under `examples/specs`: `login.test.ts`, `forms.test.ts`, `forms-slider.test.ts`, `media-upload.test.ts`, `tap-laboratory.test.ts`, `swipe.test.ts`, `drag-and-drop.test.ts`, and `webview.test.ts`. They share the `fixtures.ts` app fixture and the single page-object file at `pages/astur-demo-app.page.ts`.
 
 ## Locator Mapping
 

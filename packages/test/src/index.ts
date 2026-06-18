@@ -257,7 +257,11 @@ async function connectAndroidWebView(
  * hidden/unfocused and throttles `requestAnimationFrame` — sometimes stalling it
  * entirely. Playwright's actionability checks ("stable") sample layout across
  * animation frames, so a throttled rAF makes otherwise-valid clicks intermittently
- * time out. Mark the page active and focused so rAF runs at full rate.
+ * time out. Mark the page active and focused so rAF runs at full rate. This reduces
+ * the throttle but does not fully eliminate it for an offscreen surface, so
+ * Playwright actions on `web.page` may still need `{ force: true }`. The
+ * engine-agnostic `device.webContext()` avoids the problem entirely by acting
+ * in-page rather than through rAF-gated actionability.
  */
 async function wakeAndroidWebViewRenderer(page: Page): Promise<void> {
   await page.bringToFront().catch(() => undefined);

@@ -581,7 +581,16 @@ class AndroidSession implements PlatformSession {
     // transition) left the app behind, then rebind: hot restart spins up a fresh
     // Dart isolate, so reads must target it, not the dead one (empty tree).
     await this.foregroundFlutterApp(flutter.component);
-    await flutter.vm?.reattach();
+    let ready = (await flutter.vm?.reattach()) ?? false;
+    // A hot restart can bring the engine back surfaceless (the view never reports
+    // a non-zero size), in which case the new isolate is bound but every tree read
+    // is unlaid-out (0x0 bounds → nothing visible) and the app-shell wait times
+    // out. Re-foreground to recreate the surface and re-check readiness on the
+    // live isolate. Bounded, so a genuinely stuck app still fails fast.
+    for (let attempt = 0; !ready && flutter.vm && attempt < 3; attempt += 1) {
+      await this.foregroundFlutterApp(flutter.component);
+      ready = await flutter.vm.ensureReady();
+    }
   }
 
   /** Reads the currently focused app component (package/activity) from the platform. */

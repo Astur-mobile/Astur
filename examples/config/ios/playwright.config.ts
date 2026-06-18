@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@astur-mobile/test';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const iosDeviceId = process.env.ASTUR_IOS_DEVICE_ID;
 const iosDeviceKind = process.env.ASTUR_IOS_DEVICE_KIND === 'real' ? 'real' : 'simulator';
 const iosDeviceName = process.env.ASTUR_IOS_DEVICE_NAME ?? 'iPhone 16';
@@ -32,7 +32,7 @@ const iosDevice = iosDeviceKind === 'real'
     };
 
 export default defineConfig({
-  testDir: resolve(repoRoot, 'examples/android-native'),
+  testDir: resolve(repoRoot, 'examples/specs'),
   testMatch: [
     'login.test.ts',
     'forms.test.ts',

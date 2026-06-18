@@ -202,7 +202,7 @@ function defaultIosAutomation() {
     engine: 'agent',
     transport: 'auto',
     legacyFallback: 'never',
-    commandTimeoutMs: 15_000,
+    commandTimeoutMs: 30_000,
     startupTimeoutMs: 60_000,
     strictLocators: true,
     snapshot: {
@@ -222,7 +222,7 @@ function defaultIosAgent() {
     install: true,
     endpoint: undefined,
     launchTimeout: 60_000,
-    commandTimeout: 15_000,
+    commandTimeout: 30_000,
     legacyFallback: 'never',
     transport: 'auto'
   };

@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { get as httpGet } from 'node:http';
 import { AsturError, CdpWebEvaluator, delay, type WebEvaluator, type WebViewSelector } from '@astur-mobile/core';
+import { findSimulatorWebInspectorSocket } from './simulatorWebInspector.js';
 
 /**
  * iOS WebView (WKWebView) transport behind {@link AsturDevice.webContext}.
@@ -9,10 +10,17 @@ import { AsturError, CdpWebEvaluator, delay, type WebEvaluator, type WebViewSele
  * `ios-webkit-debug-proxy` (iwdp) bridges RWI to a CDP-like HTTP listing + a
  * per-page WebSocket, so the same {@link CdpWebEvaluator} + injected JS bridge
  * that drive Chromium WebViews on Android drive WKWebViews here too — WebKit just
- * needs `Runtime.enable` first.
+ * needs `Runtime.enable` first, and modern WebKit also wraps page traffic in the
+ * `Target` domain (handled by {@link CdpWebEvaluator}'s `webkitTargetFraming`).
+ *
+ * Works on both real devices (usbmux) and the Simulator: real devices are bridged
+ * over usbmux, while the Simulator's WKWebView is reached via iwdp's `-s` mode
+ * pointed at the per-simulator `com.apple.webinspectord_sim.socket` (discovered in
+ * {@link findSimulatorWebInspectorSocket}).
  *
  * Requirements (surfaced as actionable errors):
- *  - `ios-webkit-debug-proxy` installed (brew install ios-webkit-debug-proxy).
+ *  - `ios-webkit-debug-proxy` v1.9+ installed (brew install ios-webkit-debug-proxy);
+ *    simulator support needs the `-s` flag added in 1.9.
  *  - The app's WKWebView opted into inspection: `webView.isInspectable = true`
  *    (iOS/iPadOS 16.4+). Real devices also need Settings ▸ Safari ▸ Advanced ▸
  *    Web Inspector = ON.
@@ -34,14 +42,24 @@ export interface IwdpEvaluatorOptions {
   binaryPath?: string;
   basePort?: number;
   udid?: string;
+  /**
+   * When 'simulator', drive the Simulator's WKWebView Web Inspector via iwdp's
+   * `-s unix:<socket>` mode (usbmux can't see simulators). Anything else uses the
+   * default usbmux/real-device mode.
+   */
+  deviceKind?: string;
   bundleId?: string;
   selector?: WebViewSelector;
   timeoutMs?: number;
 }
 
-// One shared proxy per process: iwdp is a long-lived daemon, so reuse it across
-// web contexts rather than spawning one per connection.
+// One shared proxy per process, keyed by mode: iwdp is a long-lived daemon, so
+// reuse it across web contexts rather than spawning one per connection. A
+// simulator-mode proxy and a usbmux-mode proxy are different daemons, so we key
+// the cache by mode and run simulator mode on a separate port to avoid collision.
 let sharedProxy: ChildProcess | undefined;
+let sharedProxyKey: string | undefined;
+const SIMULATOR_PORT_OFFSET = 30;
 
 function httpGetJson<T>(url: string, timeoutMs = 2_000): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -67,20 +85,41 @@ async function isProxyUp(basePort: number): Promise<boolean> {
     .catch(() => false);
 }
 
-async function ensureProxy(binary: string, basePort: number, timeoutMs: number): Promise<void> {
-  if (await isProxyUp(basePort)) {
-    return;
+async function ensureProxy(
+  binary: string,
+  requestedBasePort: number,
+  timeoutMs: number,
+  simulatorSocket?: string
+): Promise<number> {
+  // Simulator mode runs on its own port so it never collides with a usbmux-mode
+  // proxy that may already hold the default port.
+  const basePort = simulatorSocket ? requestedBasePort + SIMULATOR_PORT_OFFSET : requestedBasePort;
+  const key = simulatorSocket ?? 'usbmux';
+
+  // Reuse our daemon only when it's the same mode and still listening.
+  if (sharedProxyKey === key && await isProxyUp(basePort)) {
+    return basePort;
   }
 
+  // Mode switch: retire the proxy we started for the other mode before rebinding.
+  if (sharedProxy && sharedProxyKey !== key) {
+    sharedProxy.kill();
+    sharedProxy = undefined;
+    sharedProxyKey = undefined;
+  }
+
+  const portRange = `null:${basePort},:${basePort + 1}-${basePort + 100}`;
+  const args = simulatorSocket
+    ? ['-s', `unix:${simulatorSocket}`, '-c', portRange]
+    : ['-c', portRange];
+
   try {
-    sharedProxy = spawn(
-      binary,
-      ['-c', `null:${basePort},:${basePort + 1}-${basePort + 100}`],
-      { stdio: 'ignore', detached: true }
-    );
+    sharedProxy = spawn(binary, args, { stdio: 'ignore', detached: true });
     sharedProxy.unref();
     sharedProxy.on('error', () => undefined);
+    sharedProxyKey = key;
   } catch (error) {
+    sharedProxyKey = undefined;
     throw iwdpMissingError(binary, error);
   }
 
@@ -88,14 +127,16 @@ async function ensureProxy(binary: string, basePort: number, timeoutMs: number):
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (sharedProxy?.exitCode !== null && sharedProxy?.exitCode !== undefined) {
+      sharedProxyKey = undefined;
       throw iwdpMissingError(binary);
     }
     if (await isProxyUp(basePort)) {
-      return;
+      return basePort;
     }
     await delay(300);
   }
 
+  sharedProxyKey = undefined;
   throw new AsturError('IOS_WEBKIT_PROXY_UNAVAILABLE',
     `ios-webkit-debug-proxy did not start listening on http://localhost:${basePort}.`);
 }
@@ -117,11 +158,10 @@ async function findPage(basePort: number, options: IwdpEvaluatorOptions): Promis
   const candidates = devices.filter((device) => parseDevicePort(device, basePort) !== undefined);
 
   if (candidates.length === 0) {
-    // iwdp bridges *real* devices over usbmux. The iOS Simulator's WKWebView is
-    // exposed through webinspectord_sim, which iwdp does not surface — so a sim
-    // yields an empty device list here.
+    // Simulator mode (iwdp `-s`) always lists a SIMULATOR device, so this branch
+    // only fires in usbmux/real-device mode: no inspectable physical device.
     throw new AsturError('IOS_WEBVIEW_PROXY_NO_DEVICES',
-      'ios-webkit-debug-proxy reported no inspectable iOS devices. It bridges physical devices over usbmux; the iOS Simulator’s WKWebView is not exposed to it. Use a real device (with Settings ▸ Safari ▸ Advanced ▸ Web Inspector = ON), or drive the simulator WebView via Safari’s Develop menu until simulator support lands.');
+      'ios-webkit-debug-proxy reported no inspectable iOS devices over usbmux. Connect a real device and enable Settings ▸ Safari ▸ Advanced ▸ Web Inspector = ON. (The iOS Simulator is bridged automatically via the webinspectord_sim socket — pass the simulator device kind so Astur uses iwdp’s -s mode.)');
   }
   // Prefer the device whose id matches the target UDID (the simulator/device we're
   // driving); otherwise probe each until one yields an inspectable page.
@@ -163,11 +203,23 @@ export async function createIwdpEvaluator(options: IwdpEvaluatorOptions = {}): P
   const binary = options.binaryPath ?? process.env.ASTUR_IWDP_PATH ?? 'ios_webkit_debug_proxy';
   const timeoutMs = options.timeoutMs ?? 8_000;
 
-  await ensureProxy(binary, basePort, timeoutMs);
-  const { wsUrl } = await findPage(basePort, options);
+  // On the simulator, usbmux can't see the WKWebView — bridge iwdp to the
+  // simulator's webinspectord_sim Unix socket instead (iwdp >= 1.9 `-s` mode).
+  let simulatorSocket: string | undefined;
+  if (options.deviceKind === 'simulator' && options.udid) {
+    simulatorSocket = await findSimulatorWebInspectorSocket(options.udid);
+    if (!simulatorSocket) {
+      throw new AsturError('IOS_WEBVIEW_SIM_SOCKET_NOT_FOUND',
+        `Could not find the Web Inspector socket for simulator ${options.udid}. Boot the simulator and launch the app with an open WebView that sets webView.isInspectable = true (iOS 16.4+).`);
+    }
+  }
 
-  // WebKit answers Runtime.evaluate only after Runtime.enable.
-  const evaluator = new CdpWebEvaluator(wsUrl, 10_000, ['Runtime']);
+  const effectiveBasePort = await ensureProxy(binary, basePort, timeoutMs, simulatorSocket);
+  const { wsUrl } = await findPage(effectiveBasePort, options);
+
+  // WebKit answers Runtime.evaluate only after Runtime.enable, and modern WebKit
+  // multiplexes page traffic through the Target domain (true → wrap/unwrap).
+  const evaluator = new CdpWebEvaluator(wsUrl, 10_000, ['Runtime'], true);
   await evaluator.connect();
   return evaluator;
 }

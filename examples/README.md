@@ -4,7 +4,16 @@
   </a>
 </p>
 
-# Android Native Example
+# Astur Examples
+
+These examples drive the **same shared specs** against Android and iOS, React Native and Flutter. The layout separates platform-agnostic tests from platform-specific configs:
+
+- `specs/` — shared test files, the `fixtures.ts` `app` fixture, and `pages/` page objects (run on every platform).
+- `config/android/` — Android Playwright configs (`playwright.config.ts`, `playwright.flutter.config.ts`, `playwright.parallel.config.ts`).
+- `config/ios/` — iOS Playwright configs (`playwright.config.ts`, `playwright.flutter.config.ts`).
+- `package.json` — `npm run` shortcuts (run `npm run help` for the full list).
+
+## Android
 
 This example expects:
 
@@ -25,7 +34,7 @@ Run the full feature suite from this repository root after building:
 
 ```bash
 npm run build
-npx astur-mobile test --config examples/android-native/playwright.config.ts
+npx astur-mobile test --config examples/config/android/playwright.config.ts
 ```
 
 Astur now keeps one native agent session per Playwright worker instead of recreating it for every spec. The demo `app` fixture terminates and relaunches the app before each test, so tests remain isolated without reinstalling the native agent or clearing app data on every spec. Android also skips redundant agent APK installs when the agent packages are already present on the device; set `ASTUR_ANDROID_AGENT_FORCE_INSTALL=1` only when you intentionally want to refresh the installed agent APKs.
@@ -47,20 +56,20 @@ The suite is split by user-facing functionality:
 Run one focused feature:
 
 ```bash
-npx astur-mobile test --config examples/android-native/playwright.config.ts examples/android-native/tap-laboratory.test.ts
+npx astur-mobile test --config examples/config/android/playwright.config.ts examples/specs/tap-laboratory.test.ts
 ```
 
-All Android native specs use the same page object model:
+All specs share the same page object model:
 
-- `fixtures.ts` turns Astur's built-in `device` fixture into an `app` fixture.
-- `pages/astur-demo-app.page.ts` contains the single page-object file for the demo app.
+- `specs/fixtures.ts` turns Astur's built-in `device` fixture into an `app` fixture.
+- `specs/pages/astur-demo-app.page.ts` contains the single page-object file for the demo app.
 - Test files stay focused on expected behavior and call page methods such as `app.login.enterCredentials()` and `app.forms.chooseFirstVisibleMedia()`.
 - The `app` fixture performs the per-spec app restart, so individual specs do not need repeated `app.reset()` boilerplate.
 
 Run the WebView feature:
 
 ```bash
-npx astur-mobile test --config examples/android-native/playwright.config.ts examples/android-native/webview.test.ts
+npx astur-mobile test --config examples/config/android/playwright.config.ts examples/specs/webview.test.ts
 ```
 
 Run the cross-platform suite against one Android device and one iOS simulator in parallel:
@@ -68,13 +77,13 @@ Run the cross-platform suite against one Android device and one iOS simulator in
 ```bash
 adb devices -l
 xcrun simctl list devices booted
-npx astur-mobile test --config examples/android-native/playwright.parallel.config.ts examples/android-native/login.test.ts
+npx astur-mobile test --config examples/config/android/playwright.parallel.config.ts examples/specs/login.test.ts
 ```
 
 To filter both by file and project, place the file path before `--project` because Playwright's `--project` option accepts multiple values:
 
 ```bash
-npm run test:parallel:spec -- android-native/login.test.ts --project ios-simulator
+npm run test:parallel:spec -- specs/login.test.ts --project ios-simulator
 ```
 
 The parallel config maps projects to separate platforms:
@@ -133,13 +142,13 @@ ASTUR_FLUTTER_PROJECT=/path/to/flutter-app npm run test:android:flutter
 
 # one spec
 ASTUR_FLUTTER_PROJECT=/path/to/flutter-app \
-  npm run test:android:flutter:spec -- android-native/login.test.ts
+  npm run test:android:flutter:spec -- specs/login.test.ts
 
 # codegen / inspector against the Flutter APK
 ASTUR_FLUTTER_PROJECT=/path/to/flutter-app npm run codegen:android:flutter
 ```
 
-The iOS Flutter config (`ios-native/playwright.flutter.config.ts`) drives the Flutter `Runner.app` through XCUITest; unzip `assets/astur.demo.ios.simulator_flutter.zip` into `assets/` first. Some specs that depend on native pickers or fine-grained drag are environment-sensitive on the Flutter build — see the guide's limitations.
+The iOS Flutter config (`config/ios/playwright.flutter.config.ts`) drives the Flutter `Runner.app` through XCUITest; unzip `assets/astur.demo.ios.simulator_flutter.zip` into `assets/` first. Some specs that depend on native pickers or fine-grained drag are environment-sensitive on the Flutter build — see the guide's limitations.
 
 ## Sponsor
 

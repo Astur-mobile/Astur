@@ -560,8 +560,23 @@ export class FormsPage {
   async chooseFirstVisibleMedia(): Promise<void> {
     await this.revealUploadCard();
     await this.pickMediaButton.tap();
-    await this.device.getByLabel('Photo taken', { exact: false }).tap({ timeout: 10_000 });
-    await this.selectedAsset.waitForVisible({ timeout: 10_000 });
+
+    const asset = this.device.getByLabel('Photo taken', { exact: false });
+    await asset.waitForVisible({ timeout: 10_000 });
+
+    // The picker expands inline below the button; a tap can land mid-expansion and
+    // be dropped, leaving the sheet open with no selected-asset chip. Re-scroll the
+    // option on-screen and re-tap until the selection is confirmed (a successful tap
+    // closes the sheet, so the chip becoming visible is the signal to stop).
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await asset.scrollIntoView().catch(() => undefined);
+      await asset.tap({ timeout: 10_000 });
+      if (await this.selectedAsset.isVisible({ timeout: 5_000 })) {
+        return;
+      }
+    }
+
+    await this.selectedAsset.waitForVisible({ timeout: 5_000 });
   }
 }
 

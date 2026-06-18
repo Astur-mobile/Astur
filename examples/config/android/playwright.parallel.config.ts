@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@astur-mobile/test';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const appPath = resolve(repoRoot, 'assets/astur.demo.android.apk');
 const androidDeviceId = process.env.ASTUR_ANDROID_DEVICE_ID ?? 'emulator-5554';
 const androidAvd = process.env.ASTUR_ANDROID_AVD ?? 'Pixel_9_API_35';
@@ -52,7 +52,7 @@ function getRequestedProjects(argv: readonly string[]): Set<string> {
 }
 
 export default defineConfig({
-  testDir: '.',
+  testDir: resolve(repoRoot, 'examples/specs'),
   testMatch: [
     'login.test.ts',
     'forms.test.ts',

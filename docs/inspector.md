@@ -134,7 +134,7 @@ If the tree is visible but the header briefly says `UI tree refresh delayed`, As
 
 When the device has an inspectable in-app WebView, the inspector **splices its DOM into the UI tree** under the native WebView host node. Each web element shows the same stable locator Astur generates for tests (`getByTestId` / `getById` / `getByRole` / `getByText`), and the **Fill** / **Tap** controls drive web elements by their DOM locator — no coordinate guessing.
 
-This reuses `device.webContext()`, so it works for **Flutter and React Native** WebViews on Android (Chromium WebView/CDP) today, and on real iOS devices via `ios-webkit-debug-proxy`. The DOM is probed on a background cadence and never blocks the native tree. See [WebViews (DOM)](./frameworks/#webviews-dom) for setup and the platform support matrix.
+This reuses `device.webContext()`, so it works for **Flutter and React Native** WebViews on Android (Chromium WebView/CDP) and on iOS — **both the simulator and real devices** — via `ios-webkit-debug-proxy`. The DOM is probed on a background cadence and never blocks the native tree. See [WebViews (DOM)](./frameworks/#webviews-dom) for setup and the platform support matrix.
 
 ## Platform Limits
 

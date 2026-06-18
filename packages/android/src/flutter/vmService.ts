@@ -182,9 +182,19 @@ export class FlutterVmService {
    * but the tree never reflects them) or, once it dies, an empty tree. Excluding
    * the pre-restart id is what makes resets land on the live isolate.
    */
-  async reattach(): Promise<void> {
+  async reattach(): Promise<boolean> {
     await this.resolveIsolate(this.isolateId);
-    await this.waitForReady();
+    return this.waitForReady();
+  }
+
+  /**
+   * Re-checks readiness on the already-bound isolate without re-resolving it.
+   * Used by the reset path to re-wait after re-foregrounding a surfaceless engine
+   * (a hot restart can come back with a 0x0 view), so callers can retry cheaply
+   * instead of paying the isolate-resolution grace window again.
+   */
+  async ensureReady(): Promise<boolean> {
+    return this.waitForReady();
   }
 
   /**
@@ -356,7 +366,7 @@ export class FlutterVmService {
    *     and laid out, not their exact bounds, so a continuously-animating app
    *     still settles instead of polling until the timeout.
    */
-  private async waitForReady(): Promise<void> {
+  private async waitForReady(): Promise<boolean> {
     const deadline = Date.now() + this.readyTimeoutMs;
 
     // Phase 1 — a known screen size (physicalSize is 0x0 until the view lays out).
@@ -377,7 +387,10 @@ export class FlutterVmService {
         break;
       }
       if (Date.now() >= deadline) {
-        return;
+        // Never captured a real screen size: the engine is surfaceless (a 0x0
+        // view after a hot restart). Report it so the reset path can re-foreground
+        // and retry instead of serving an unlaid-out tree.
+        return false;
       }
       await this.sleep(this.readyPollMs);
     }
@@ -397,14 +410,16 @@ export class FlutterVmService {
           settleStart = Date.now();
         }
         if (Date.now() - settleStart >= this.readySettleMs) {
-          return;
+          return true;
         }
       } else {
         settleStart = 0;
         previous = fingerprint;
       }
       if (Date.now() >= deadline) {
-        return;
+        // The view reported a real size (Phase 1 passed); the laid-out set just
+        // never fully settled. That is still usable, so treat it as ready.
+        return true;
       }
       await this.sleep(this.readyPollMs);
     }

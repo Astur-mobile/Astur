@@ -810,26 +810,6 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
 :root[data-theme="light"] .platform-note {
   color: #475569;
 }
-/* Small centered pill below the label (no longer a corner badge on a box). */
-.platform-tag {
-  order: 3;
-  margin-top: 0.1rem;
-  font-family: monospace;
-  font-size: 0.56rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 0.18rem 0.55rem;
-  border-radius: 999px;
-  color: var(--cyber-primary);
-  background: rgba(20, 184, 166, 0.1);
-  border: 1px solid rgba(20, 184, 166, 0.22);
-}
-.platform-tag--fw {
-  color: #a78bfa;
-  background: rgba(167, 139, 250, 0.1);
-  border-color: rgba(167, 139, 250, 0.26);
-}
 @media (max-width: 860px) {
   .platform-grid {
     grid-template-columns: repeat(2, 1fr);

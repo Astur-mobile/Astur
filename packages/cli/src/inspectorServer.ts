@@ -220,6 +220,39 @@ export function startInspectorServer(
     const WEB_PROBE_PRESENT_MS = 1_500;
     const WEB_PROBE_ABSENT_MS = 6_000;
 
+    // ── Device-action scheduler ────────────────────────────────────────────
+    // Serialize device actions ahead of the background screenshot/tree/WebView
+    // polls. While a fill/tap/swipe/etc. runs, polling is paused so it cannot
+    // pile commands onto the single-threaded agent, re-focus the field mid-type
+    // (the "autofill tag keeps reappearing" retry feel), or dispose the WebView
+    // context between two fills. After the last action settles, refresh once.
+    let pendingDeviceActions = 0;
+    let actionSettleTimer: ReturnType<typeof setTimeout> | undefined;
+    const ACTION_SETTLE_MS = 350;
+    const devicePollingPaused = (): boolean =>
+      pendingDeviceActions > 0 || actionSettleTimer !== undefined;
+
+    async function runDeviceAction<T>(fn: () => Promise<T>): Promise<T> {
+      pendingDeviceActions += 1;
+      if (actionSettleTimer) {
+        clearTimeout(actionSettleTimer);
+        actionSettleTimer = undefined;
+      }
+      try {
+        return await fn();
+      } finally {
+        pendingDeviceActions -= 1;
+        if (pendingDeviceActions === 0) {
+          // Let the keyboard/scroll animation finish, then do a single refresh
+          // (one tree+frame read) instead of many mid-action reads.
+          actionSettleTimer = setTimeout(() => {
+            actionSettleTimer = undefined;
+            void syncInspectorState();
+          }, ACTION_SETTLE_MS);
+        }
+      }
+    }
+
     function maybeProbeWebTree(): void {
       if (!activeInspector.webSnapshot || webProbeInFlight || Date.now() < webProbeNextAt) {
         return;
@@ -602,15 +635,17 @@ export function startInspectorServer(
 
           if (shouldRecordTap && suggestions[0]) {
             try {
-              if (options.performTap) {
-                await options.performTap({ x: event.x, y: event.y });
-              } else {
-                await activeInspector.executeAction({
-                  kind: 'tap',
-                  selector: suggestions[0].selector,
-                  options: { timeout: 2_000 }
-                });
-              }
+              await runDeviceAction(async () => {
+                if (options.performTap) {
+                  await options.performTap({ x: event.x, y: event.y });
+                } else {
+                  await activeInspector.executeAction({
+                    kind: 'tap',
+                    selector: suggestions[0].selector,
+                    options: { timeout: 2_000 }
+                  });
+                }
+              });
             } catch (error) {
               ws.send(JSON.stringify({
                 type: 'status',
@@ -626,7 +661,6 @@ export function startInspectorServer(
             };
             steps.push(step);
             broadcast({ type: 'step', ...step });
-            await syncInspectorState();
             broadcast({ type: 'status', message: 'Action OK: Tap recorded' });
           }
           break;
@@ -640,28 +674,28 @@ export function startInspectorServer(
             ? currentNodes.find((node) => node.uid === selectedUid && node.web)
             : undefined;
           try {
-            if (selectedWebNode?.web && activeInspector.webAct) {
-              await activeInspector.webAct(
-                selectedWebNode.web,
-                event.action === 'fill' ? 'fill' : 'tap',
-                event.value
-              );
-            } else if (event.action === 'fill') {
-              await activeInspector.executeAction({
-                kind: 'fill',
-                selector: event.selector,
-                value: event.value ?? '',
-                options: { timeout: 2_000 }
-              });
-            } else {
-              await activeInspector.executeAction({
-                kind: 'tap',
-                selector: event.selector,
-                options: { timeout: 2_000 }
-              });
-            }
-
-            await syncInspectorState();
+            await runDeviceAction(async () => {
+              if (selectedWebNode?.web && activeInspector.webAct) {
+                await activeInspector.webAct(
+                  selectedWebNode.web,
+                  event.action === 'fill' ? 'fill' : 'tap',
+                  event.value
+                );
+              } else if (event.action === 'fill') {
+                await activeInspector.executeAction({
+                  kind: 'fill',
+                  selector: event.selector,
+                  value: event.value ?? '',
+                  options: { timeout: 2_000 }
+                });
+              } else {
+                await activeInspector.executeAction({
+                  kind: 'tap',
+                  selector: event.selector,
+                  options: { timeout: 2_000 }
+                });
+              }
+            });
             broadcast({ type: 'status', message: `Action OK: ${event.action === 'fill' ? 'Filled' : 'Tapped'}${selectedWebNode ? ' (web)' : ''}` });
           } catch (error) {
             ws.send(JSON.stringify({
@@ -994,7 +1028,7 @@ export function startInspectorServer(
     let frameInFlight = false;
 
     async function pushFrame(): Promise<InspectorRefreshResult> {
-      if (clients.size === 0 || frameInFlight) {
+      if (clients.size === 0 || frameInFlight || devicePollingPaused()) {
         return 'busy';
       }
 
@@ -1048,7 +1082,9 @@ export function startInspectorServer(
     let consecutiveTreeErrors = 0;
 
     async function pushTree(options: { reportFirstError?: boolean } = {}): Promise<InspectorRefreshResult> {
-      if (treeInFlight) {
+      // Bootstrap/manual refreshes (reportFirstError) bypass the action gate;
+      // background polls pause while a device action is running or settling.
+      if (treeInFlight || (devicePollingPaused() && !options.reportFirstError)) {
         return 'busy';
       }
 
@@ -2494,7 +2530,14 @@ let busyWatchdog = null;
 // WebView), no status ever comes back and the overlay would otherwise spin
 // forever, bricking the session. The watchdog force-clears it so the user can
 // keep working (switch screens, terminate, etc.).
-const BUSY_WATCHDOG_MS = 15000;
+//
+// Must sit ABOVE the native agent command timeout (iOS default 30s) — otherwise a
+// slow-but-succeeding action gets a premature, misleading "timed out" while the
+// agent is still completing it (e.g. filling a field inside a never-idle WKWebView,
+// where each keystroke's bounded idle-wait makes a clear+type land around ~16s). At
+// 35s the agent's own success/timeout response always arrives first, so the user
+// sees the real outcome; this stays purely a backstop for a truly hung session.
+const BUSY_WATCHDOG_MS = 35000;
 let socketConnected = false;
 let hasFrame = false;
 let hasTree = false;
@@ -3352,6 +3395,10 @@ function nodeRoles(node) {
   if (type.includes('switch')) roles.push('switch');
   if (type.includes('tab')) roles.push('tab');
   if (type.includes('edittext') || type.includes('textfield') || type.includes('securetextfield') || type.includes('searchfield') || type.includes('textinput')) roles.push('textbox');
+  // Spliced WebView DOM nodes ('web:input', 'web:textarea'): text inputs are fillable
+  // (and contenteditable surfaces). Without this the Fill control stays disabled for
+  // web-context elements even though the server routes them through webAct.
+  if (type === 'web:input' || type === 'web:textarea' || type.includes('contenteditable')) roles.push('textbox');
   return roles;
 }
 

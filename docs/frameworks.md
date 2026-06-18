@@ -45,7 +45,7 @@ Flutter paints its own pixels instead of using native widgets, so on **Android**
 ```bash
 # Run a Flutter suite (Android)
 ASTUR_FLUTTER_PROJECT=/path/to/flutter-app \
-  npx astur-mobile test --config ./android-native/playwright.flutter.config.ts
+  npx astur-mobile test --config ./config/android/playwright.flutter.config.ts
 
 # Open the inspector / codegen against a Flutter APK
 ASTUR_FLUTTER_PROJECT=/path/to/flutter-app \

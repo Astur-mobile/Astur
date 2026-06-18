@@ -5,10 +5,10 @@ import { defineConfig } from '@astur-mobile/test';
 // Flutter validation config: same Android demo-app test suite, pointed at the
 // Flutter build of the demo app (assets/astur.demo.android_flutter.apk) instead
 // of the React Native build. Used to validate native Flutter automation support.
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 export default defineConfig({
-  testDir: '.',
+  testDir: resolve(repoRoot, 'examples/specs'),
   timeout: 240_000,
   fullyParallel: false,
   workers: 1,
