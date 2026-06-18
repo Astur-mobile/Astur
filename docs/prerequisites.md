@@ -120,6 +120,26 @@ Astur signs and starts the bundled XCUITest runner automatically, but Apple requ
 
 USB-connected real devices normally communicate through Xcode's CoreDevice tunnel. Keep `ASTUR_IOS_AGENT_HOST` unset unless you intentionally need the phone to connect to a specific Mac network address.
 
+### iOS WebView DOM (optional)
+
+Only needed if you drive WebView **DOM** content (`device.webContext()` / `webview()`) on iOS. Native locators on WebView screens need none of this.
+
+- `brew install ios-webkit-debug-proxy` (v1.9+ — simulator support uses its `-s` mode)
+- the app sets `WKWebView.isInspectable = true` (iOS/iPadOS 16.4+)
+- real devices only: Settings ▸ Safari ▸ Advanced ▸ Web Inspector = ON
+
+Works on both the iOS Simulator and real devices; Astur locates the simulator's Web Inspector socket automatically.
+
+## Required For Flutter
+
+Astur drives Flutter apps without Appium or a Flutter-specific third-party driver.
+
+- **Android Flutter** — point your config at a **debug** (or profile) Flutter APK; release builds have no Dart VM service and cannot be driven. Also needs the `flutter` CLI on `PATH` (or `ASTUR_FLUTTER_PATH`) and `ASTUR_FLUTTER_PROJECT` set to the Flutter app's source directory (the folder with `pubspec.yaml`).
+- **iOS Flutter** — read through the XCUITest accessibility tree (no Dart VM service); ship a simulator-built `Runner.app` and enable semantics so identifiers/labels are exposed.
+- Give widgets a stable `Semantics(identifier: 'login-email-input')` so `getById()` resolves them; `getByText` / `getByLabel` match `Text` and labels.
+
+See [Flutter & React Native](./frameworks/) for the full guide and [Platform Limits](./platform-limits/) for what each platform excludes.
+
 ## Current Beta Limits
 
 - Android native automation defaults to the bundled Kotlin UIAutomator agent for locator lookup, waits, actions, gestures, keyboard control, and UI-tree inspection.
@@ -130,7 +150,7 @@ USB-connected real devices normally communicate through Xcode's CoreDevice tunne
 - iOS simulators use `simctl` for lifecycle helpers; real devices use `devicectl`.
 - Real iOS devices require signing the XCUITest runner with `ASTUR_IOS_DEVELOPMENT_TEAM`.
 - Real iOS permissions, direct cache/data clearing, lock/unlock, and video recording remain limited by Apple's public tooling. Use reinstall reset and screenshots where those APIs are unavailable. If native video is enabled for a real iOS run, Astur records a skipped-video attachment instead of failing the test.
-- iOS WebView (WKWebView) DOM automation is not supported yet. Native locators work on WebView screens, but DOM attachment is Android-only today (`webview()` returns `WEBVIEW_NOT_SUPPORTED` on iOS).
+- iOS WebView (WKWebView) DOM automation works on the **simulator and real devices** via `ios-webkit-debug-proxy` (v1.9+) and `WKWebView.isInspectable = true` (iOS 16.4+). Native locators also work on WebView screens.
 
 ## Optional Native-Agent Endpoint Prerequisites
 

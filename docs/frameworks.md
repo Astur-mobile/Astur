@@ -16,7 +16,7 @@ React Native renders **native views**, so Astur automates it exactly like a nati
 
 - Add a `testID` prop to elements your tests need. React Native maps `testID` to the native accessibility identifier (`resource-id` on Android, `accessibilityIdentifier` on iOS), which `getById()` matches.
 - `getByText()` / `getByLabel()` match visible text and accessibility labels.
-- In-app **WebView DOM** automation works through `device.webContext()` — see [WebViews (DOM)](#webviews-dom) below — on Android today, and on real iOS devices via `ios-webkit-debug-proxy`.
+- In-app **WebView DOM** automation works through `device.webContext()` — see [WebViews (DOM)](#webviews-dom) below — on Android and on iOS (simulator and real devices) via `ios-webkit-debug-proxy`.
 
 ```tsx
 // React Native — expose stable ids for tests

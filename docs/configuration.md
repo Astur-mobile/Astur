@@ -519,7 +519,7 @@ await expect(web.page.locator('body')).toContainText(/Astur Web Lab/);
 await web.page.getByRole('button', { name: /Submit web form/i }).click({ force: true });
 ```
 
-`device.contexts()` lists native and WebView contexts. `device.webContext()` works on Android and real iOS devices; the `webview()` (`web.page`) fixture is Android-only, and on iOS it throws `WEBVIEW_NOT_SUPPORTED` — drive WebView screens with native locators there instead. Native mode remains available on both platforms for navigation bars, system buttons, permissions, and other OS or app chrome outside the WebView.
+`device.contexts()` lists native and WebView contexts. `device.webContext()` (the engine-agnostic DOM bridge) works on **Android and iOS — simulator and real devices**. The `webview()` (`web.page`) Playwright-Page fixture remains **Android-only** (it needs Chromium CDP); on iOS it throws `WEBVIEW_NOT_SUPPORTED` — use `device.webContext()` or native locators there instead. Native mode remains available on both platforms for navigation bars, system buttons, permissions, and other OS or app chrome outside the WebView.
 
 ## App And Device Management
 

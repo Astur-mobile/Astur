@@ -84,6 +84,13 @@ const pages = [
     title: 'Roadmap',
     description: 'Planned work for native agents, diagnostics, CI, and release readiness.',
     order: 11
+  },
+  {
+    source: 'docs/release-notes.md',
+    target: 'release-notes.md',
+    title: 'Release Notes',
+    description: "What's new in each Astur release.",
+    order: 12
   }
 ];
 
