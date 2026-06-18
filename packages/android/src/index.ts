@@ -47,9 +47,11 @@ import {
   delay,
   preparePointerTargetForKeyboard,
   waitFor,
+  CdpWebEvaluator,
   type NativeAgentClient,
   type PlatformDriver,
-  type PlatformSession
+  type PlatformSession,
+  type WebEvaluator
 } from '@astur-mobile/core';
 import { run, runText, spawnCommand, spawnDetached } from './command.js';
 import { parseUiAutomatorXml } from './uiautomatorXml.js';
@@ -565,18 +567,30 @@ class AndroidSession implements PlatformSession {
       flutter.component = await this.detectForegroundComponent().catch(() => undefined);
       return;
     }
-    await flutter.process.hotRestart();
-    // Hot restart re-runs main() in place but does NOT foreground the app. Test
-    // resets tap the home button first, so without this the app stays behind the
-    // launcher: the VM service still reads its (background) widget tree, but taps
-    // and gestures land on the launcher. Reorder the existing task to the front
-    // (no relaunch, which would detach `flutter run`). Do this BEFORE reattaching
-    // so the view is attached and reports a non-zero size — a backgrounded
-    // Flutter view can report 0x0, which would stall reattach's readiness wait.
+    // Foreground the app FIRST, before the hot restart. Test resets tap the home
+    // button, which backgrounds the app and tears its Flutter surface down to 0x0.
+    // Hot-restarting a surfaceless engine is racy: the new isolate can come up
+    // without the view ever reporting a real size, so reattach's readiness wait
+    // (which gates on a non-zero physicalSize) times out and the app-shell never
+    // appears. Bringing the task to the front first re-creates the surface, so the
+    // restart runs with a live, sized view. Reorder the existing task (no relaunch,
+    // which would detach `flutter run`).
     await this.foregroundFlutterApp(flutter.component);
-    // Hot restart spins up a fresh Dart isolate; rebind so tree reads don't run
-    // against the dead one (which returns an empty tree -> app-shell timeouts).
-    await flutter.vm?.reattach();
+    await flutter.process.hotRestart();
+    // Re-assert the foreground in case anything (the restart, a lingering launcher
+    // transition) left the app behind, then rebind: hot restart spins up a fresh
+    // Dart isolate, so reads must target it, not the dead one (empty tree).
+    await this.foregroundFlutterApp(flutter.component);
+    let ready = (await flutter.vm?.reattach()) ?? false;
+    // A hot restart can bring the engine back surfaceless (the view never reports
+    // a non-zero size), in which case the new isolate is bound but every tree read
+    // is unlaid-out (0x0 bounds → nothing visible) and the app-shell wait times
+    // out. Re-foreground to recreate the surface and re-check readiness on the
+    // live isolate. Bounded, so a genuinely stuck app still fails fast.
+    for (let attempt = 0; !ready && flutter.vm && attempt < 3; attempt += 1) {
+      await this.foregroundFlutterApp(flutter.component);
+      ready = await flutter.vm.ensureReady();
+    }
   }
 
   /** Reads the currently focused app component (package/activity) from the platform. */
@@ -948,7 +962,29 @@ class AndroidSession implements PlatformSession {
     const element = await this.waitForElement(selector, { ...options, state: 'visible' });
     await preparePointerTargetForKeyboard(this, centerOf(element.bounds), options.keyboard);
     await this.tap(centerOf(element.bounds));
+    // Tapping the field focuses it and raises the soft keyboard, but the IME input
+    // connection attaches a beat after the tap returns. `input text` sent into that
+    // gap silently drops its leading character(s) — the race widens on a loaded
+    // emulator (e.g. after several hot-restarts), which is why the first field of a
+    // form intermittently loses its first letter. Wait for the keyboard to actually
+    // be up before typing so the whole string registers.
+    await this.waitForKeyboardVisible();
     await this.adb(['shell', 'input', 'text', escapeAndroidInputText(value)]);
+  }
+
+  /** Polls until the soft keyboard reports visible (then settles), or a deadline elapses. */
+  private async waitForKeyboardVisible(): Promise<void> {
+    const deadline = Date.now() + 2_000;
+    while (Date.now() <= deadline) {
+      if ((await this.getKeyboardState().catch(() => ({ visible: false }))).visible) {
+        // The IME window is shown, but its input connection binds a beat later; a
+        // short settle keeps the first characters from being dropped.
+        await delay(150);
+        return;
+      }
+
+      await delay(50);
+    }
   }
 
   async dragElement(
@@ -1217,6 +1253,39 @@ class AndroidSession implements PlatformSession {
     });
   }
 
+  /**
+   * Opens a raw CDP `Runtime.evaluate` transport into a WebView's DOM. This backs
+   * {@link AsturDevice.webContext}: the engine-agnostic JS bridge runs over it, so
+   * the Chromium WebView is driven without Playwright's element model — the same
+   * code path the iOS WebKit transport will mirror.
+   */
+  async createWebEvaluator(selector: WebViewSelector = {}): Promise<WebEvaluator> {
+    const endpoint = await this.connectWebView(selector);
+    const targets = await readDevtoolsTargets(endpoint.cdpUrl).catch((): DevtoolsTarget[] => []);
+    const target = targets.find((candidate) =>
+      candidate.webSocketDebuggerUrl && (!endpoint.context.pageId || candidate.id === endpoint.context.pageId))
+      ?? targets.find((candidate) => candidate.webSocketDebuggerUrl);
+
+    if (!target?.webSocketDebuggerUrl) {
+      throw new AsturError('WEBVIEW_NO_CDP_TARGET', 'The Android WebView exposed no inspectable DevTools page.', {
+        selector,
+        cdpUrl: endpoint.cdpUrl
+      });
+    }
+
+    // The forwarded socket lives on 127.0.0.1:<port> (endpoint.cdpUrl); rewrite the
+    // page's ws URL onto that host:port so it resolves regardless of the host the
+    // WebView advertised.
+    const base = new URL(endpoint.cdpUrl);
+    const wsUrl = new URL(target.webSocketDebuggerUrl);
+    wsUrl.host = base.host;
+    wsUrl.protocol = 'ws:';
+
+    const evaluator = new CdpWebEvaluator(wsUrl.toString());
+    await evaluator.connect();
+    return evaluator;
+  }
+
   async getKeyboardState(): Promise<KeyboardState> {
     const command = await this.tryNativeCommand('keyboard.state');
     if (command.ok) {
@@ -1237,8 +1306,25 @@ class AndroidSession implements PlatformSession {
       return;
     }
 
-    await this.pressKey('BACK');
+    // On the Flutter (no-agent) driver, dismiss the IME by clearing the Dart
+    // primary focus over the VM service. A Back press is racy here: once the IME
+    // has begun hiding it is no longer consumed by the keyboard and instead
+    // reaches the app, popping the current route or backgrounding the task —
+    // which makes the whole widget tree vanish from subsequent reads. Unfocusing
+    // hides the keyboard with no navigation side effect, so the screen and its
+    // fields stay exactly as they were.
+    if (this.flutter?.vm) {
+      await this.flutter.vm.unfocus().catch(() => undefined);
+      await this.waitForKeyboardHidden();
+      return;
+    }
 
+    await this.pressKey('BACK');
+    await this.waitForKeyboardHidden();
+  }
+
+  /** Polls until the soft keyboard reports hidden, or a short deadline elapses. */
+  private async waitForKeyboardHidden(): Promise<void> {
     const deadline = Date.now() + 1_500;
     while (Date.now() <= deadline) {
       if (!(await this.getKeyboardState()).visible) {

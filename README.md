@@ -32,6 +32,8 @@ The iOS driver can run diagnostics, list simulators and USB-connected real devic
 
 Both platform drivers support endpoint-based native agent transport wiring (`use.astur.agent.endpoint` or `ASTUR_ANDROID_AGENT_ENDPOINT` / `ASTUR_IOS_AGENT_ENDPOINT`). Astur defaults to the native-agent engine and starts one Astur session per Playwright worker. The example fixture isolates specs with a lightweight terminate + launch cycle instead of reinstalling the native agent or clearing app data every spec. `automation.engine: 'auto'` is available as a migration setting when legacy fallback is still needed.
 
+**Flutter** apps run through the same API: on Android via the Dart VM service (live widget tree), and on iOS via the XCUITest accessibility tree. **In-app WebViews** are automated at the DOM level with `device.webContext()` — engine-agnostic across Flutter and React Native — on Android (Chrome DevTools Protocol) and real iOS devices (`ios-webkit-debug-proxy`). See [Frameworks](docs/frameworks.md) and the [Changelog](CHANGELOG.md).
+
 ## What Is Still Missing
 
 - Rich on-device actionability diagnostics in agent responses (multiple-match details, candidate snapshots, and structured failure context), especially for Android strict-locator failures.

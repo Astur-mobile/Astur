@@ -104,8 +104,13 @@ function defaultAutomationForPlatform(platform: PlatformName): Pick<
 > {
   if (platform === 'ios') {
     return {
+      // 30s (was 15s): a focused Flutter text field never reports "idle" (blinking
+      // cursor), so XCUITest types character-by-character with a settle between keys and
+      // a multi-char fill legitimately runs ~15-20s. 15s clipped it. Reads no longer
+      // stall (quiescence is bounded in the agent), so a larger transport timeout does
+      // not reintroduce long hangs.
       engine: 'agent',
-      commandTimeoutMs: 15_000,
+      commandTimeoutMs: 30_000,
       startupTimeoutMs: 60_000
     };
   }

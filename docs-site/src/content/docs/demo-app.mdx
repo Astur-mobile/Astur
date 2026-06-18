@@ -39,7 +39,7 @@ It is the same app the runnable suites drive, so the screenshots below map one-t
   </figure>
   <figure>
     <img src={webImg.src} alt="Web Lab screen showing a native WebView with DOM targets." />
-    <figcaption><strong>Web Lab</strong> — <strong>hybrid WebView</strong> (DOM automation is Android-only today): switch into the web context, drive DOM locators, submit a web form, and upload inside the WebView.</figcaption>
+    <figcaption><strong>Web Lab</strong> — <strong>hybrid WebView</strong>: switch into the web context with <code>device.webContext()</code>, drive DOM locators, submit a web form, and upload inside the WebView.</figcaption>
   </figure>
 </div>
 
@@ -48,7 +48,9 @@ It is the same app the runnable suites drive, so the screenshots below map one-t
 The builds ship with the boilerplate and in this repo's `assets/`:
 
 - **Android:** `assets/astur.demo.android.apk`
+- **Android (Flutter):** `assets/astur.demo.android_flutter.apk`
 - **iOS simulator:** `assets/astur.demo.ios.simulator.zip` (unzip to `assets/Astur.app`)
+- **iOS simulator (Flutter):** `assets/astur.demo.ios.simulator_flutter.zip` (unzip to `assets/Runner.app`)
 - **iOS real device:** `assets/astur.demo.ios.ipa`
 
 ## Run targets
@@ -77,11 +79,14 @@ npx astur-mobile codegen --ios --simulator \
 Or run the full feature suite from the [astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate) starter:
 
 ```bash
-npx astur-mobile test --config android-native/playwright.config.ts
+npx astur-mobile test --config config/android/playwright.config.ts
 ```
 
-:::note[WebView DOM is Android-only today]
-WebView DOM automation currently works on **Android only**. The app must enable WebView debugging — `WebView.setWebContentsDebuggingEnabled(true)` — which exposes the Chrome DevTools Protocol socket Astur attaches to. The bundled demo APK ships with it on.
+:::note[WebView DOM control]
+`device.webContext()` drives WebView DOM on **Android and iOS (simulator and real devices)**.
 
-On **iOS**, the Web Lab screen renders and you can drive it with native locators, but DOM attachment is not supported yet — `webview()` throws `WEBVIEW_NOT_SUPPORTED`. (WKWebView uses Apple's Web Inspector rather than CDP, and would require the app to set `WKWebView.isInspectable = true` on iOS 16.4+.)
+- **Android** — the app enables WebView debugging (`WebView.setWebContentsDebuggingEnabled(true)`), exposing the Chrome DevTools Protocol socket. The demo APK ships with it on.
+- **iOS** — the app sets `WKWebView.isInspectable = true` (iOS 16.4+) and `ios-webkit-debug-proxy` (v1.9+) is installed (`brew install ios-webkit-debug-proxy`). Astur bridges the simulator's Web Inspector automatically.
+
+The Playwright-Page `webview()` (`web.page`) fixture remains Android-only; on iOS use `device.webContext()` or native locators.
 :::

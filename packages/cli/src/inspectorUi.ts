@@ -952,6 +952,17 @@ function renderInspectorHtml(payload: InspectorUiPayload): string {
           return [];
         }
 
+        if (node.web) {
+          const d = node.web;
+          let code;
+          if (d.strategy === 'testid') code = "device.getByTestId('" + escapeSingle(d.value) + "')";
+          else if (d.strategy === 'id') code = "device.getById('" + escapeSingle(d.value) + "')";
+          else if (d.strategy === 'role') code = "device.getByRole('" + escapeSingle(d.value) + "'" + (d.name ? ", { name: '" + escapeSingle(d.name) + "' }" : "") + ")";
+          else if (d.strategy === 'text') code = "device.getByText('" + escapeSingle(d.value) + "')";
+          else code = "device.locator('" + escapeSingle(d.value) + "')";
+          return [{ code, score: 0.97 }];
+        }
+
         const candidates = [];
         const role = inferRole(node);
         const name = node.label || node.text || node.value;

@@ -53,7 +53,7 @@ describe('CLI platform-aware output', () => {
   it('generates a default Android emulator scaffold', () => {
     const files = __testing.buildInitFiles(__testing.defaultInitAnswers());
     const config = files.find((file) => file.path === 'playwright.config.ts')?.contents;
-    const test = files.find((file) => file.path === 'tests/example.test.ts')?.contents;
+    const test = files.find((file) => file.path === 'specs/example.test.ts')?.contents;
 
     expect(config).toContain("name: 'android-emulator'");
     expect(config).toContain("platform: 'android'");

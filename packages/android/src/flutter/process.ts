@@ -170,7 +170,18 @@ export class FlutterProcess {
     if (!child) {
       throw new AsturError('FLUTTER_PROCESS_NOT_STARTED', 'Cannot hot-restart: the Flutter process is not running.');
     }
-    const done = this.waitForOutput(/Restarted application/i, this.options.restartTimeoutMs, 'Timed out waiting for Flutter hot restart.');
+    // Only consider output that arrives AFTER we issue the restart. stdoutBuffer
+    // accumulates across the whole session and is never cleared, so matching the
+    // whole buffer would find a *previous* restart's "Restarted application" line
+    // and resolve immediately — proceeding to reattach before the new isolate
+    // exists, which binds the dying old isolate and reads an empty tree.
+    const fromIndex = this.stdoutBuffer.length;
+    const done = this.waitForOutput(
+      /Restarted application/i,
+      this.options.restartTimeoutMs,
+      'Timed out waiting for Flutter hot restart.',
+      fromIndex
+    );
     child.stdin.write('R\n');
     await done;
   }
@@ -199,8 +210,14 @@ export class FlutterProcess {
     });
   }
 
-  private waitForOutput(pattern: RegExp, timeoutMs: number, timeoutMessage: string): Promise<string> {
-    const existing = this.stdoutBuffer.match(pattern);
+  private waitForOutput(
+    pattern: RegExp,
+    timeoutMs: number,
+    timeoutMessage: string,
+    fromIndex = 0
+  ): Promise<string> {
+    const search = (): RegExpMatchArray | null => this.stdoutBuffer.slice(fromIndex).match(pattern);
+    const existing = search();
     if (existing) {
       return Promise.resolve(existing[1] ?? existing[0]);
     }
@@ -210,7 +227,7 @@ export class FlutterProcess {
         reject(new AsturError('FLUTTER_PROCESS_TIMEOUT', timeoutMessage, { tail: this.stdoutBuffer.slice(-1200) }));
       }, timeoutMs);
       const listener = () => {
-        const match = this.stdoutBuffer.match(pattern);
+        const match = search();
         if (match) {
           clearTimeout(timer);
           this.listeners.delete(listener);

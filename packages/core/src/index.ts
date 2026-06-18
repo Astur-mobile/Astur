@@ -1,5 +1,6 @@
 export * from '@astur-mobile/protocol';
 export * from './agent.js';
+export * from './cdpWebEvaluator.js';
 export * from './config.js';
 export * from './errors.js';
 export * from './inspector.js';
@@ -7,3 +8,4 @@ export * from './keyboard.js';
 export * from './locator.js';
 export * from './session.js';
 export * from './wait.js';
+export * from './webBridge.js';

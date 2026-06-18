@@ -490,24 +490,36 @@ await device.getByLabel('Login').tap();
 await expect(device.getByText('Credentials')).toBeVisible();
 ```
 
-On Android, WebView screens can be driven through the browser DOM. In `@astur-mobile/test`, request a WebView handle after navigating the native app to a WebView screen:
+WebView screens can be driven through the browser DOM. The recommended path is `device.webContext()` — an engine-agnostic API that acts **in-page** over the WebView's debugging transport, so it is immune to the `requestAnimationFrame` throttling that an offscreen WebView applies (which intermittently stalls Playwright actionability). It works the same for Flutter and React Native:
 
 ```ts
 import { expect, test } from '@astur-mobile/test';
 
-test('webview content', async ({ device, webview }) => {
+test('webview content', async ({ device }) => {
   await device.app.launch();
   await device.getById('tab-web').tap();
 
-  const web = await webview({ timeout: 30_000 });
-  await expect(web.page.locator('body')).toContainText(/Astur Web Lab/);
-  await web.page.getByRole('button', { name: /Submit web form/i }).click();
+  const web = await device.webContext();
+  await web.getById('astur-email').fill('qa@astur.dev');
+  await web.getById('astur-submit').tap();
+  expect(await web.getById('astur-result').textContent()).toMatch(/Submitted/i);
 
-  await device.getById('tab-login').tap();
+  await web.close();
 });
 ```
 
-`device.contexts()` lists native and WebView contexts. WebView DOM control is **Android-only today**: it uses Chrome DevTools Protocol, so the app must enable WebView debugging. On iOS, `webview()` throws `WEBVIEW_NOT_SUPPORTED` — drive WebView screens with native locators there instead. Native mode remains available on both platforms for navigation bars, system buttons, permissions, and other OS or app chrome outside the WebView.
+For full Playwright ergonomics you can instead take a `web.page` handle with the `webview` fixture (Android only — it uses Chrome DevTools Protocol, so the app must enable WebView debugging):
+
+```ts
+const web = await webview({ timeout: 30_000 });
+await expect(web.page.locator('body')).toContainText(/Astur Web Lab/);
+// Offscreen WebViews throttle rAF, which can stall Playwright's actionability
+// "stable" check — pass { force: true } for rAF-sensitive actions, or prefer
+// device.webContext() above.
+await web.page.getByRole('button', { name: /Submit web form/i }).click({ force: true });
+```
+
+`device.contexts()` lists native and WebView contexts. `device.webContext()` works on Android and real iOS devices; the `webview()` (`web.page`) fixture is Android-only, and on iOS it throws `WEBVIEW_NOT_SUPPORTED` — drive WebView screens with native locators there instead. Native mode remains available on both platforms for navigation bars, system buttons, permissions, and other OS or app chrome outside the WebView.
 
 ## App And Device Management
 
@@ -624,7 +636,7 @@ For parallel runs, specify unique device selectors per project:
 - Android + iOS: use separate platform projects with separate physical or virtual devices.
 - iOS simulator + real iPhone: use separate `device.id` values and make sure the real-device app and XCUITest runner are signed.
 
-The example `examples/android-native/playwright.parallel.config.ts` runs one Android project and one iOS simulator project in parallel. It uses `ASTUR_ANDROID_DEVICE_ID`, `ASTUR_IOS_DEVICE_ID`, `ASTUR_IOS_DEVICE_NAME`, and `ASTUR_IOS_BUNDLE_ID` as optional overrides.
+The example `examples/config/android/playwright.parallel.config.ts` runs one Android project and one iOS simulator project in parallel. It uses `ASTUR_ANDROID_DEVICE_ID`, `ASTUR_IOS_DEVICE_ID`, `ASTUR_IOS_DEVICE_NAME`, and `ASTUR_IOS_BUNDLE_ID` as optional overrides.
 
 Astur reserves each configured device per worker session. If two workers select the same physical device, the second worker fails with a reservation error instead of silently fighting over the app. Set the top-level `workers` value to the number of available devices, keep project selectors unique, and set `workers: 1` inside each project that maps to one physical device.
 
@@ -633,7 +645,7 @@ A single phone or simulator cannot run two native app sessions at the same time.
 When filtering a parallel run to one file and one project, pass the file before `--project`:
 
 ```bash
-npm run test:parallel:spec -- android-native/login.test.ts --project ios-simulator
+npm run test:parallel:spec -- specs/login.test.ts --project ios-simulator
 ```
 
 `--project` is variadic in Playwright, so anything after it can be read as another project name.

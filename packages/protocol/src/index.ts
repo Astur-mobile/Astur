@@ -280,6 +280,43 @@ export interface WebViewEndpoint {
   cdpUrl: string;
 }
 
+export type WebLocatorStrategy = 'testid' | 'id' | 'role' | 'text' | 'css';
+
+export interface WebLocatorDescriptor {
+  strategy: WebLocatorStrategy;
+  value: string;
+  /** Accessible name, only for the `role` strategy. */
+  name?: string;
+}
+
+export interface WebElementSnapshot {
+  tag: string;
+  id?: string;
+  testId?: string;
+  role?: string;
+  name?: string;
+  value?: string;
+  /** CSS pixels relative to the WebView viewport. */
+  bounds: { x: number; y: number; width: number; height: number };
+  visible: boolean;
+  enabled: boolean;
+  /** The best (most stable) locator Astur would generate for this element. */
+  locator: WebLocatorDescriptor;
+  children: WebElementSnapshot[];
+}
+
+export interface WebTreeSnapshot {
+  /** window.devicePixelRatio — maps CSS px (bounds) to device px for overlays. */
+  devicePixelRatio: number;
+  /** Visual viewport size in CSS px. */
+  viewport: { width: number; height: number };
+  url: string;
+  title: string;
+  root: WebElementSnapshot;
+}
+
+export type WebElementAction = 'fill' | 'tap' | 'clear' | 'select';
+
 export interface DeviceFileEntry {
   name: string;
   path: string;
@@ -466,6 +503,14 @@ export interface InspectorSession {
   clearHighlight(): Promise<void>;
   generateLocator(selector: ElementSelector): Promise<LocatorSuggestion[]>;
   executeAction(action: InspectorAction): Promise<void>;
+  /**
+   * Reads the DOM of the device's active WebView (if any) so the inspector can
+   * splice web elements into the UI tree with real DOM locators. Resolves
+   * undefined when the platform/app exposes no inspectable WebView.
+   */
+  webSnapshot?(): Promise<WebTreeSnapshot | undefined>;
+  /** Performs a fill/tap/clear/select on a WebView DOM element by its locator. */
+  webAct?(descriptor: WebLocatorDescriptor, action: WebElementAction, value?: string): Promise<void>;
 }
 
 export interface CommandEnvelope<TParams = unknown> {

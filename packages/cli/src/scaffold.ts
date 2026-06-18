@@ -144,7 +144,7 @@ export function buildInitFiles(answers: InitAnswers): InitFile[] {
       contents: buildPlaywrightConfig(answers)
     },
     {
-      path: 'tests/example.test.ts',
+      path: 'specs/example.test.ts',
       contents: buildExampleTest()
     },
     {
@@ -179,7 +179,7 @@ function buildPlaywrightConfig(answers: InitAnswers): string {
   return `import { defineConfig } from '@astur-mobile/test';
 
 export default defineConfig({
-  testDir: './tests',
+  testDir: './specs',
   timeout: 120_000,
   outputDir: 'test-results/mobile',
   reporter: [
@@ -357,7 +357,7 @@ npx astur-mobile test
 ## What Was Generated
 
 - \`playwright.config.ts\`: Playwright projects and Astur device/app config.
-- \`tests/example.test.ts\`: starter mobile test.
+- \`specs/example.test.ts\`: starter mobile test.
 - \`.gitignore\`: default ignored output folders, if one did not already exist.
 
 ## Selected Platforms
