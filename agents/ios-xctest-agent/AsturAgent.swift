@@ -65,6 +65,12 @@ private struct AsturElementActionOptions {
     let textInputMode: String?
 }
 
+private struct TextInputProfile {
+    let secure: Bool
+    let currentValue: String?
+    let empty: Bool
+}
+
 private struct AsturPoint {
     let x: Int
     let y: Int
@@ -613,31 +619,23 @@ final class AsturAgent {
         let element = try resolveElement(selector, options: options)
         boundedTap(element)
 
-        let secure = element.elementType == .secureTextField
+        let profile = textInputProfile(element)
 
         // Skip the slow clear+type entirely when the field already holds the
         // target value. Secure fields report a masked value, so always rewrite.
-        if clear && !secure, let current = stringValue(element.value), current == value {
+        if clear && !profile.secure, profile.currentValue == value {
             return
         }
 
-        if clear {
+        if clear && !profile.empty {
             clearText(element)
         }
 
-        // Field-aware input strategy:
-        //  - explicit "type"/"paste" wins,
-        //  - secure or short values type (paste into secure fields is unreliable,
-        //    and the long-press paste menu costs more than typing a few chars),
-        //  - longer plain values paste (far faster than per-character typeText).
-        let usePaste: Bool
-        switch options.textInputMode {
-        case "paste": usePaste = true
-        case "type": usePaste = false
-        default: usePaste = !secure && value.count > 4
+        if value.isEmpty {
+            return
         }
 
-        if usePaste {
+        if shouldPasteText(value, profile: profile, requestedMode: options.textInputMode) {
             pasteText(value, into: element)
         } else {
             element.typeText(value)
@@ -816,8 +814,8 @@ final class AsturAgent {
     /// whole command timeout: wait briefly for hittability, otherwise fall back to a
     /// coordinate tap at the element centre (which performs no hittability wait and
     /// so cannot spin for ~30s).
-    private func boundedTap(_ element: XCUIElement) {
-        if waitForHittable(element, timeoutMs: 2_500) {
+    private func boundedTap(_ element: XCUIElement, timeoutMs: Int = 2_500) {
+        if waitForHittable(element, timeoutMs: timeoutMs) {
             element.tap()
         } else {
             element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -1283,12 +1281,17 @@ final class AsturAgent {
     }
 
     private func pasteText(_ value: String, into element: XCUIElement) {
+        let previousPasteboardItems = UIPasteboard.general.items
         UIPasteboard.general.string = value
+        defer {
+            UIPasteboard.general.items = previousPasteboardItems
+        }
+
         element.press(forDuration: 0.5) // 500ms is the iOS minimum long-press (was 800ms)
 
         let paste = app.menuItems["Paste"].firstMatch
-        if paste.waitForExistence(timeout: 0.8) {
-            paste.tap()
+        if tapMenuItem(paste, timeoutMs: 800) {
+            tapPastePermissionAlertIfPresent()
             usleep(80_000) // brief settle (was 150ms)
             return
         }
@@ -1300,9 +1303,60 @@ final class AsturAgent {
     private func selectAllText(in element: XCUIElement) {
         element.press(forDuration: 0.5) // 500ms (was 800ms)
         let selectAll = app.menuItems["Select All"].firstMatch
-        if selectAll.waitForExistence(timeout: 0.6) {
-            selectAll.tap()
+        if tapMenuItem(selectAll, timeoutMs: 600) {
             usleep(60_000) // brief settle (was 120ms)
+        }
+    }
+
+    private func tapMenuItem(_ element: XCUIElement, timeoutMs: Int) -> Bool {
+        let timeout = Double(max(0, timeoutMs)) / 1_000
+        guard element.waitForExistence(timeout: timeout) else {
+            return false
+        }
+
+        boundedTap(element, timeoutMs: min(500, timeoutMs))
+        return true
+    }
+
+    private func tapPastePermissionAlertIfPresent() {
+        // iOS 16+ may show a paste-consent alert when test automation pastes via
+        // UIPasteboard. Since the agent selected paste as an optimization, it also
+        // owns clearing this prompt; otherwise a fast fill path turns into a
+        // user-facing blocker in codegen and tests.
+        for host in [app, XCUIApplication(bundleIdentifier: "com.apple.springboard")] {
+            let allow = host.alerts.buttons["Allow Paste"].firstMatch
+            if allow.waitForExistence(timeout: 0.4) {
+                boundedTap(allow, timeoutMs: 500)
+                usleep(120_000)
+                return
+            }
+        }
+    }
+
+    private func textInputProfile(_ element: XCUIElement) -> TextInputProfile {
+        let current = stringValue(element.value)
+        let placeholder = element.placeholderValue
+        let hasCurrentValue = current?.isEmpty == false && current != placeholder
+
+        return TextInputProfile(
+            secure: element.elementType == .secureTextField,
+            currentValue: hasCurrentValue ? current : nil,
+            empty: !hasCurrentValue
+        )
+    }
+
+    private func shouldPasteText(_ value: String, profile: TextInputProfile, requestedMode: String?) -> Bool {
+        if profile.secure {
+            return false
+        }
+
+        switch requestedMode {
+        case "type":
+            return false
+        case "paste":
+            return true
+        default:
+            return false
         }
     }
 
