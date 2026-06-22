@@ -475,10 +475,11 @@ await device.keyboard.show(device.getByLabel('Password'));
 await device.getByRole('button', { name: 'Sign in' }).tap();
 ```
 
-iOS fill defaults to paste-backed input to avoid XCTest `typeText` autocorrection. Use key-by-key input only when the keyboard behavior itself is under test:
+iOS fill uses XCTest `typeText` for secure and short values, and a paste-backed path for longer non-secure replacement fills. Paste remains available as an explicit opt-in when you want to force it for a specific non-secure field:
 
 ```ts
-await device.getByLabel('Name').fill('Amr', { textInputMode: 'type' });
+await device.getByLabel('Name').fill('Amr');
+await device.getByLabel('Bio').fill('Long local-only text', { textInputMode: 'paste' });
 ```
 
 ## Native And WebView Contexts

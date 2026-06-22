@@ -212,6 +212,7 @@ async function codegen(args: string[]): Promise<void> {
         performDeviceAction: (action) => runInspectorDeviceAction(device, action),
         performTap: (point) => device.tap(point),
         performSwipe: (gesture) => device.swipe(gesture),
+        performDrag: (gesture) => device.drag(gesture),
         installApp: (path) => device.app.install(path),
         performAppAction: async (action, options) => {
           if (action === 'launch' && device.deviceInfo.platform === 'ios') {

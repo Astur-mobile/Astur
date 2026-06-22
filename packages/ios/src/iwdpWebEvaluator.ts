@@ -59,7 +59,37 @@ export interface IwdpEvaluatorOptions {
 // the cache by mode and run simulator mode on a separate port to avoid collision.
 let sharedProxy: ChildProcess | undefined;
 let sharedProxyKey: string | undefined;
+let proxyCleanupRegistered = false;
 const SIMULATOR_PORT_OFFSET = 30;
+
+// Kill any ios-webkit-debug-proxy still bound to this port from a previous session.
+// iwdp's port config appears in its argv (e.g. "null:9251,:9252-9351"), so we match
+// on that. Leaked daemons (from codegen sessions that exited) otherwise hold the port
+// and, after a simulator reboot, point at a stale webinspectord socket — starving a
+// fresh session of the live WebView page.
+function killProxiesOnPort(basePort: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const child = spawn('pkill', ['-f', `null:${basePort},`], { stdio: 'ignore' });
+    child.on('error', () => resolve());
+    child.on('close', () => resolve());
+  });
+}
+
+// Ensure our spawned proxy dies with this process (it is also non-detached, so a
+// Ctrl-C to the codegen process group reaches it — this covers clean exits).
+function registerProxyCleanup(): void {
+  if (proxyCleanupRegistered) {
+    return;
+  }
+  proxyCleanupRegistered = true;
+  process.once('exit', () => {
+    try {
+      sharedProxy?.kill();
+    } catch {
+      // best effort
+    }
+  });
+}
 
 function httpGetJson<T>(url: string, timeoutMs = 2_000): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -96,17 +126,24 @@ async function ensureProxy(
   const basePort = simulatorSocket ? requestedBasePort + SIMULATOR_PORT_OFFSET : requestedBasePort;
   const key = simulatorSocket ?? 'usbmux';
 
-  // Reuse our daemon only when it's the same mode and still listening.
-  if (sharedProxyKey === key && await isProxyUp(basePort)) {
+  // Reuse only the proxy WE started in this process — same mode, still alive and
+  // listening. A foreign proxy from a previous session may hold the port while
+  // pointing at a dead socket, so we never trust one we did not spawn.
+  if (sharedProxyKey === key && sharedProxy && sharedProxy.exitCode === null && await isProxyUp(basePort)) {
     return basePort;
   }
 
-  // Mode switch: retire the proxy we started for the other mode before rebinding.
-  if (sharedProxy && sharedProxyKey !== key) {
+  // Retire our own stale/other-mode proxy.
+  if (sharedProxy) {
     sharedProxy.kill();
     sharedProxy = undefined;
     sharedProxyKey = undefined;
   }
+
+  // Clear leaked proxies holding this port (previous codegen sessions), then let the
+  // port settle before rebinding.
+  await killProxiesOnPort(basePort);
+  await delay(250);
 
   const portRange = `null:${basePort},:${basePort + 1}-${basePort + 100}`;
   const args = simulatorSocket
@@ -114,10 +151,12 @@ async function ensureProxy(
     : ['-c', portRange];
 
   try {
-    sharedProxy = spawn(binary, args, { stdio: 'ignore', detached: true });
+    // Not detached: tie the proxy's lifetime to this process so it can't leak.
+    sharedProxy = spawn(binary, args, { stdio: 'ignore' });
     sharedProxy.unref();
     sharedProxy.on('error', () => undefined);
     sharedProxyKey = key;
+    registerProxyCleanup();
   } catch (error) {
     sharedProxyKey = undefined;
     throw iwdpMissingError(binary, error);

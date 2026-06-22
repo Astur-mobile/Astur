@@ -2,6 +2,21 @@
 
 What's new in each Astur release.
 
+## 0.4.0-beta.0
+
+### Improved
+
+- **Faster iOS input fills.** Short and secure values stay on the reliable typed path, long non-secure replacement fills can use paste, and iOS field state is verified after fill.
+- **Better keyboard handling on iOS.** Taps are bounded, keyboard obstruction checks are frame-based, and multi-field flows avoid unnecessary dismiss/reopen cycles.
+- **WebView fills stay in web context.** Inspector/codegen now remaps overlapping native WebView fields back to their DOM node, so the second fill does not accidentally route through the native iOS agent.
+- **Drag-and-drop in codegen.** Inspector has a Drag mode and records drag actions into generated test code.
+- **Cleaner iOS WebView proxy lifecycle.** Stale `ios-webkit-debug-proxy` processes are cleared before a new session binds to the same port.
+
+### Release
+
+- Bumped public packages to `0.4.0-beta.0`.
+- Regenerated `package-lock.json` after dependency and package version updates.
+
 ## 0.3.0-beta.0
 
 ### New

@@ -65,6 +65,12 @@ private struct AsturElementActionOptions {
     let textInputMode: String?
 }
 
+private struct TextInputProfile {
+    let secure: Bool
+    let currentValue: String?
+    let empty: Bool
+}
+
 private struct AsturPoint {
     let x: Int
     let y: Int
@@ -197,7 +203,7 @@ final class AsturAgent {
                let ms = UInt32(raw) {
                 return ms * 1_000
             }
-            return 1_000_000
+            return 500_000
         }()
 
         var patched = 0
@@ -338,12 +344,7 @@ final class AsturAgent {
     }
 
     private func inspectorScreenshotBase64() -> String {
-        let window = app.windows.firstMatch
-        if window.exists, !window.frame.isEmpty {
-            return window.screenshot().pngRepresentation.base64EncodedString()
-        }
-
-        return app.screenshot().pngRepresentation.base64EncodedString()
+        return XCUIScreen.main.screenshot().pngRepresentation.base64EncodedString()
     }
 
     func dispatch(_ command: AsturCommand) -> AsturCommandResult {
@@ -613,34 +614,43 @@ final class AsturAgent {
         let element = try resolveElement(selector, options: options)
         boundedTap(element)
 
-        let secure = element.elementType == .secureTextField
+        let profile = textInputProfile(element)
 
         // Skip the slow clear+type entirely when the field already holds the
         // target value. Secure fields report a masked value, so always rewrite.
-        if clear && !secure, let current = stringValue(element.value), current == value {
+        if clear && !profile.secure, profile.currentValue == value {
             return
         }
 
-        if clear {
-            clearText(element)
+        if value.isEmpty {
+            if clear && !profile.empty {
+                clearText(element)
+            }
+            return
         }
 
-        // Field-aware input strategy:
-        //  - explicit "type"/"paste" wins,
-        //  - secure or short values type (paste into secure fields is unreliable,
-        //    and the long-press paste menu costs more than typing a few chars),
-        //  - longer plain values paste (far faster than per-character typeText).
-        let usePaste: Bool
-        switch options.textInputMode {
-        case "paste": usePaste = true
-        case "type": usePaste = false
-        default: usePaste = !secure && value.count > 4
-        }
-
-        if usePaste {
-            pasteText(value, into: element)
+        let canReplaceWithPaste = clear || profile.empty
+        if canReplaceWithPaste && shouldPasteText(value, profile: profile, requestedMode: options.textInputMode) {
+            pasteText(value, into: element, replacing: clear && !profile.empty)
         } else {
+            if clear && !profile.empty {
+                clearText(element)
+            }
             element.typeText(value)
+        }
+
+        // Native typeText can drop characters when the soft keyboard / QuickType
+        // (Passwords) bar is still animating, leaving a truncated value (e.g. "test"
+        // -> "tt"). Verify the field landed the value and retry for non-secure fields.
+        // (Secure fields report a masked value, so the comparison can't be made.) The
+        // value check returns immediately when correct, so a good fill pays nothing.
+        if !profile.secure {
+            var attempts = 0
+            while attempts < 2 && !waitForTextInputValue(element, value, timeoutMs: 500) {
+                attempts += 1
+                clearText(element)
+                element.typeText(value)
+            }
         }
 
         // keyboard:auto policy — leave the keyboard up after typing. The next
@@ -744,7 +754,7 @@ final class AsturAgent {
         for title in ["Done", "Return", "Go", "Search", "Next"] {
             let button = keyboard.buttons[title]
             if button.exists {
-                if waitForHittable(button, timeoutMs: 2_000) {
+                if waitForHittable(button, timeoutMs: 500) {
                     button.tap()
                     return
                 }
@@ -816,8 +826,8 @@ final class AsturAgent {
     /// whole command timeout: wait briefly for hittability, otherwise fall back to a
     /// coordinate tap at the element centre (which performs no hittability wait and
     /// so cannot spin for ~30s).
-    private func boundedTap(_ element: XCUIElement) {
-        if waitForHittable(element, timeoutMs: 2_500) {
+    private func boundedTap(_ element: XCUIElement, timeoutMs: Int = 700) {
+        if waitForHittable(element, timeoutMs: timeoutMs) {
             element.tap()
         } else {
             element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -1282,28 +1292,113 @@ final class AsturAgent {
         }
     }
 
-    private func pasteText(_ value: String, into element: XCUIElement) {
+    private func pasteText(_ value: String, into element: XCUIElement, replacing: Bool) {
+        let previousPasteboardItems = UIPasteboard.general.items
         UIPasteboard.general.string = value
+        defer {
+            UIPasteboard.general.items = previousPasteboardItems
+        }
+
+        if replacing {
+            clearText(element)
+        }
+
         element.press(forDuration: 0.5) // 500ms is the iOS minimum long-press (was 800ms)
 
         let paste = app.menuItems["Paste"].firstMatch
-        if paste.waitForExistence(timeout: 0.8) {
-            paste.tap()
-            usleep(80_000) // brief settle (was 150ms)
-            return
+        if tapMenuItem(paste, timeoutMs: 800) {
+            tapPastePermissionAlertIfPresent()
+            if waitForTextInputValue(element, value, timeoutMs: 800) {
+                return
+            }
         }
 
         // Fallback to character-by-character
+        if replacing {
+            clearText(element)
+        }
         element.typeText(value)
     }
 
     private func selectAllText(in element: XCUIElement) {
         element.press(forDuration: 0.5) // 500ms (was 800ms)
         let selectAll = app.menuItems["Select All"].firstMatch
-        if selectAll.waitForExistence(timeout: 0.6) {
-            selectAll.tap()
+        if tapMenuItem(selectAll, timeoutMs: 600) {
             usleep(60_000) // brief settle (was 120ms)
         }
+    }
+
+    private func tapMenuItem(_ element: XCUIElement, timeoutMs: Int) -> Bool {
+        let timeout = Double(max(0, timeoutMs)) / 1_000
+        guard element.waitForExistence(timeout: timeout) else {
+            return false
+        }
+
+        boundedTap(element, timeoutMs: min(500, timeoutMs))
+        return true
+    }
+
+    private func tapPastePermissionAlertIfPresent() {
+        // iOS 16+ may show a paste-consent alert when test automation pastes via
+        // UIPasteboard. Since the agent selected paste as an optimization, it also
+        // owns clearing this prompt; otherwise a fast fill path turns into a
+        // user-facing blocker in codegen and tests.
+        for host in [app, XCUIApplication(bundleIdentifier: "com.apple.springboard")] {
+            let allow = host.alerts.buttons["Allow Paste"].firstMatch
+            if allow.waitForExistence(timeout: 0.4) {
+                boundedTap(allow, timeoutMs: 500)
+                usleep(120_000)
+                return
+            }
+        }
+    }
+
+    private func textInputProfile(_ element: XCUIElement) -> TextInputProfile {
+        let current = stringValue(element.value)
+        let placeholder = element.placeholderValue
+        let hasCurrentValue = current?.isEmpty == false && current != placeholder
+
+        return TextInputProfile(
+            secure: element.elementType == .secureTextField,
+            currentValue: hasCurrentValue ? current : nil,
+            empty: !hasCurrentValue
+        )
+    }
+
+    private func shouldPasteText(_ value: String, profile: TextInputProfile, requestedMode: String?) -> Bool {
+        if profile.secure {
+            return false
+        }
+
+        switch requestedMode {
+        case "type":
+            return false
+        case "paste":
+            return true
+        default:
+            // Paste carries ~2-3s of fixed overhead (long-press, edit menu, paste-
+            // consent alert, value verification) and can fall back to typing on hosts
+            // (e.g. React Native) where the long-press menu is flaky — paying both
+            // costs. typeText only overtakes that for genuinely long strings, so keep
+            // the fast/reliable typeText path for short and medium values and reserve
+            // auto-paste for long text. Explicit `textInputMode: "paste"` still forces it.
+            return value.count >= 80
+        }
+    }
+
+    private func waitForTextInputValue(_ element: XCUIElement, _ expected: String, timeoutMs: Int) -> Bool {
+        let deadline = Date().addingTimeInterval(Double(max(0, timeoutMs)) / 1_000)
+        repeat {
+            if textInputValueEquals(element, expected) {
+                return true
+            }
+            usleep(50_000)
+        } while Date() < deadline
+        return textInputValueEquals(element, expected)
+    }
+
+    private func textInputValueEquals(_ element: XCUIElement, _ expected: String) -> Bool {
+        stringValue(element.value) == expected
     }
 
     private func isTextInputEmpty(_ element: XCUIElement) -> Bool {
