@@ -1,6 +1,6 @@
 {
   "name": "@astur-mobile/test",
-  "version": "0.3.0-beta.0",
+  "version": "0.4.0-beta.0",
   "description": "Playwright Test integration for Astur.",
   "keywords": [
     "astur",
@@ -44,16 +44,16 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/android": "0.3.0-beta.0",
-    "@astur-mobile/core": "0.3.0-beta.0",
-    "@astur-mobile/ios": "0.3.0-beta.0",
-    "@astur-mobile/protocol": "0.3.0-beta.0"
+    "@astur-mobile/android": "0.4.0-beta.0",
+    "@astur-mobile/core": "0.4.0-beta.0",
+    "@astur-mobile/ios": "0.4.0-beta.0",
+    "@astur-mobile/protocol": "0.4.0-beta.0"
   },
   "peerDependencies": {
     "@playwright/test": ">=1.50.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0"
+    "@playwright/test": "^1.61.0"
   },
   "repository": {
     "type": "git",

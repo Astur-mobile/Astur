@@ -57,6 +57,7 @@ export type ClientEvent =
   | { type: 'switch_device'; deviceId: string }
   | { type: 'app_action'; action: InspectorAppActionKind; identifier?: string; permission?: string }
   | { type: 'swipe'; gesture: SwipeGesture; record?: boolean }
+  | { type: 'drag'; gesture: SwipeGesture; record?: boolean }
   | { type: 'record_toggle' }
   | { type: 'add_step'; action: 'tap' | 'fill' | 'expect'; locator: string; value?: string; assertion?: AssertionKind }
   | { type: 'direct_action'; action: InspectorDirectActionKind; selector: ElementSelector; value?: string }
@@ -110,6 +111,12 @@ export interface RecordingStep {
   assertion?: AssertionKind;
   gesture?: SwipeGesture;
   point?: Coordinates;
+  /**
+   * When true, `locator` is a WebView DOM call (e.g. `getByTestId('astur-password')`)
+   * driven through `device.webContext()`, so codegen emits `web.<locator>.fill(...)`
+   * and a one-time `const web = await device.webContext();` setup line.
+   */
+  web?: boolean;
 }
 
 export interface InspectorSessionBinding {
@@ -142,6 +149,8 @@ export interface InspectorServerOptions {
   performTap?: (point: Coordinates) => Promise<void>;
   /** Perform a swipe gesture from the mirror. */
   performSwipe?: (gesture: SwipeGesture) => Promise<void>;
+  /** Perform a press-and-drag gesture from the mirror (no swipe/scroll shortcut). */
+  performDrag?: (gesture: SwipeGesture) => Promise<void>;
   /** Install an uploaded app artifact. */
   installApp?: (path: string) => Promise<void>;
   /** Launch or manage an app by package/bundle identifier. */
@@ -654,11 +663,10 @@ export function startInspectorServer(
               return;
             }
 
-            const step: RecordingStep = {
-              index: steps.length,
-              action: 'tap',
-              locator: normalizeRecordingLocator(suggestions[0].code),
-            };
+            const recordedLocator = normalizeRecordingLocator(suggestions[0].code);
+            const step: RecordingStep = recordedLocator
+              ? { index: steps.length, action: 'tap', locator: recordedLocator }
+              : { index: steps.length, action: 'tapPoint', locator: '', point: { x: event.x, y: event.y } };
             steps.push(step);
             broadcast({ type: 'step', ...step });
             broadcast({ type: 'status', message: 'Action OK: Tap recorded' });
@@ -670,33 +678,57 @@ export function startInspectorServer(
           // The fill/tap buttons act on the currently selected node. When that is a
           // spliced WebView DOM node, drive it by its DOM locator (in-page JS)
           // instead of the native driver.
-          const selectedWebNode = selectedUid
-            ? currentNodes.find((node) => node.uid === selectedUid && node.web)
+          const selectedNode = selectedUid
+            ? currentNodes.find((node) => node.uid === selectedUid)
+            : undefined;
+          const selectedWebNode = selectedNode
+            ? webActionTargetForSelectedNode(selectedNode, currentNodes, event.action)
             : undefined;
           try {
+            const runNative = () => activeInspector.executeAction(
+              event.action === 'fill'
+                ? { kind: 'fill', selector: event.selector, value: event.value ?? '', options: { timeout: 2_000 } }
+                : { kind: 'tap', selector: event.selector, options: { timeout: 2_000 } }
+            );
+            let usedWeb = false;
             await runDeviceAction(async () => {
               if (selectedWebNode?.web && activeInspector.webAct) {
-                await activeInspector.webAct(
-                  selectedWebNode.web,
-                  event.action === 'fill' ? 'fill' : 'tap',
-                  event.value
-                );
-              } else if (event.action === 'fill') {
-                await activeInspector.executeAction({
-                  kind: 'fill',
-                  selector: event.selector,
-                  value: event.value ?? '',
-                  options: { timeout: 2_000 }
-                });
+                try {
+                  await activeInspector.webAct(
+                    selectedWebNode.web,
+                    event.action === 'fill' ? 'fill' : 'tap',
+                    event.value
+                  );
+                  usedWeb = true;
+                } catch {
+                  // The WebView DOM context may have momentarily dropped — fall back to
+                  // the native driver rather than failing the action outright.
+                  await runNative();
+                }
               } else {
-                await activeInspector.executeAction({
-                  kind: 'tap',
-                  selector: event.selector,
-                  options: { timeout: 2_000 }
-                });
+                await runNative();
               }
             });
-            broadcast({ type: 'status', message: `Action OK: ${event.action === 'fill' ? 'Filled' : 'Tapped'}${selectedWebNode ? ' (web)' : ''}` });
+
+            // Record the Fill/Tap button action while recording so codegen captures it.
+            // Web actions record as a webContext call; native actions as a device locator.
+            if (recording) {
+              const value = event.action === 'fill' ? (event.value ?? '') : undefined;
+              const step: RecordingStep = usedWeb && selectedWebNode?.web
+                ? { index: steps.length, action: event.action, locator: webContextLocatorCall(selectedWebNode.web), web: true, value }
+                : {
+                    index: steps.length,
+                    action: event.action,
+                    locator: normalizeRecordingLocator(
+                      selectedNode ? (suggestLocatorsForNode(selectedNode, currentNodes)[0]?.code ?? '') : ''
+                    ),
+                    value
+                  };
+              steps.push(step);
+              broadcast({ type: 'step', ...step });
+            }
+
+            broadcast({ type: 'status', message: `Action OK: ${event.action === 'fill' ? 'Filled' : 'Tapped'}${usedWeb ? ' (web)' : ''}` });
           } catch (error) {
             ws.send(JSON.stringify({
               type: 'status',
@@ -900,6 +932,50 @@ export function startInspectorServer(
           break;
         }
 
+        case 'drag': {
+          if (!options.performDrag) {
+            ws.send(JSON.stringify({ type: 'status', message: 'Action Error: Drag is unavailable in this session.' }));
+            break;
+          }
+
+          const now = Date.now();
+          if (gestureCommandInFlight || now - lastGestureCommandAt < 350) {
+            ws.send(JSON.stringify({ type: 'gesture_ack' }));
+            break;
+          }
+
+          gestureCommandInFlight = true;
+          lastGestureCommandAt = now;
+          try {
+            await runDeviceAction(() => options.performDrag!(event.gesture));
+            if (recording && event.record !== false) {
+              // Record element-sourced when the drag start resolves to a stable
+              // locator (getByTestId(...).dragTo({x,y})); else fall back to a raw
+              // coordinate drag.
+              const startNode = findUiNodeAtPoint(currentNodes, event.gesture.start, { preferActionable: true });
+              const srcSuggestions = startNode ? suggestLocatorsForNode(startNode, currentNodes) : [];
+              const srcLocator = srcSuggestions[0] ? normalizeRecordingLocator(srcSuggestions[0].code) : '';
+              const step: RecordingStep = {
+                index: steps.length,
+                action: 'drag',
+                locator: srcLocator,
+                gesture: event.gesture
+              };
+              steps.push(step);
+              broadcast({ type: 'step', ...step });
+            }
+            broadcast({ type: 'status', message: recording ? 'Action OK: Drag recorded' : 'Action OK: Dragged' });
+          } catch (error) {
+            ws.send(JSON.stringify({
+              type: 'status',
+              message: `Action Error: Drag failed: ${formatActionError(error)}`
+            }));
+          } finally {
+            gestureCommandInFlight = false;
+          }
+          break;
+        }
+
         case 'record_toggle': {
           recording = !recording;
           broadcast({ type: 'status', message: recording ? 'Recording ON' : 'Recording OFF' });
@@ -1028,7 +1104,12 @@ export function startInspectorServer(
     let frameInFlight = false;
 
     async function pushFrame(): Promise<InspectorRefreshResult> {
-      if (clients.size === 0 || frameInFlight || devicePollingPaused()) {
+      // Keep the mirror live even during a device action. A screenshot is read-only:
+      // it can't disturb the fill, re-focus the field, or drop the WebView context.
+      // Pausing it (only the heavy tree/WebView reads are paused — see pushTree) made
+      // a fill look like nothing happened in the mirror while the simulator already
+      // showed the typed text and keyboard.
+      if (clients.size === 0 || frameInFlight) {
         return 'busy';
       }
 
@@ -1315,6 +1396,19 @@ function webLocatorCode(descriptor: WebLocatorDescriptor): string {
     case 'role': return `device.getByRole(${JSON.stringify(descriptor.value)}${descriptor.name ? `, { name: ${JSON.stringify(descriptor.name)} }` : ''})`;
     case 'text': return `device.getByText(${JSON.stringify(descriptor.value)})`;
     default: return `device.locator(${JSON.stringify(descriptor.value)})`;
+  }
+}
+
+// Call form for a WebView DOM locator under a `web` context handle (no `device.`
+// prefix), e.g. `getByTestId('astur-password')` — used in recorded codegen as
+// `web.<call>.fill(...)` after `const web = await device.webContext();`.
+function webContextLocatorCall(descriptor: WebLocatorDescriptor): string {
+  switch (descriptor.strategy) {
+    case 'testid': return `getByTestId(${JSON.stringify(descriptor.value)})`;
+    case 'role': return `getByRole(${JSON.stringify(descriptor.value)}${descriptor.name ? `, { name: ${JSON.stringify(descriptor.name)} }` : ''})`;
+    case 'text': return `getByText(${JSON.stringify(descriptor.value)})`;
+    case 'id':
+    default: return `getById(${JSON.stringify(descriptor.value)})`;
   }
 }
 
@@ -1678,6 +1772,12 @@ function scoreInspectableNode(node: UiNode, options: { preferActionable?: boolea
   }
 
   let score = 0;
+  // Prefer the WebView DOM node over an overlapping native accessibility node at the
+  // same point. Inside a WebView both exist; the DOM node fills/taps reliably (webAct),
+  // while the native overlay — especially secure text fields — often fails. This only
+  // affects spliced web nodes (WebView regions); native screens are unchanged, and the
+  // tree still lets you pick the native node explicitly.
+  if (node.web) score += 100;
   if (normalizeLocatorToken(node.id)) score += 80;
   if (normalizeLocatorToken(node.label)) score += 70;
   if (normalizeLocatorToken(node.text)) score += 42;
@@ -1695,6 +1795,66 @@ function scoreInspectableNode(node: UiNode, options: { preferActionable?: boolea
   }
 
   return score + Math.min(node.depth, 14);
+}
+
+function webActionTargetForSelectedNode(
+  selected: UiNode,
+  nodes: UiNode[],
+  action: 'fill' | 'tap'
+): UiNode | undefined {
+  if (selected.web && webNodeSupportsAction(selected, action)) {
+    return selected;
+  }
+
+  const selectedArea = selected.bounds.width * selected.bounds.height;
+  if (selectedArea <= 0) {
+    return undefined;
+  }
+
+  const selectedCenter = centerOfBounds(selected.bounds);
+  let best: UiNode | undefined;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const node of nodes) {
+    if (!node.web || !node.visible || !node.enabled || !webNodeSupportsAction(node, action)) {
+      continue;
+    }
+
+    const overlap = intersectionArea(selected.bounds, node.bounds);
+    const nodeArea = node.bounds.width * node.bounds.height;
+    if (nodeArea <= 0 || overlap <= 0) {
+      continue;
+    }
+
+    const overlapRatio = overlap / Math.min(selectedArea, nodeArea);
+    const centerHit = containsPoint(node.bounds, selectedCenter);
+    if (!centerHit && overlapRatio < 0.55) {
+      continue;
+    }
+
+    const score = overlapRatio * 100
+      + (centerHit ? 20 : 0)
+      + Math.min(node.depth, 20)
+      - Math.log10(nodeArea) * 2;
+    if (!best || score > bestScore) {
+      best = node;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+function webNodeSupportsAction(node: UiNode, action: 'fill' | 'tap'): boolean {
+  if (!node.web) {
+    return false;
+  }
+
+  if (action === 'fill') {
+    return isFillableNode(node);
+  }
+
+  return isActionableNode(node);
 }
 
 function uiNodeMatchesSelector(node: UiNode, selector: ElementSelector): boolean {
@@ -1770,6 +1930,7 @@ function rolesForNode(node: UiNode): MobileRole[] {
   if (type.includes('switch')) roles.add('switch');
   if (type.includes('tab')) roles.add('tab');
   if (type.includes('edittext') || type.includes('textfield') || type.includes('securetextfield') || type.includes('searchfield') || type.includes('textinput')) roles.add('textbox');
+  if (type === 'web:input' || type === 'web:textarea' || type.includes('contenteditable')) roles.add('textbox');
   if (type.includes('textview') || type.includes('statictext') || type.includes('label')) roles.add('text');
 
   return [...roles];
@@ -1916,6 +2077,21 @@ function containsPoint(bounds: Bounds, point: { x: number; y: number }): boolean
     && point.y <= bounds.y + bounds.height;
 }
 
+function centerOfBounds(bounds: Bounds): Coordinates {
+  return {
+    x: Math.round(bounds.x + bounds.width / 2),
+    y: Math.round(bounds.y + bounds.height / 2)
+  };
+}
+
+function intersectionArea(a: Bounds, b: Bounds): number {
+  const left = Math.max(a.x, b.x);
+  const top = Math.max(a.y, b.y);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const bottom = Math.min(a.y + a.height, b.y + b.height);
+  return Math.max(0, right - left) * Math.max(0, bottom - top);
+}
+
 async function readAsturLogoDataUri(): Promise<string | undefined> {
   const candidates = [
     fileURLToPath(new URL('../assets/brand/astur-logo-dark.png', import.meta.url)),
@@ -1955,7 +2131,9 @@ function generateTestCode(steps: RecordingStep[], lang: 'typescript' | 'javascri
     ? `import { test, expect } from '@astur-mobile/test';`
     : `const { test, expect } = require('@astur-mobile/test');`;
 
-  const lines = steps.map((s) => generateRecordedStepCode(s));
+  // Web steps run through a WebView DOM context — emit the handle once.
+  const setup = steps.some((s) => s.web) ? ['  const web = await device.webContext();'] : [];
+  const lines = setup.concat(steps.map((s) => generateRecordedStepCode(s)));
 
   return `${importLine}\n\ntest('recorded flow', async ({ device }) => {\n${lines.join('\n')}\n});\n`;
 }
@@ -1963,8 +2141,22 @@ function generateTestCode(steps: RecordingStep[], lang: 'typescript' | 'javascri
 function generateRecordedStepCode(step: RecordingStep): string {
   const locator = normalizeRecordingLocator(step.locator);
 
+  if (step.web && locator) {
+    // WebView DOM action via the `web` context handle.
+    return step.action === 'fill'
+      ? `  await web.${locator}.fill(${JSON.stringify(step.value ?? '')});`
+      : `  await web.${locator}.tap();`;
+  }
+
   if (step.action === 'swipe' && step.gesture) {
     return `  await device.swipe(${JSON.stringify(step.gesture)});`;
+  }
+
+  if (step.action === 'drag' && step.gesture) {
+    if (locator) {
+      return `  await device.${locator}.dragTo({ x: ${step.gesture.end.x}, y: ${step.gesture.end.y} });`;
+    }
+    return `  await device.drag(${JSON.stringify(step.gesture)});`;
   }
 
   if (step.action === 'tapPoint' && step.point) {
@@ -1994,6 +2186,13 @@ function generateRecordedStepCode(step: RecordingStep): string {
     }
   }
 
+  if (!locator) {
+    // Never emit broken `device..tap()` — fall back to a coordinate tap when we
+    // have a point, otherwise leave a clear marker to re-record.
+    return step.point
+      ? `  await device.tap(${JSON.stringify(step.point)});`
+      : `  // TODO: tap target had no stable locator — re-record this step in Inspect mode`;
+  }
   return `  await device.${locator}.tap();`;
 }
 
@@ -2255,6 +2454,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 #phone-notch{display:none}
 #mirror-stage{position:relative;cursor:crosshair;overflow:hidden;border-radius:28px;background:#0a0a0f;box-shadow:0 24px 64px rgba(0,0,0,.48),0 0 0 1px rgba(255,255,255,.08);width:360px;height:720px;max-width:calc(100vw - 420px);max-height:calc(100vh - 96px)}
 #mirror-stage[data-mode="interact"]{cursor:pointer}
+#mirror-stage[data-mode="drag"]{cursor:grab}
 #mirror-stage.dragging{cursor:grabbing}
 #mirror-img{display:block;max-width:100%;user-select:none;pointer-events:none;border-radius:inherit}
 #mirror-img.placeholder{opacity:.15}
@@ -2393,6 +2593,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
           <div class="action-mode-row" role="group" aria-label="Mirror click mode">
             <button type="button" id="inspect-mode-btn" class="mode-btn active" title="Select elements in the mirror">Inspect</button>
             <button type="button" id="interact-mode-btn" class="mode-btn" title="Tap the device without recording">Interact</button>
+            <button type="button" id="drag-mode-btn" class="mode-btn" title="Press and drag on the mirror to move an element (e.g. drag-and-drop)">Drag</button>
           </div>
           <div class="element-action-row">
             <button type="button" id="element-tap-btn" class="element-action-btn" disabled>Tap</button>
@@ -2573,6 +2774,7 @@ const highlightOverlay = $('highlight-overlay');
 const inspectorHint = $('inspector-hint');
 const inspectModeBtn = $('inspect-mode-btn');
 const interactModeBtn = $('interact-mode-btn');
+const dragModeBtn = $('drag-mode-btn');
 const elementTapBtn = $('element-tap-btn');
 const elementFillInput = $('element-fill-input');
 const elementFillBtn = $('element-fill-btn');
@@ -3426,13 +3628,16 @@ function updateStepControls() {
 
 function setMirrorMode(mode) {
   mirrorMode = mode;
-  const interacting = mode === 'interact';
-  inspectModeBtn.classList.toggle('active', !interacting);
-  interactModeBtn.classList.toggle('active', interacting);
+  inspectModeBtn.classList.toggle('active', mode === 'inspect');
+  interactModeBtn.classList.toggle('active', mode === 'interact');
+  dragModeBtn.classList.toggle('active', mode === 'drag');
   mirrorStage.dataset.mode = mode;
-  inspectorHint.textContent = interacting
-    ? 'Tap the screen to interact with the device without recording.'
-    : 'Tap on the screen or select an element in the tree to generate locators.';
+  inspectorHint.textContent =
+    mode === 'interact'
+      ? 'Tap the screen to interact with the device without recording.'
+      : mode === 'drag'
+        ? 'Press and drag on the mirror to move an element. Turn on Record to capture it as a drag step.'
+        : 'Tap on the screen or select an element in the tree to generate locators.';
 }
 
 // ── Details ────────────────────────────────────────────────────────────────
@@ -3512,8 +3717,11 @@ mirrorStage.addEventListener('click', e => {
 
   const point = mirrorEventPoint(e);
   const performTap = mirrorMode === 'interact' && !recording;
-  if (recording || performTap) setBusy(true);
-  send({ type: 'click', x: point.x, y: point.y, record: recording, perform: performTap });
+  // In Drag mode a click only selects/inspects — it must never record a tap, so a
+  // small-movement drag can't leak a locator-less tap into the recording.
+  const recordTap = recording && mirrorMode !== 'drag';
+  if (recordTap || performTap) setBusy(true);
+  send({ type: 'click', x: point.x, y: point.y, record: recordTap, perform: performTap });
 });
 
 mirrorStage.addEventListener('wheel', e => {
@@ -3545,11 +3753,13 @@ mirrorStage.addEventListener('pointerup', e => {
 
   suppressNextClick = true;
   const end = mirrorEventPoint(e);
-  sendGesture({
-    start: start.point,
-    end,
-    durationMs: 350
-  });
+  if (mirrorMode === 'drag') {
+    // Press-and-hold then drag — routes to device.drag (no swipe/scroll shortcut),
+    // so draggable tiles actually pick up instead of scrolling the screen.
+    sendDrag({ start: start.point, end, durationMs: 700 });
+  } else {
+    sendGesture({ start: start.point, end, durationMs: 350 });
+  }
 });
 
 mirrorStage.addEventListener('pointercancel', e => {
@@ -3570,7 +3780,7 @@ function mirrorEventPoint(e) {
   };
 }
 
-function sendGesture(gesture) {
+function sendMirrorGesture(type, gesture) {
   const now = Date.now();
   if (gestureInFlight || now < nextGestureAllowedAt) {
     return false;
@@ -3580,7 +3790,7 @@ function sendGesture(gesture) {
   nextGestureAllowedAt = now + 450;
   setBusy(true);
   send({
-    type: 'swipe',
+    type,
     record: recording,
     gesture
   });
@@ -3595,6 +3805,14 @@ function sendGesture(gesture) {
   }, 1800);
 
   return true;
+}
+
+function sendGesture(gesture) {
+  return sendMirrorGesture('swipe', gesture);
+}
+
+function sendDrag(gesture) {
+  return sendMirrorGesture('drag', gesture);
 }
 
 function wheelSwipeGesture(e) {
@@ -3812,7 +4030,16 @@ function updateCodeBlock() {
   if (!steps.length) { codeBlock.textContent = '// No steps recorded yet'; return; }
   const lines = steps.map(s => {
     const locator = normalizeLocatorCode(s.locator);
+    if (s.web && locator) {
+      return s.action === 'fill'
+        ? '  await web.' + locator + '.fill(' + JSON.stringify(s.value || '') + ');'
+        : '  await web.' + locator + '.tap();';
+    }
     if (s.action === 'swipe' && s.gesture) return '  await device.swipe(' + JSON.stringify(s.gesture) + ');';
+    if (s.action === 'drag' && s.gesture) {
+      if (locator) return '  await device.' + locator + '.dragTo({ x: ' + s.gesture.end.x + ', y: ' + s.gesture.end.y + ' });';
+      return '  await device.drag(' + JSON.stringify(s.gesture) + ');';
+    }
     if (s.action === 'tapPoint' && s.point) return '  await device.tap(' + JSON.stringify(s.point) + ');';
     if (s.action === 'fill') return '  await device.' + locator + '.fill(' + JSON.stringify(s.value || '') + ');';
     if (s.action === 'expect') {
@@ -3832,12 +4059,18 @@ function updateCodeBlock() {
           return '  await expect(' + actual + ').toBeVisible();';
       }
     }
+    if (!locator) {
+      return s.point ? '  await device.tap(' + JSON.stringify(s.point) + ');' : '  // TODO: tap target had no stable locator';
+    }
     return '  await device.' + locator + '.tap();';
   });
   const imp = codeLang === 'typescript'
     ? "import { test, expect } from '@astur-mobile/test';"
     : "const { test, expect } = require('@astur-mobile/test');";
-  const body = imp + "\\n\\ntest('recorded flow', async ({ device }) => {\\n" + lines.join('\\n') + "\\n});\\n";
+  const allLines = steps.some(s => s.web)
+    ? ['  const web = await device.webContext();'].concat(lines)
+    : lines;
+  const body = imp + "\\n\\ntest('recorded flow', async ({ device }) => {\\n" + allLines.join('\\n') + "\\n});\\n";
   codeBlock.textContent = body;
 }
 
@@ -3987,6 +4220,7 @@ function runSelectedElementFill() {
   });
 }
 
+dragModeBtn.addEventListener('click', () => setMirrorMode('drag'));
 inspectModeBtn.addEventListener('click', () => setMirrorMode('inspect'));
 interactModeBtn.addEventListener('click', () => setMirrorMode('interact'));
 elementTapBtn.addEventListener('click', runSelectedElementTap);

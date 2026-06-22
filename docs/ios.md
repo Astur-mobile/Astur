@@ -205,7 +205,7 @@ You normally omit these. Override them only when debugging a custom agent endpoi
 
 ## Keyboard And Fill
 
-iOS text fill defaults to XCTest `typeText` through the XCUITest agent. This keeps CI and server runs prompt-free, because iOS can show a system confirmation sheet when an automation process pastes into the app.
+iOS text fill uses XCTest `typeText` for secure and short values, and a paste-backed path for longer non-secure replacement fills. This keeps password fields reliable while avoiding slow key-by-key entry for long text.
 
 ```ts
 await device.getByTestId('forms-main-input').fill('Astur native form automation');
@@ -213,7 +213,7 @@ await device.keyboard.hide();
 await device.keyboard.show(device.getByTestId('forms-main-input'));
 ```
 
-Paste is still available as an explicit opt-in for non-secure fields. Use it only when you control the device state and can tolerate the iOS paste permission behavior:
+Paste is also available as an explicit opt-in for non-secure fields:
 
 ```ts
 await device.getByLabel('Bio').fill('Long local-only text', { textInputMode: 'paste' });
@@ -252,7 +252,7 @@ Additional guidance:
 
 - Expose stable accessibility identifiers for every control you interact with. `getByTestId` / `getById` resolve in one query; broad text or role enumeration is inherently slower, especially on real devices.
 - Keep custom in-app animations short or non-looping on screens under test. A continuously animating view never lets XCTest reach idle, so the next action waits the full command timeout before failing.
-- Default iOS fill is the safest CI path because it avoids paste permission prompts. `{ textInputMode: 'paste' }` can be faster for long non-secure strings on controlled local devices, but do not use it as the server default.
+- Long non-secure replacement fills use paste to avoid slow key-by-key input. Secure fields always type, and `{ textInputMode: 'type' }` forces key-by-key input when an app rejects paste.
 
 ## Inspector On iOS
 

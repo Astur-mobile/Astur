@@ -203,7 +203,7 @@ final class AsturAgent {
                let ms = UInt32(raw) {
                 return ms * 1_000
             }
-            return 1_000_000
+            return 500_000
         }()
 
         var patched = 0
@@ -344,12 +344,7 @@ final class AsturAgent {
     }
 
     private func inspectorScreenshotBase64() -> String {
-        let window = app.windows.firstMatch
-        if window.exists, !window.frame.isEmpty {
-            return window.screenshot().pngRepresentation.base64EncodedString()
-        }
-
-        return app.screenshot().pngRepresentation.base64EncodedString()
+        return XCUIScreen.main.screenshot().pngRepresentation.base64EncodedString()
     }
 
     func dispatch(_ command: AsturCommand) -> AsturCommandResult {
@@ -627,18 +622,35 @@ final class AsturAgent {
             return
         }
 
-        if clear && !profile.empty {
-            clearText(element)
-        }
-
         if value.isEmpty {
+            if clear && !profile.empty {
+                clearText(element)
+            }
             return
         }
 
-        if shouldPasteText(value, profile: profile, requestedMode: options.textInputMode) {
-            pasteText(value, into: element)
+        let canReplaceWithPaste = clear || profile.empty
+        if canReplaceWithPaste && shouldPasteText(value, profile: profile, requestedMode: options.textInputMode) {
+            pasteText(value, into: element, replacing: clear && !profile.empty)
         } else {
+            if clear && !profile.empty {
+                clearText(element)
+            }
             element.typeText(value)
+        }
+
+        // Native typeText can drop characters when the soft keyboard / QuickType
+        // (Passwords) bar is still animating, leaving a truncated value (e.g. "test"
+        // -> "tt"). Verify the field landed the value and retry for non-secure fields.
+        // (Secure fields report a masked value, so the comparison can't be made.) The
+        // value check returns immediately when correct, so a good fill pays nothing.
+        if !profile.secure {
+            var attempts = 0
+            while attempts < 2 && !waitForTextInputValue(element, value, timeoutMs: 500) {
+                attempts += 1
+                clearText(element)
+                element.typeText(value)
+            }
         }
 
         // keyboard:auto policy — leave the keyboard up after typing. The next
@@ -742,7 +754,7 @@ final class AsturAgent {
         for title in ["Done", "Return", "Go", "Search", "Next"] {
             let button = keyboard.buttons[title]
             if button.exists {
-                if waitForHittable(button, timeoutMs: 2_000) {
+                if waitForHittable(button, timeoutMs: 500) {
                     button.tap()
                     return
                 }
@@ -814,7 +826,7 @@ final class AsturAgent {
     /// whole command timeout: wait briefly for hittability, otherwise fall back to a
     /// coordinate tap at the element centre (which performs no hittability wait and
     /// so cannot spin for ~30s).
-    private func boundedTap(_ element: XCUIElement, timeoutMs: Int = 2_500) {
+    private func boundedTap(_ element: XCUIElement, timeoutMs: Int = 700) {
         if waitForHittable(element, timeoutMs: timeoutMs) {
             element.tap()
         } else {
@@ -1280,11 +1292,15 @@ final class AsturAgent {
         }
     }
 
-    private func pasteText(_ value: String, into element: XCUIElement) {
+    private func pasteText(_ value: String, into element: XCUIElement, replacing: Bool) {
         let previousPasteboardItems = UIPasteboard.general.items
         UIPasteboard.general.string = value
         defer {
             UIPasteboard.general.items = previousPasteboardItems
+        }
+
+        if replacing {
+            clearText(element)
         }
 
         element.press(forDuration: 0.5) // 500ms is the iOS minimum long-press (was 800ms)
@@ -1292,11 +1308,15 @@ final class AsturAgent {
         let paste = app.menuItems["Paste"].firstMatch
         if tapMenuItem(paste, timeoutMs: 800) {
             tapPastePermissionAlertIfPresent()
-            usleep(80_000) // brief settle (was 150ms)
-            return
+            if waitForTextInputValue(element, value, timeoutMs: 800) {
+                return
+            }
         }
 
         // Fallback to character-by-character
+        if replacing {
+            clearText(element)
+        }
         element.typeText(value)
     }
 
@@ -1356,8 +1376,29 @@ final class AsturAgent {
         case "paste":
             return true
         default:
-            return false
+            // Paste carries ~2-3s of fixed overhead (long-press, edit menu, paste-
+            // consent alert, value verification) and can fall back to typing on hosts
+            // (e.g. React Native) where the long-press menu is flaky — paying both
+            // costs. typeText only overtakes that for genuinely long strings, so keep
+            // the fast/reliable typeText path for short and medium values and reserve
+            // auto-paste for long text. Explicit `textInputMode: "paste"` still forces it.
+            return value.count >= 80
         }
+    }
+
+    private func waitForTextInputValue(_ element: XCUIElement, _ expected: String, timeoutMs: Int) -> Bool {
+        let deadline = Date().addingTimeInterval(Double(max(0, timeoutMs)) / 1_000)
+        repeat {
+            if textInputValueEquals(element, expected) {
+                return true
+            }
+            usleep(50_000)
+        } while Date() < deadline
+        return textInputValueEquals(element, expected)
+    }
+
+    private func textInputValueEquals(_ element: XCUIElement, _ expected: String) -> Bool {
+        stringValue(element.value) == expected
     }
 
     private func isTextInputEmpty(_ element: XCUIElement) -> Bool {

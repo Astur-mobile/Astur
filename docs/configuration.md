@@ -475,7 +475,7 @@ await device.keyboard.show(device.getByLabel('Password'));
 await device.getByRole('button', { name: 'Sign in' }).tap();
 ```
 
-iOS fill defaults to XCTest `typeText` so CI and server runs do not hit the iOS paste permission sheet. Paste remains available as an explicit opt-in for non-secure fields when local speed matters more than avoiding the paste prompt:
+iOS fill uses XCTest `typeText` for secure and short values, and a paste-backed path for longer non-secure replacement fills. Paste remains available as an explicit opt-in when you want to force it for a specific non-secure field:
 
 ```ts
 await device.getByLabel('Name').fill('Amr');
