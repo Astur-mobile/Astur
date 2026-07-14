@@ -127,10 +127,11 @@ device.getByRole('button', { name: 'Sign in' });
 await expect(device.getByText('Welcome')).toBeVisible();
 await expect(device.getByLabel('Email')).toHaveValue('qa@example.com');
 await expect(device.getByRole('button', { name: 'Submit' })).toBeEnabled({ timeout: 5_000 });
+await expect(device.getByRole('menuitem')).toHaveCount(3);
 await expect.soft(device.getByText('Optional banner')).toBeHidden();
 ```
 
-Supported native matchers include `toBeVisible`, `toBeHidden`, `toExist`, `toBeEnabled`, `toBeDisabled`, `toBeSelected`, `toBeFocused`, `toHaveText`, `toContainText`, `toHaveValue`, `toHaveLabel`, `toHaveType`, and `toHaveBounds`.
+Supported native matchers include `toBeVisible`, `toBeHidden`, `toExist`, `toBeEnabled`, `toBeDisabled`, `toBeSelected`, `toBeFocused`, `toHaveText`, `toContainText`, `toHaveValue`, `toHaveLabel`, `toHaveType`, `toHaveBounds`, and `toHaveCount`.
 
 Native screenshots and Android file transfer are available on the same device fixture:
 
@@ -155,6 +156,27 @@ await device.lock();
 await device.unlock();
 await device.isLocked();
 ```
+
+## Reading Element State
+
+`MobileLocator` also exposes Playwright-style state readers, so tests can branch
+on native UI state without dropping down to raw snapshots:
+
+```ts
+const email = device.getByLabel('Email');
+
+await email.textContent();   // rendered text
+await email.inputValue();    // current input value
+await email.bounds();        // { x, y, width, height }
+await email.count();         // number of current matches (returns immediately)
+await email.isEnabled();     // also: isDisabled(), isSelected(), isFocused()
+
+await email.clear();         // empty the field (same engine path as fill)
+await email.waitFor({ state: 'visible' }); // 'visible' | 'hidden' | 'attached'
+```
+
+Readers auto-wait for the element with the same rules as actions; `count()` is
+the exception and reports the current match total without waiting.
 
 ## Gestures And Scrolling
 

@@ -87,6 +87,47 @@ describe('@astur-mobile/test expect matchers', () => {
     await asturExpect(locator).toContainText(/Web Lab/, wait);
     await asturExpect(locator).toHaveValue('qa@astur.dev', wait);
   });
+
+  it('asserts match counts with toHaveCount', async () => {
+    const session = createSession();
+    const textViews = new MobileLocator(session, by.type('android.widget.TextView'));
+    const missing = new MobileLocator(session, by.text('Nope'));
+    const wait = { timeout: 50, interval: 1 };
+
+    await asturExpect(textViews).toHaveCount(2, wait);
+    await asturExpect(missing).toHaveCount(0, wait);
+    await asturExpect(textViews).not.toHaveCount(5, wait);
+  });
+
+  it('reports the last observed count when toHaveCount fails', async () => {
+    const session = createSession();
+    const textViews = new MobileLocator(session, by.type('android.widget.TextView'));
+
+    let message = '';
+    try {
+      await asturExpect(textViews).toHaveCount(9, { timeout: 25, interval: 1 });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    asturExpect(message).toContain('to have count 9');
+    asturExpect(message).toContain('last saw 2');
+  });
+
+  it('routes MobileLocator through the mobile path even though it now has waitFor()', async () => {
+    const session = createSession();
+    const missing = new MobileLocator(session, by.text('Nope'));
+
+    let message = '';
+    try {
+      await asturExpect(missing).toBeVisible({ timeout: 25 });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    asturExpect(message).toContain('to be visible');
+    asturExpect(message).not.toContain('Playwright');
+  });
 });
 
 function createSession(snapshot: MobileElementSnapshot = tree): PlatformSession {

@@ -3,6 +3,31 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## 0.5.0-beta.0
+
+### Added
+
+- **Locator state readers and conveniences.** `MobileLocator` gains
+  `textContent()`, `inputValue()`, `bounds()`, `count()`, `isEnabled()`,
+  `isDisabled()`, `isSelected()`, `isFocused()`, `clear()`, and a
+  Playwright-style `waitFor({ state })` (`visible` / `hidden` / `attached`).
+  All are cross-platform and ride the existing snapshot/auto-wait pipeline.
+- **`toHaveCount` matcher.** `expect(locator).toHaveCount(n)` polls until the
+  number of matches equals `n` — for native `MobileLocator`s and Playwright web
+  locators alike — and reports the last observed count on failure.
+- **Native multi-match lookup on Android.** The UIAutomator agent now serves
+  `element.findAll` / `element.findMany`, so `queryAll()`, `count()`,
+  `device.findAll()`, and `device.findMany()` resolve on-device in a single
+  round trip instead of pulling and parsing a full UI-tree dump. Older
+  installed agent builds keep working: the host detects missing support and
+  falls back to the previous tree-snapshot path, including in `required` mode.
+
+### Fixed
+
+- **Locator routing in matchers.** Custom matchers now identify Playwright
+  locators without misclassifying `MobileLocator` (which also exposes a
+  `waitFor()` method as of this release).
+
 ## 0.3.0-beta.0
 
 ### Added

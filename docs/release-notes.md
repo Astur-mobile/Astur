@@ -2,6 +2,17 @@
 
 What's new in each Astur release.
 
+## 0.5.0-beta.0
+
+### New
+
+- **Read element state straight from locators.** `textContent()`, `inputValue()`, `bounds()`, `count()`, `isEnabled()`, `isDisabled()`, `isSelected()`, `isFocused()`, plus `clear()` and a Playwright-style `waitFor({ state })`.
+- **`toHaveCount` assertion.** `await expect(device.getByRole('menuitem')).toHaveCount(3)` — polls and retries like every other Astur matcher.
+
+### Improved
+
+- **Faster multi-match queries on Android.** `queryAll()`, `count()`, and `device.findMany()` now resolve natively on-device through the UIAutomator agent instead of dumping the whole UI tree. Older installed agent builds keep working through the previous path.
+
 ## 0.4.0-beta.0
 
 ### Improved

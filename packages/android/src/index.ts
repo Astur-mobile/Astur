@@ -42,6 +42,7 @@ import {
   centerOf,
   connectNativeAgentClient,
   findElement,
+  findElements,
   formatSelector,
   AsturError,
   delay,
@@ -838,6 +839,32 @@ class AndroidSession implements PlatformSession {
     }
 
     return findElement(await this.getTree(), selector);
+  }
+
+  async findElements(selector: ElementSelector): Promise<MobileElementSnapshot[]> {
+    // Agent builds that predate element.findAll do not advertise it; fall back to
+    // the tree snapshot (the same path queryAll used before this hook existed)
+    // instead of failing required-mode runs against an older installed agent.
+    if (this.nativeAgent?.info.capabilities.includes('element.findAll')) {
+      const command = await this.tryNativeCommand('element.findAll', { selector });
+      if (command.ok) {
+        return command.result;
+      }
+    }
+
+    return findElements(await this.getTree(), selector);
+  }
+
+  async findManyElements(selectors: ElementSelector[]): Promise<MobileElementSnapshot[]> {
+    if (this.nativeAgent?.info.capabilities.includes('element.findMany')) {
+      const command = await this.tryNativeCommand('element.findMany', { selectors });
+      if (command.ok) {
+        return command.result;
+      }
+    }
+
+    const root = await this.getTree();
+    return selectors.flatMap((selector) => findElements(root, selector));
   }
 
   async waitForElement(

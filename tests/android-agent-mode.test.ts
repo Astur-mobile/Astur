@@ -374,6 +374,140 @@ describe('Android native-agent mode', () => {
 
     expect(server.requests.filter((request) => request.method === 'gesture.tap')).toHaveLength(2);
   });
+
+  it('routes element.findAll and element.findMany through the endpoint when advertised', async () => {
+    const info: NativeAgentInfo = {
+      ...ANDROID_AGENT_INFO,
+      capabilities: ['agent.ping', 'element.findAll', 'element.findMany']
+    };
+    const match: MobileElementSnapshot = {
+      type: 'android.widget.TextView',
+      text: 'Welcome',
+      enabled: true,
+      visible: true,
+      bounds: { x: 0, y: 0, width: 100, height: 40 },
+      children: []
+    };
+
+    const server = await createAgentServer((request) => {
+      if (request.method === 'agent.ping') {
+        return { body: ok(request.id, info) };
+      }
+
+      if (request.method === 'element.findAll') {
+        return { body: ok(request.id, [match]) };
+      }
+
+      if (request.method === 'element.findMany') {
+        return { body: ok(request.id, [match, match]) };
+      }
+
+      return {
+        status: 404,
+        body: {
+          id: request.id,
+          ok: false,
+          error: { code: 'UNKNOWN_COMMAND', message: request.method }
+        }
+      };
+    });
+    servers.push(server);
+
+    const driver = createDriver();
+    const session = await driver.createSession(normalizeCapabilities({
+      platform: 'android',
+      device: {
+        id: ANDROID_DEVICE.id
+      },
+      agent: {
+        mode: 'required',
+        endpoint: server.endpoint,
+        launchTimeout: 500,
+        commandTimeout: 500
+      }
+    }));
+
+    const selector = { strategy: 'text', value: 'Welcome', exact: true } as const;
+
+    await expect(session.findElements!(selector)).resolves.toEqual([match]);
+    await expect(session.findManyElements!([selector, selector])).resolves.toEqual([match, match]);
+
+    expect(server.requests.map((request) => request.method)).toContain('element.findAll');
+    expect(server.requests.map((request) => request.method)).toContain('element.findMany');
+    expect(server.requests.filter((request) => request.method === 'tree.get')).toHaveLength(0);
+  });
+
+  it('falls back to the tree snapshot for findElements when the agent does not advertise element.findAll, even in required mode', async () => {
+    const welcome: MobileElementSnapshot = {
+      type: 'android.widget.TextView',
+      text: 'Welcome',
+      enabled: true,
+      visible: true,
+      bounds: { x: 0, y: 0, width: 100, height: 40 },
+      children: []
+    };
+    const other: MobileElementSnapshot = {
+      type: 'android.widget.TextView',
+      text: 'Other',
+      enabled: true,
+      visible: true,
+      bounds: { x: 0, y: 60, width: 100, height: 40 },
+      children: []
+    };
+    const treeWithMatches: MobileElementSnapshot = {
+      ...ANDROID_TREE,
+      children: [welcome, { ...welcome, bounds: { x: 0, y: 120, width: 100, height: 40 } }, other]
+    };
+
+    // ANDROID_AGENT_INFO advertises tree.get but not element.findAll/findMany.
+    const server = await createAgentServer((request) => {
+      if (request.method === 'agent.ping') {
+        return { body: ok(request.id, ANDROID_AGENT_INFO) };
+      }
+
+      if (request.method === 'tree.get') {
+        return { body: ok(request.id, treeWithMatches) };
+      }
+
+      return {
+        status: 404,
+        body: {
+          id: request.id,
+          ok: false,
+          error: { code: 'UNKNOWN_COMMAND', message: request.method }
+        }
+      };
+    });
+    servers.push(server);
+
+    const driver = createDriver();
+    const session = await driver.createSession(normalizeCapabilities({
+      platform: 'android',
+      device: {
+        id: ANDROID_DEVICE.id
+      },
+      agent: {
+        mode: 'required',
+        endpoint: server.endpoint,
+        launchTimeout: 500,
+        commandTimeout: 500
+      }
+    }));
+
+    const welcomeSelector = { strategy: 'text', value: 'Welcome', exact: true } as const;
+    const otherSelector = { strategy: 'text', value: 'Other', exact: true } as const;
+
+    const found = await session.findElements!(welcomeSelector);
+    expect(found).toHaveLength(2);
+
+    const many = await session.findManyElements!([welcomeSelector, otherSelector]);
+    expect(many).toHaveLength(3);
+
+    const methods = server.requests.map((request) => request.method);
+    expect(methods).not.toContain('element.findAll');
+    expect(methods).not.toContain('element.findMany');
+    expect(methods.filter((method) => method === 'tree.get').length).toBeGreaterThan(0);
+  });
 });
 
 function createDriver() {

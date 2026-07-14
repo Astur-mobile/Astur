@@ -367,6 +367,56 @@ export class MobileLocator {
       : findElements(await this.session.getTree(), this.selector);
   }
 
+  async waitFor(options: WaitOptions & { state?: 'visible' | 'hidden' | 'attached' } = {}): Promise<void> {
+    const { state = 'visible', ...wait } = options;
+    if (state === 'hidden') {
+      await this.waitForHidden(wait);
+      return;
+    }
+    if (state === 'attached') {
+      await this.waitForSnapshot(() => true, wait);
+      return;
+    }
+    await this.waitForVisible(wait);
+  }
+
+  async count(): Promise<number> {
+    return (await this.queryAll()).length;
+  }
+
+  async clear(options: WaitOptions & ElementFillOptions = {}): Promise<void> {
+    await this.fill('', options);
+  }
+
+  async textContent(options: WaitOptions = {}): Promise<string> {
+    return (await this.snapshot(options)).text ?? '';
+  }
+
+  async inputValue(options: WaitOptions = {}): Promise<string> {
+    const snapshot = await this.snapshot(options);
+    return snapshot.value ?? snapshot.text ?? '';
+  }
+
+  async bounds(options: WaitOptions = {}): Promise<Bounds> {
+    return (await this.snapshot(options)).bounds;
+  }
+
+  async isEnabled(options: WaitOptions = {}): Promise<boolean> {
+    return (await this.snapshot(options)).enabled;
+  }
+
+  async isDisabled(options: WaitOptions = {}): Promise<boolean> {
+    return !(await this.isEnabled(options));
+  }
+
+  async isSelected(options: WaitOptions = {}): Promise<boolean> {
+    return (await this.snapshot(options)).selected === true;
+  }
+
+  async isFocused(options: WaitOptions = {}): Promise<boolean> {
+    return (await this.snapshot(options)).focused === true;
+  }
+
   toString(): string {
     return formatSelector(this.selector);
   }
