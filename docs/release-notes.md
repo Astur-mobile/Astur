@@ -2,6 +2,16 @@
 
 What's new in each Astur release.
 
+## 0.5.0-beta.1
+
+### New
+
+- **Record the new assertions from the Inspector.** The assertion composer now offers enabled/disabled/selected/focused and "match count equals" (generates `toHaveCount(n)`), alongside the existing text/value/label/type checks.
+
+### Fixed
+
+- **Codegen safety.** The Inspector refuses to record a fill/expect step for a target without a stable locator (clear message instead of silently broken generated code), and count values are validated before a step is added.
+
 ## 0.5.0-beta.0
 
 ### New

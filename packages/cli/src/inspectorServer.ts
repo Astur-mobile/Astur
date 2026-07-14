@@ -35,7 +35,18 @@ export type ServerEvent =
   | { type: 'status'; message: string }
   | { type: 'terminated'; message: string };
 
-export type AssertionKind = 'visible' | 'text' | 'containsText' | 'value' | 'label' | 'type';
+export type AssertionKind =
+  | 'visible'
+  | 'text'
+  | 'containsText'
+  | 'value'
+  | 'label'
+  | 'type'
+  | 'enabled'
+  | 'disabled'
+  | 'selected'
+  | 'focused'
+  | 'count';
 export type InspectorDeviceAction =
   | 'refresh'
   | 'tree.refresh'
@@ -983,10 +994,30 @@ export function startInspectorServer(
         }
 
         case 'add_step': {
+          const locator = normalizeRecordingLocator(event.locator);
+
+          // fill/expect steps are locator-addressed — refuse an empty locator up
+          // front instead of recording a step the code generator cannot emit.
+          if (!locator) {
+            broadcast({
+              type: 'status',
+              message: `Action Error: Cannot add ${event.action} step without a locator — pick an element first.`
+            });
+            break;
+          }
+
+          if (event.assertion === 'count' && !/^\d+$/.test((event.value ?? '').trim())) {
+            broadcast({
+              type: 'status',
+              message: 'Action Error: "match count equals" needs a whole number (0 or more) in the value field.'
+            });
+            break;
+          }
+
           const step: RecordingStep = {
             index: steps.length,
             action: event.action,
-            locator: normalizeRecordingLocator(event.locator),
+            locator,
             value: event.value,
             assertion: event.assertion,
           };
@@ -2054,6 +2085,12 @@ function normalizeRecordingLocator(locator: string): string {
   return locator.trim().replace(/^device\./, '');
 }
 
+/** Coerce the composer's free-text value into a safe non-negative integer for toHaveCount. */
+function normalizeCountValue(value: string | undefined): number {
+  const parsed = Number.parseInt((value ?? '').trim(), 10);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 1;
+}
+
 function escapeSingleQuotes(value: string): string {
   return value.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
 }
@@ -2163,6 +2200,16 @@ function generateRecordedStepCode(step: RecordingStep): string {
     return `  await device.tap(${JSON.stringify(step.point)});`;
   }
 
+  if (!locator) {
+    // Never emit broken `device..tap()` / `device..fill()` — fall back to a
+    // coordinate tap when we have a point, otherwise leave a clear marker to
+    // re-record. Applies to every locator-addressed action, including fill and
+    // expect steps.
+    return step.point
+      ? `  await device.tap(${JSON.stringify(step.point)});`
+      : `  // TODO: ${step.action} target had no stable locator — re-record this step in Inspect mode`;
+  }
+
   if (step.action === 'fill') {
     return `  await device.${locator}.fill(${JSON.stringify(step.value ?? '')});`;
   }
@@ -2180,19 +2227,22 @@ function generateRecordedStepCode(step: RecordingStep): string {
         return `  await expect(${actual}).toHaveLabel(${JSON.stringify(step.value ?? '')});`;
       case 'type':
         return `  await expect(${actual}).toHaveType(${JSON.stringify(step.value ?? '')});`;
+      case 'enabled':
+        return `  await expect(${actual}).toBeEnabled();`;
+      case 'disabled':
+        return `  await expect(${actual}).toBeDisabled();`;
+      case 'selected':
+        return `  await expect(${actual}).toBeSelected();`;
+      case 'focused':
+        return `  await expect(${actual}).toBeFocused();`;
+      case 'count':
+        return `  await expect(${actual}).toHaveCount(${normalizeCountValue(step.value)});`;
       case 'visible':
       default:
         return `  await expect(${actual}).toBeVisible();`;
     }
   }
 
-  if (!locator) {
-    // Never emit broken `device..tap()` — fall back to a coordinate tap when we
-    // have a point, otherwise leave a clear marker to re-record.
-    return step.point
-      ? `  await device.tap(${JSON.stringify(step.point)});`
-      : `  // TODO: tap target had no stable locator — re-record this step in Inspect mode`;
-  }
   return `  await device.${locator}.tap();`;
 }
 
@@ -2686,6 +2736,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
                   <option value="value">value equals</option>
                   <option value="label">label equals</option>
                   <option value="type">type equals</option>
+                  <option value="enabled">enabled</option>
+                  <option value="disabled">disabled</option>
+                  <option value="selected">selected</option>
+                  <option value="focused">focused</option>
+                  <option value="count">match count equals</option>
                 </select>
                 <input id="composer-value" class="composer-input" placeholder="value"/>
               </div>
@@ -4189,12 +4244,13 @@ composerAddBtn.addEventListener('click', () => {
     send({ type: 'add_step', action: 'fill', locator, value: composerValue.value });
   } else {
     const assertion = composerAssertion.value;
+    const valueless = ['visible', 'enabled', 'disabled', 'selected', 'focused'];
     send({
       type: 'add_step',
       action: 'expect',
       locator,
       assertion,
-      value: assertion === 'visible' ? undefined : composerValue.value
+      value: valueless.includes(assertion) ? undefined : composerValue.value
     });
   }
   closeStepComposer();

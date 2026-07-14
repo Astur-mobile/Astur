@@ -3,6 +3,23 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## 0.5.0-beta.1
+
+### Added
+
+- **Inspector assertion composer covers the 0.5.0 matcher set.** New assertion
+  kinds `enabled`, `disabled`, `selected`, `focused`, and `match count equals`
+  (emits `toHaveCount(n)`); boolean assertions send no value, and count input
+  is validated as a whole number before the step is accepted.
+
+### Fixed
+
+- **Inspector codegen can no longer emit broken steps.** Locator-less `fill` /
+  `expect` steps are rejected at recording time with a clear status message,
+  and the code generator's empty-locator guard now runs before the fill/expect
+  emitters (previously it could produce `device..fill(...)`). The generator is
+  now covered by direct unit tests.
+
 ## 0.5.0-beta.0
 
 ### Added
