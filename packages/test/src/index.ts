@@ -613,12 +613,51 @@ export const expect = baseExpect.extend({
       `Expected ${actual.toString()} to have bounds ${JSON.stringify(expected)}.`,
       `Expected ${actual.toString()} not to have bounds ${JSON.stringify(expected)}.`
     );
+  },
+
+  async toHaveCount(actual: unknown, expected: number, options?: WaitOptions): AsturMatcherResult {
+    if (isPlaywrightLocator(actual)) {
+      return runPlaywrightAssertion(
+        `Expected Playwright locator to have count ${expected}.`,
+        () => baseExpect(actual).toHaveCount(expected, { timeout: options?.timeout })
+      );
+    }
+
+    if (!(actual instanceof MobileLocator)) {
+      return unsupportedActual('toHaveCount');
+    }
+
+    let lastCount: number | undefined;
+
+    try {
+      await waitFor(
+        async () => {
+          lastCount = await actual.count();
+          return lastCount === expected ? true : undefined;
+        },
+        {
+          ...options,
+          message: options?.message ?? `Timed out waiting for ${actual.toString()} to have count ${expected}`
+        }
+      );
+      return {
+        pass: true,
+        message: () => `Expected ${actual.toString()} not to have count ${expected}.`
+      };
+    } catch {
+      return {
+        pass: false,
+        message: () =>
+          `Expected ${actual.toString()} to have count ${expected}, but last saw ${lastCount ?? 0}.`
+      };
+    }
   }
 });
 
 function isPlaywrightLocator(actual: unknown): actual is Locator {
   return typeof actual === 'object'
     && actual !== null
+    && !(actual instanceof MobileLocator)
     && 'waitFor' in actual
     && typeof (actual as { waitFor?: unknown }).waitFor === 'function';
 }

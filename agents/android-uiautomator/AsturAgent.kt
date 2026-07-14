@@ -153,6 +153,7 @@ private data class AsturElementSnapshot(
 private interface AsturBackend {
     fun getTree(): AsturElementSnapshot
     fun findElement(selector: AsturSelector): AsturElementSnapshot?
+    fun findElements(selector: AsturSelector): List<AsturElementSnapshot>
     fun waitForElement(selector: AsturSelector, options: AsturWaitOptions): AsturElementSnapshot?
     fun tapElement(selector: AsturSelector, options: AsturElementActionOptions)
     fun doubleTapElement(selector: AsturSelector, options: AsturElementActionOptions, intervalMs: Long)
@@ -189,6 +190,16 @@ class AsturAgent private constructor(
                 "element.find" -> {
                     val selector = parseSelectorFromParams(command.params)
                     ok(command.id, backend.findElement(selector)?.toMap())
+                }
+
+                "element.findAll" -> {
+                    val selector = parseSelectorFromParams(command.params)
+                    ok(command.id, backend.findElements(selector).map { it.toMap() })
+                }
+
+                "element.findMany" -> {
+                    val selectors = parseSelectorsFromParams(command.params)
+                    ok(command.id, selectors.flatMap { backend.findElements(it) }.map { it.toMap() })
                 }
 
                 "element.wait" -> {
@@ -308,6 +319,24 @@ class AsturAgent private constructor(
                 "INVALID_PARAMS",
                 "selector is required and must be an object."
             ))
+    }
+
+    private fun parseSelectorsFromParams(params: Map<String, Any?>): List<AsturSelector> {
+        val raw = params["selectors"] as? List<*>
+            ?: throw AsturAgentException(
+                "INVALID_PARAMS",
+                "selectors is required and must be an array of selector objects."
+            )
+
+        return raw.map { entry ->
+            @Suppress("UNCHECKED_CAST")
+            val map = entry as? Map<String, Any?>
+                ?: throw AsturAgentException(
+                    "INVALID_PARAMS",
+                    "selectors entries must be selector objects."
+                )
+            parseSelector(map)
+        }
     }
 
     private fun parseSelector(raw: Map<String, Any?>): AsturSelector {
@@ -466,6 +495,8 @@ class AsturAgent private constructor(
             "device.setOrientation",
             "tree.get",
             "element.find",
+            "element.findAll",
+            "element.findMany",
             "element.wait",
             "element.tap",
             "element.doubleTap",
@@ -511,6 +542,10 @@ private class UiAutomatorBackend(
     override fun findElement(selector: AsturSelector): AsturElementSnapshot? {
         val node = findObject(selector) ?: return null
         return toSnapshot(node)
+    }
+
+    override fun findElements(selector: AsturSelector): List<AsturElementSnapshot> {
+        return findObjects(selector).map { toSnapshot(it) }
     }
 
     override fun waitForElement(selector: AsturSelector, options: AsturWaitOptions): AsturElementSnapshot? {
@@ -941,6 +976,69 @@ private class UiAutomatorBackend(
                 mapOf("selector" to selector.toMap())
             )
         }
+    }
+
+    private fun findObjects(selector: AsturSelector): List<UiObject2> {
+        return when (selector.strategy.lowercase()) {
+            "accessibility", "text", "type" -> {
+                val candidates = runCatching { device.findObjects(toBySelector(selector)) }.getOrElse { emptyList() }
+                candidates.filter { matchesName(it, selector.name, selector.exact) }
+            }
+
+            "id" -> findObjectsById(selector)
+
+            "role" -> findObjectsByRole(selector)
+
+            "xpath" -> throw AsturAgentException(
+                "NOT_IMPLEMENTED",
+                "xpath selectors are not supported by the Android UIAutomator agent."
+            )
+
+            "coordinates" -> throw AsturAgentException(
+                "NOT_IMPLEMENTED",
+                "coordinates selectors are not supported for element lookup. Use gesture.* commands for raw coordinates."
+            )
+
+            else -> throw AsturAgentException(
+                "INVALID_SELECTOR",
+                "Unsupported selector strategy: ${selector.strategy}",
+                mapOf("selector" to selector.toMap())
+            )
+        }
+    }
+
+    private fun findObjectsById(selector: AsturSelector): List<UiObject2> {
+        val selectors = if (selector.exact) {
+            if (selector.value.contains(":id/")) {
+                listOf(By.res(selector.value))
+            } else {
+                // A resource name cannot both equal the bare value and contain ":id/",
+                // so these candidates never match the same node twice.
+                listOf(
+                    By.res(selector.value),
+                    By.res(Pattern.compile(".+:id/${Pattern.quote(selector.value)}"))
+                )
+            }
+        } else {
+            listOf(By.res(Pattern.compile(".*${Pattern.quote(selector.value)}.*")))
+        }
+
+        return selectors.flatMap { by ->
+            runCatching { device.findObjects(by) }.getOrElse { emptyList() }
+        }.filter { matchesName(it, selector.name, selector.exact) }
+    }
+
+    private fun findObjectsByRole(selector: AsturSelector): List<UiObject2> {
+        val classes = roleClassMapping[selector.value.lowercase()]
+            ?: throw AsturAgentException(
+                "NOT_IMPLEMENTED",
+                "Role '${selector.value}' is not mapped to Android widget classes.",
+                mapOf("selector" to selector.toMap())
+            )
+
+        return classes.flatMap { clazz ->
+            runCatching { device.findObjects(By.clazz(clazz)) }.getOrElse { emptyList() }
+        }.filter { matchesName(it, selector.name, selector.exact) }
     }
 
     private fun toBySelector(selector: AsturSelector): BySelector {

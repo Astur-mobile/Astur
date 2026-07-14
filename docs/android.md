@@ -197,7 +197,7 @@ app: { packageName: 'com.example', activity: '.MainActivity' }
 | Permissions | `device.permissions.grant('camera')`, `revoke('camera')` | Accepts Android permission names or Astur shorthand where available. |
 | Orientation | `device.setOrientation('landscape')`, `device.orientation.portrait()` | Uses Android display/orientation control. |
 | Lock state | `device.lock()`, `device.unlock()`, `device.isLocked()` | Uses Android shell/device state APIs. |
-| Native locators | `getByText()`, `getByLabel()`, `getByTestId()`, `getByRole()` | Runs through the UIAutomator native-agent path by default. |
+| Native locators | `getByText()`, `getByLabel()`, `getByTestId()`, `getByRole()` | Runs through the UIAutomator native-agent path by default. Multi-match queries (`locator.count()`, `queryAll()`, `device.findAll()`, `device.findMany()`) also resolve on-device via `element.findAll` / `element.findMany`; agent builds without those commands fall back to the tree-snapshot path automatically. |
 | Coordinates | `device.tap()`, `device.longPress()`, `device.swipe()`, `device.drag()` | Useful for gesture surfaces and inspector-generated fallback steps. |
 | Scroll into view | `locator.scrollIntoView({ direction, maxScrolls })` | Cross-platform. Swipes the surrounding scroll view until the element is visible, then resolves with its snapshot. Replaces hand-written "swipe in a loop until visible" page-object helpers. |
 

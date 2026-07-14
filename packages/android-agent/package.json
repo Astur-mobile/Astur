@@ -1,6 +1,6 @@
 {
   "name": "@astur-mobile/android-agent",
-  "version": "0.4.0-beta.0",
+  "version": "0.5.0-beta.0",
   "description": "Android instrumentation agent for Astur native UI automation.",
   "license": "Apache-2.0",
   "author": "Amr Salem",

@@ -427,6 +427,116 @@ describe('MobileLocator', () => {
   });
 });
 
+describe('locator state readers and conveniences', () => {
+  const formTree: MobileElementSnapshot = {
+    type: 'root',
+    enabled: true,
+    visible: true,
+    bounds: { x: 0, y: 0, width: 300, height: 600 },
+    children: [
+      {
+        id: 'email',
+        text: 'qa@astur.dev',
+        value: 'qa@astur.dev',
+        type: 'android.widget.EditText',
+        enabled: true,
+        visible: true,
+        focused: true,
+        bounds: { x: 10, y: 20, width: 200, height: 50 },
+        children: []
+      },
+      {
+        label: 'Submit',
+        type: 'android.widget.Button',
+        enabled: false,
+        visible: true,
+        selected: true,
+        bounds: { x: 30, y: 100, width: 150, height: 60 },
+        children: []
+      },
+      {
+        label: 'Ghost',
+        type: 'android.widget.TextView',
+        enabled: true,
+        visible: false,
+        bounds: { x: 0, y: 0, width: 0, height: 0 },
+        children: []
+      }
+    ]
+  };
+
+  const wait = { timeout: 25, interval: 1 };
+
+  it('reads text, value, bounds, and state flags from the snapshot', async () => {
+    const session = createSession(formTree);
+    const email = new MobileLocator(session, by.id('email'));
+    const submit = new MobileLocator(session, by.label('Submit'));
+
+    expect(await email.textContent(wait)).toBe('qa@astur.dev');
+    expect(await email.inputValue(wait)).toBe('qa@astur.dev');
+    expect(await email.bounds(wait)).toEqual({ x: 10, y: 20, width: 200, height: 50 });
+    expect(await email.isEnabled(wait)).toBe(true);
+    expect(await email.isDisabled(wait)).toBe(false);
+    expect(await email.isFocused(wait)).toBe(true);
+    expect(await email.isSelected(wait)).toBe(false);
+    expect(await submit.isEnabled(wait)).toBe(false);
+    expect(await submit.isDisabled(wait)).toBe(true);
+    expect(await submit.isSelected(wait)).toBe(true);
+    expect(await submit.isFocused(wait)).toBe(false);
+  });
+
+  it('returns an empty inputValue when the element has neither value nor text', async () => {
+    const session = createSession(formTree);
+    const submit = new MobileLocator(session, by.label('Submit'));
+
+    expect(await submit.inputValue(wait)).toBe('');
+  });
+
+  it('counts matches without waiting', async () => {
+    const session = createSession(formTree);
+
+    expect(await new MobileLocator(session, by.type('android.widget.EditText')).count()).toBe(1);
+    expect(await new MobileLocator(session, by.text('missing')).count()).toBe(0);
+  });
+
+  it('waitFor dispatches on state', async () => {
+    const session = createSession(formTree);
+    const email = new MobileLocator(session, by.id('email'));
+    const ghost = new MobileLocator(session, by.label('Ghost'));
+    const missing = new MobileLocator(session, by.text('missing'));
+
+    await email.waitFor(wait);
+    await email.waitFor({ ...wait, state: 'visible' });
+    await ghost.waitFor({ ...wait, state: 'attached' });
+    await missing.waitFor({ ...wait, state: 'hidden' });
+    await expect(ghost.waitFor({ ...wait, state: 'visible' })).rejects.toThrow();
+    await expect(email.waitFor({ ...wait, state: 'hidden' })).rejects.toThrow();
+  });
+
+  it('clear delegates to the native fill hook with an empty string', async () => {
+    const session = createSession(formTree);
+    session.fillElement = vi.fn();
+    const email = new MobileLocator(session, by.id('email'));
+
+    await email.clear(wait);
+
+    expect(session.fillElement).toHaveBeenCalledWith(by.id('email'), '', {
+      timeout: 25,
+      interval: 1,
+      keyboard: 'auto'
+    });
+  });
+
+  it('clear works through the legacy fill path', async () => {
+    const session = createSession(formTree);
+    const email = new MobileLocator(session, by.id('email'));
+
+    await email.clear(wait);
+
+    expect(session.fill).toHaveBeenCalledWith(by.id('email'), '');
+  });
+});
+
 function createSession(snapshot: MobileElementSnapshot = tree): PlatformSession {
   return {
     capabilities: {
