@@ -1902,6 +1902,9 @@ function uiNodeMatchesSelector(node: UiNode, selector: ElementSelector): boolean
       return selector.value.trim().toLowerCase() === 'any' || matchSelectorValue(node.type, selector);
     case 'coordinates':
     case 'xpath':
+    case 'native':
+      // Native selectors resolve on the agent, not against the Inspector's
+      // cached tree snapshot — never considered a match here.
       return false;
   }
 }

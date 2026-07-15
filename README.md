@@ -34,7 +34,7 @@ Both platform drivers support endpoint-based native agent transport wiring (`use
 
 **Flutter** apps run through the same API: on Android via the Dart VM service (live widget tree), and on iOS via the XCUITest accessibility tree. **In-app WebViews** are automated at the DOM level with `device.webContext()` — engine-agnostic across Flutter and React Native — on Android (Chrome DevTools Protocol) and iOS simulators and real devices (`ios-webkit-debug-proxy`). See [Frameworks](docs/frameworks.md) and the [Changelog](CHANGELOG.md).
 
-Locators also expose Playwright-style state readers (`textContent()`, `inputValue()`, `count()`, `bounds()`, enabled/selected/focused checks, `clear()`, `waitFor({ state })`) plus a polling `toHaveCount` matcher, and multi-match queries on Android resolve natively on-device through the UiAutomator agent instead of full UI-tree dumps.
+Locators also expose Playwright-style state readers (`textContent()`, `inputValue()`, `count()`, `bounds()`, enabled/selected/focused checks, `clear()`, `waitFor({ state })`) plus a polling `toHaveCount` matcher, and multi-match queries on Android resolve natively on-device through the UiAutomator agent instead of full UI-tree dumps. For the elements none of that can express, `by.native({ ios, android })` is a raw escape hatch straight to the agents.
 
 ## What Is Still Missing
 
@@ -121,6 +121,13 @@ device.getByLabel('Email');
 device.getByTestId('login-submit');
 device.getByRole('button', { name: 'Sign in' });
 ```
+
+For the rare element none of those can pin down — a screen with no
+accessibility metadata, where the only reliable match is by structure —
+`by.native({ ios, android })` is a raw escape hatch straight to the agents:
+NSPredicate on iOS, a structured `By`/`BySelector` chain on Android. See
+[docs/android.md](docs/android.md#native-selector-escape-hatch-bynative) and
+[docs/ios.md](docs/ios.md#native-selector-escape-hatch-bynative).
 
 ## Native Assertions
 

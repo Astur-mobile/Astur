@@ -22,13 +22,13 @@
     "test:build": "npm run build && vitest run"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.0",
-    "@types/node": "^26.0.0",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "astur-mobile": "0.5.0-beta.2",
     "create-astur": "0.5.0-beta.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "vite": "^7.3.3"

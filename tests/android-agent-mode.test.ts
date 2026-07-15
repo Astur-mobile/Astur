@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAndroidDriver } from '@astur-mobile/android';
 import {
   AsturError,
+  by,
   normalizeCapabilities,
   type DeviceInfo,
   type MobileElementSnapshot,
@@ -435,6 +436,65 @@ describe('Android native-agent mode', () => {
     expect(server.requests.map((request) => request.method)).toContain('element.findAll');
     expect(server.requests.map((request) => request.method)).toContain('element.findMany');
     expect(server.requests.filter((request) => request.method === 'tree.get')).toHaveLength(0);
+  });
+
+  it('round-trips a by.native() selector to the agent unmodified over the wire', async () => {
+    // No new host-side logic exists for `native` — element.find/findAll already
+    // pass the selector through generically. This test exists to catch a future
+    // refactor that accidentally drops the `native` payload during
+    // (de)serialization, since packages/android has no other coverage that
+    // would notice a silently-stripped field.
+    const info: NativeAgentInfo = {
+      ...ANDROID_AGENT_INFO,
+      capabilities: ['agent.ping', 'element.find']
+    };
+    const match: MobileElementSnapshot = {
+      type: 'android.widget.Button',
+      label: 'Save',
+      enabled: true,
+      visible: true,
+      bounds: { x: 0, y: 0, width: 100, height: 40 },
+      children: []
+    };
+
+    const server = await createAgentServer((request) => {
+      if (request.method === 'agent.ping') {
+        return { body: ok(request.id, info) };
+      }
+      if (request.method === 'element.find') {
+        return { body: ok(request.id, match) };
+      }
+      return {
+        status: 404,
+        body: { id: request.id, ok: false, error: { code: 'UNKNOWN_COMMAND', message: request.method } }
+      };
+    });
+    servers.push(server);
+
+    const driver = createDriver();
+    const session = await driver.createSession(normalizeCapabilities({
+      platform: 'android',
+      device: { id: ANDROID_DEVICE.id },
+      agent: { mode: 'required', endpoint: server.endpoint, launchTimeout: 500, commandTimeout: 500 }
+    }));
+
+    const selector = by.native({
+      android: { className: 'android.widget.Button', textContains: 'Save' },
+      instance: 2
+    });
+
+    await expect(session.findElement(selector)).resolves.toEqual(match);
+
+    const request = server.requests.find((r) => r.method === 'element.find');
+    expect(request?.params).toMatchObject({
+      selector: {
+        strategy: 'native',
+        native: {
+          android: { className: 'android.widget.Button', textContains: 'Save' },
+          instance: 2
+        }
+      }
+    });
   });
 
   it('falls back to the tree snapshot for findElements when the agent does not advertise element.findAll, even in required mode', async () => {

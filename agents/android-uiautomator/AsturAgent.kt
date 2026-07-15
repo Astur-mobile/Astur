@@ -37,7 +37,10 @@ private data class AsturSelector(
     val strategy: String,
     val value: String,
     val exact: Boolean = true,
-    val name: Any? = null
+    val name: Any? = null,
+    /** Present only when strategy == "native": the raw `{ android, instance }` payload (see by.native() in @astur-mobile/core). */
+    val nativeAndroid: Map<String, Any?>? = null,
+    val nativeInstance: Int? = null
 ) {
     fun toMap(): Map<String, Any?> {
         return mapOf(
@@ -344,11 +347,29 @@ class AsturAgent private constructor(
         val value = raw.requiredString("value")
         val exact = raw.booleanValue("exact") ?: true
 
+        val nativeAndroid: Map<String, Any?>?
+        val nativeInstance: Int?
+        if (strategy == "native") {
+            val native = raw.mapValue("native")
+            nativeAndroid = native?.mapValue("android")
+                ?: throw AsturAgentException(
+                    "INVALID_SELECTOR",
+                    "by.native() selector has no `android` chain, but this is the Android agent. " +
+                        "Provide `android` in by.native({ ios, android }) to run this selector on Android."
+                )
+            nativeInstance = native.intValue("instance")
+        } else {
+            nativeAndroid = null
+            nativeInstance = null
+        }
+
         return AsturSelector(
             strategy = strategy,
             value = value,
             exact = exact,
-            name = raw["name"]
+            name = raw["name"],
+            nativeAndroid = nativeAndroid,
+            nativeInstance = nativeInstance
         )
     }
 
@@ -960,6 +981,10 @@ private class UiAutomatorBackend(
 
             "role" -> findByRole(selector)
 
+            "native" -> findNativeObjects(selector).let { matches ->
+                matches.getOrNull(selector.nativeInstance ?: 0)
+            }
+
             "xpath" -> throw AsturAgentException(
                 "NOT_IMPLEMENTED",
                 "xpath selectors are not supported by the Android UIAutomator agent."
@@ -989,6 +1014,8 @@ private class UiAutomatorBackend(
 
             "role" -> findObjectsByRole(selector)
 
+            "native" -> findNativeObjects(selector)
+
             "xpath" -> throw AsturAgentException(
                 "NOT_IMPLEMENTED",
                 "xpath selectors are not supported by the Android UIAutomator agent."
@@ -1005,6 +1032,48 @@ private class UiAutomatorBackend(
                 mapOf("selector" to selector.toMap())
             )
         }
+    }
+
+    /**
+     * Resolves a by.native() Android chain. Deliberately built entirely from
+     * androidx.test.uiautomator's own `By`/`BySelector` fluent API (no eval, no
+     * custom expression parser) — see AndroidNativeSelector in @astur-mobile/protocol.
+     */
+    private fun findNativeObjects(selector: AsturSelector): List<UiObject2> {
+        val chain = selector.nativeAndroid
+            ?: throw AsturAgentException(
+                "INVALID_SELECTOR",
+                "by.native() selector is missing its `android` chain.",
+                mapOf("selector" to selector.toMap())
+            )
+
+        return runCatching { device.findObjects(buildBySelector(chain)) }.getOrElse { emptyList() }
+    }
+
+    /**
+     * Builds a `BySelector` from an AndroidNativeSelector chain by chaining its
+     * instance methods (each further constrains the same selector — logical
+     * AND). `By.pkg(".*")` is a neutral, always-true starting point since
+     * `BySelector` has no public no-arg constructor of its own.
+     */
+    private fun buildBySelector(chain: Map<String, Any?>): BySelector {
+        var selector: BySelector = By.pkg(Pattern.compile(".*"))
+
+        chain.stringValue("className")?.let { selector = selector.clazz(it) }
+        chain.stringValue("classNameMatches")?.let { selector = selector.clazz(Pattern.compile(it)) }
+        chain.stringValue("text")?.let { selector = selector.text(it) }
+        chain.stringValue("textContains")?.let { selector = selector.textContains(it) }
+        chain.stringValue("textMatches")?.let { selector = selector.text(Pattern.compile(it)) }
+        chain.stringValue("description")?.let { selector = selector.desc(it) }
+        chain.stringValue("descriptionContains")?.let { selector = selector.descContains(it) }
+        chain.stringValue("descriptionMatches")?.let { selector = selector.desc(Pattern.compile(it)) }
+        chain.stringValue("resourceId")?.let { selector = selector.res(it) }
+        chain.stringValue("resourceIdMatches")?.let { selector = selector.res(Pattern.compile(it)) }
+        chain.stringValue("packageName")?.let { selector = selector.pkg(it) }
+        chain.mapValue("hasChild")?.let { selector = selector.hasChild(buildBySelector(it)) }
+        chain.mapValue("hasDescendant")?.let { selector = selector.hasDescendant(buildBySelector(it)) }
+
+        return selector
     }
 
     private fun findObjectsById(selector: AsturSelector): List<UiObject2> {

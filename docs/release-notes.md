@@ -4,8 +4,13 @@ What's new in each Astur release.
 
 ## 0.5.0-beta.2
 
+### New
+
+- **`by.native({ ios, android })` — a raw escape hatch for the elements no other locator can pin down.** `ios` takes an XCUITest predicate string; `android` takes a structured selector (class, text, resource id, parent/child relationships). Useful for screens with little or no accessibility metadata. See the [Android](android.md#native-selector-escape-hatch-bynative) and [iOS](ios.md#native-selector-escape-hatch-bynative) guides.
+
 ### Fixed
 
+- **`astur test` could crash with `spawn EINVAL` on Node 22/24** (worked fine on Node 20). It now runs Playwright directly instead of going through `npx`, removing the double process-indirection that triggered it.
 - **Android inspector no longer flaps "UI tree unavailable".** If an earlier run crashed or was killed, its on-device agent kept holding Android's automation slot and silently broke the next session's UI tree. Astur now clears stale agent instrumentation and leaked port-forwards when a session starts, and tears its own down fully on close — a bad exit can't poison the next run.
 - Small Inspector contrast fix on the code-language toggle.
 

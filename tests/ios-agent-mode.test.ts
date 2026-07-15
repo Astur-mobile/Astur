@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createIosDriver } from '@astur-mobile/ios';
 import {
   AsturError,
+  by,
   normalizeCapabilities,
   type DeviceInfo,
   type MobileElementSnapshot,
@@ -458,6 +459,54 @@ describe('iOS native-agent mode', () => {
     } satisfies Partial<AsturError>);
 
     expect(server.requests.filter((request) => request.method === 'tree.get')).toHaveLength(2);
+  });
+
+  it('round-trips a by.native() selector to the agent unmodified over the wire', async () => {
+    // No new host-side logic exists for `native` — element.find already passes
+    // the selector through generically. This test exists to catch a future
+    // refactor that accidentally drops the `native` payload during
+    // (de)serialization, since packages/ios has no other coverage that would
+    // notice a silently-stripped field.
+    const info: NativeAgentInfo = {
+      ...IOS_AGENT_INFO,
+      capabilities: ['agent.ping', 'element.find']
+    };
+
+    const server = await createAgentServer((request) => {
+      if (request.method === 'agent.ping') {
+        return { body: ok(request.id, info) };
+      }
+      if (request.method === 'element.find') {
+        return { body: ok(request.id, IOS_ELEMENT) };
+      }
+      return {
+        status: 404,
+        body: { id: request.id, ok: false, error: { code: 'UNKNOWN_COMMAND', message: request.method } }
+      };
+    });
+    servers.push(server);
+
+    const driver = createDriver();
+    const session = await driver.createSession(normalizeCapabilities({
+      platform: 'ios',
+      device: { id: IOS_DEVICE.id },
+      agent: { mode: 'required', endpoint: server.endpoint, launchTimeout: 500, commandTimeout: 500 }
+    }));
+
+    const selector = by.native({
+      ios: "type == 'Button' AND label CONTAINS 'Login'",
+      instance: 0
+    });
+
+    await expect(session.findElement(selector)).resolves.toEqual(IOS_ELEMENT);
+
+    const request = server.requests.find((r) => r.method === 'element.find');
+    expect(request?.params).toMatchObject({
+      selector: {
+        strategy: 'native',
+        native: { ios: "type == 'Button' AND label CONTAINS 'Login'", instance: 0 }
+      }
+    });
   });
 });
 

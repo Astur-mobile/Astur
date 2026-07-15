@@ -26,7 +26,8 @@ export type LocatorStrategy =
   | 'text'
   | 'type'
   | 'xpath'
-  | 'coordinates';
+  | 'coordinates'
+  | 'native';
 
 export type MobileRole =
   | 'button'
@@ -344,11 +345,75 @@ export interface DoubleTapOptions extends TapOptions {
   intervalMs?: number;
 }
 
+/**
+ * A well-defined Android element query, built from androidx.test.uiautomator's
+ * `By`/`BySelector` fields — the same API the bundled UiAutomator agent already
+ * uses for every other strategy. Each present field further constrains the
+ * match (logical AND); `hasChild`/`hasDescendant` nest the same shape to
+ * express structural relationships ("the button inside this specific card").
+ * Deliberately NOT an arbitrary expression language (no eval, no custom
+ * parser) — every field maps 1:1 to a real `BySelector` instance method.
+ */
+export interface AndroidNativeSelector {
+  className?: string;
+  classNameMatches?: string;
+  text?: string;
+  textContains?: string;
+  textMatches?: string;
+  description?: string;
+  descriptionContains?: string;
+  descriptionMatches?: string;
+  resourceId?: string;
+  resourceIdMatches?: string;
+  packageName?: string;
+  /** Matches elements that have at least one direct child satisfying this selector. */
+  hasChild?: AndroidNativeSelector;
+  /** Matches elements that have at least one descendant (any depth) satisfying this selector. */
+  hasDescendant?: AndroidNativeSelector;
+}
+
+/**
+ * Raw native-agent escape hatch (`by.native(...)`) for the rare element the
+ * semantic tree match (id/label/text/role/type) cannot express — most often a
+ * badly-instrumented screen with no accessibility metadata, where the only
+ * way to pin an element down is by structure or by combining several native
+ * conditions at once.
+ *
+ * `ios` is passed verbatim to XCUITest's own `NSPredicate(format:)` — the
+ * same declarative predicate grammar Apple's own APIs and Appium's `-ios
+ * predicate string` strategy use. It is data for a restricted query grammar,
+ * not executable code.
+ *
+ * `android` is a structured `AndroidNativeSelector` chain (see above) rather
+ * than a raw string, because Android has no equivalent built-in predicate
+ * grammar — the closest analogue (Appium's `-android uiautomator` strategy)
+ * works by compiling arbitrary source at runtime, which this escape hatch
+ * deliberately does not attempt.
+ *
+ * Provide whichever platform(s) the test needs to run on; a selector with
+ * only `ios` set still throws a clear, structured error if it reaches an
+ * Android session (and vice versa) rather than silently matching nothing.
+ * Requires a connected native agent — cannot be resolved against a cached
+ * UI-tree snapshot (legacy/no-agent sessions throw `NATIVE_SELECTOR_REQUIRES_AGENT`).
+ */
+export interface NativeSelectorPayload {
+  ios?: string;
+  android?: AndroidNativeSelector;
+  /**
+   * 0-based index into the elements matching `android` / `ios`, applied
+   * after all `hasChild`/`hasDescendant` constraints (Android) or as the
+   * predicate query's own nth match (iOS). Omit to take the first match.
+   */
+  instance?: number;
+}
+
 export interface ElementSelector {
   strategy: LocatorStrategy;
   value: string;
   exact?: boolean;
   name?: string | RegExp;
+  /** Present only when `strategy === 'native'`. See {@link NativeSelectorPayload}. */
+  native?: NativeSelectorPayload;
 }
 
 export type ElementWaitState = 'attached' | 'visible' | 'hidden';

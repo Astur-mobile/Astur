@@ -306,3 +306,52 @@ The Android example suite is split by functionality under `examples/specs`: `log
 | `getByType()` / `by.type()` | Android class |
 
 Prefer accessibility labels and stable resource ids.
+
+## Native Selector Escape Hatch (`by.native`)
+
+For the rare element none of the strategies above can pin down — most often
+a screen with no accessibility metadata, where the only reliable match is by
+structure or by combining several conditions at once — `by.native()` builds
+an Android query straight from androidx.test.uiautomator's own `By`/
+`BySelector` fields, the same API the bundled UiAutomator agent already uses
+for every other strategy:
+
+```ts
+await device.find(by.native({
+  android: {
+    className: 'android.widget.Button',
+    textContains: 'Save',
+    // "the Save button inside this specific card" instead of "the 3rd Save
+    // button on the whole screen":
+    hasChild: { resourceId: 'com.example:id/card_title' }
+  }
+})).tap();
+
+// Disambiguate identical siblings by position (0-based, after any
+// hasChild/hasDescendant constraints are applied):
+await device.find(by.native({
+  android: { className: 'android.widget.TextView', text: 'Delete' },
+  instance: 2
+})).tap();
+```
+
+| `AndroidNativeSelector` field | Maps to |
+| --- | --- |
+| `className` / `classNameMatches` | `BySelector.clazz(String \| Pattern)` |
+| `text` / `textContains` / `textMatches` | `BySelector.text()` / `.textContains()` / `.textMatches()` |
+| `description` / `descriptionContains` / `descriptionMatches` | `BySelector.desc()` / `.descContains()` / `.descMatches()` |
+| `resourceId` / `resourceIdMatches` | `BySelector.res(String \| Pattern)` |
+| `packageName` | `BySelector.pkg()` |
+| `hasChild` / `hasDescendant` | `BySelector.hasChild()` / `.hasDescendant()`, nesting another `AndroidNativeSelector` |
+
+Every present field further constrains the same query (logical AND). This is
+deliberately **not** an arbitrary expression language — no `eval`, no custom
+parser, no runtime bytecode compilation (unlike Appium's `-android
+uiautomator` strategy, which needs one to run literal Java/Kotlin source).
+Everything maps 1:1 to a real, type-checked `BySelector` method.
+
+`by.native()` requires a connected native agent — it cannot be resolved
+against a cached UI-tree snapshot, so a legacy/no-agent session throws
+`NATIVE_SELECTOR_REQUIRES_AGENT` rather than silently matching nothing. To
+target iOS with the same locator, add an `ios` predicate string alongside
+`android` — see [iOS: Native Selector Escape Hatch](./ios/#native-selector-escape-hatch-bynative).

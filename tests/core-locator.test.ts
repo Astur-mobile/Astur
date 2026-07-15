@@ -89,6 +89,52 @@ describe('locator primitives', () => {
     expect(() => matches(tree, by.xpath('//Button'))).toThrow(AsturError);
   });
 
+  it('builds by.native() selectors carrying the raw ios/android payload', () => {
+    const selector = by.native({
+      ios: "type == 'Button' AND label CONTAINS 'Save'",
+      android: { className: 'android.widget.Button', textContains: 'Save' },
+      instance: 1
+    });
+
+    expect(selector.strategy).toBe('native');
+    expect(selector.exact).toBe(true);
+    expect(selector.native).toEqual({
+      ios: "type == 'Button' AND label CONTAINS 'Save'",
+      android: { className: 'android.widget.Button', textContains: 'Save' },
+      instance: 1
+    });
+    // A human-readable placeholder for error messages / formatSelector(), not
+    // used for matching.
+    expect(selector.value).toContain('Save');
+  });
+
+  it('by.native() requires at least one of ios or android', () => {
+    expect(() => by.native({})).toThrow(AsturError);
+    expect(() => by.native({ instance: 0 })).toThrow(AsturError);
+  });
+
+  it('by.native() accepts an ios-only or android-only payload', () => {
+    expect(by.native({ ios: "label == 'Save'" }).native).toEqual({
+      ios: "label == 'Save'",
+      android: undefined,
+      instance: undefined
+    });
+    expect(by.native({ android: { className: 'android.widget.Button' } }).native).toEqual({
+      ios: undefined,
+      android: { className: 'android.widget.Button' },
+      instance: undefined
+    });
+  });
+
+  it('throws NATIVE_SELECTOR_REQUIRES_AGENT when matched against a cached snapshot', () => {
+    // by.native() can only be resolved on-device; the host-side snapshot
+    // fallback (legacy/no-agent sessions) must fail loud, not silently miss.
+    const selector = by.native({ android: { className: 'android.widget.Button' } });
+    expect(() => matches(tree, selector)).toThrow(
+      expect.objectContaining({ code: 'NATIVE_SELECTOR_REQUIRES_AGENT' })
+    );
+  });
+
   it('formats selectors and computes stable geometry', () => {
     expect(formatSelector(by.text('Welcome'))).toBe('text="Welcome"');
     expect(formatSelector(by.role('button', { name: 'Login' }))).toBe('role="button"[name="Login"]');

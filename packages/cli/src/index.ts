@@ -3,7 +3,8 @@ import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import { realpathSync } from 'node:fs';
 import { access, mkdir, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAndroidDriver } from '@astur-mobile/android';
 import { AsturError, AsturRuntime, AsturDevice } from '@astur-mobile/core';
@@ -399,9 +400,42 @@ async function codegen(args: string[]): Promise<void> {
   console.log(`\n${colors.bold('next')} start recording interactions in the inspector UI layer and convert actions into Astur codegen snippets.`);
 }
 
+function resolvePlaywrightCliPath(): string {
+  // Resolve as if a module at <cwd>/package.json required '@playwright/test' —
+  // finds the user's own installed Playwright by searching node_modules
+  // upward from the project directory, exactly like `npx` would, but as a
+  // synchronous, no-network, no-subprocess module resolution.
+  const projectRequire = createRequire(join(process.cwd(), 'package.json'));
+  try {
+    // '@playwright/test''s package.json "exports" map only allows "./cli"
+    // (no .js extension) as a public subpath — ".../cli.js" exists on disk
+    // but is not exported, and require.resolve() correctly rejects it.
+    return projectRequire.resolve('@playwright/test/cli');
+  } catch {
+    throw new AsturError(
+      'PLAYWRIGHT_NOT_FOUND',
+      'Could not resolve @playwright/test from this directory. Install it with ' +
+        '`npm install --save-dev @playwright/test` (already a dependency of @astur-mobile/test) and try again.'
+    );
+  }
+}
+
 function runPlaywright(args: string[]): Promise<void> {
-  const bin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const child = spawn(bin, ['playwright', 'test', ...args], {
+  // Spawn Playwright's own entry file directly under the same Node binary
+  // Astur is already running on, instead of going through `npx`. `npx` and
+  // node_modules/.bin/playwright are BOTH `#!/usr/bin/env node` shebang
+  // scripts, so the old `spawn('npx', [...])` chained two separate
+  // shebang-driven re-execs (Astur -> npx -> npx's own resolver -> playwright
+  // cli.js). Node's posix_spawn-based spawn path (default since ~Node 20,
+  // hardened further by 22/24) has a known EINVAL failure class with that
+  // kind of nested shebang re-exec on some platforms — it does not reproduce
+  // on Node 20 but does on 22/24, matching the observed report exactly.
+  // Spawning the resolved .js file directly under process.execPath removes
+  // the whole class of bug: one exec, no shell, no shebang indirection, no
+  // PATH lookup for `npx` at all — and it is also strictly faster, since it
+  // skips npx's own package-resolution overhead on every run.
+  const cliPath = resolvePlaywrightCliPath();
+  const child = spawn(process.execPath, [cliPath, 'test', ...args], {
     stdio: 'inherit',
     shell: false
   });
@@ -1211,6 +1245,8 @@ export const __testing = {
   selectCodegenDevice,
   buildCodegenConfig,
   codegenPreparationDetails,
+  resolvePlaywrightCliPath,
+  runPlaywright,
   inspectorServer: inspectorServerTesting
 };
 

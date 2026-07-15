@@ -28,6 +28,10 @@ private struct AsturSelector {
     let value: String
     let exact: Bool
     let name: Any?
+    /// Present only when strategy == "native": the raw NSPredicate format
+    /// string from by.native({ ios, android }) (see @astur-mobile/core).
+    let nativeIos: String?
+    let nativeInstance: Int?
 
     func toDictionary() -> [String: Any] {
         var result: [String: Any] = [
@@ -584,10 +588,26 @@ final class AsturAgent {
             return []
         }
 
-        let query = directManyQuery(selectors) ?? findManyCandidateQuery(selectors)
+        // Native selectors are resolved separately (see findElementObjects) and
+        // never fed into directManyQuery/matches() — they carry their own
+        // complete predicate, not one of the shared strategies those optimise
+        // for.
+        let nativeSelectors = selectors.filter { $0.strategy.lowercased() == "native" }
+        let otherSelectors = selectors.filter { $0.strategy.lowercased() != "native" }
 
-        return boundedElements(query, limit: maxFindManyResults)
-            .filter { element in selectors.contains { matches(element, selector: $0) } }
+        var results: [XCUIElement] = []
+
+        if !otherSelectors.isEmpty {
+            let query = directManyQuery(otherSelectors) ?? findManyCandidateQuery(otherSelectors)
+            results += boundedElements(query, limit: maxFindManyResults)
+                .filter { element in otherSelectors.contains { matches(element, selector: $0) } }
+        }
+
+        for selector in nativeSelectors {
+            results += nativeElements(selector)
+        }
+
+        return results
             .prefix(maxFindManyResults)
             .map { snapshot($0, includeChildren: false) }
     }
@@ -987,6 +1007,17 @@ final class AsturAgent {
     }
 
     private func findElementObject(_ selector: AsturSelector) -> XCUIElement? {
+        // Deliberately isolated from the directQuery/matches() machinery below —
+        // a native NSPredicate query is already a complete, self-contained
+        // match; routing it through the generic id/text/role scan-and-filter
+        // paths would risk the broad-scan fallback treating "no predicate
+        // match" as "scan everything", which is wrong for this strategy.
+        if selector.strategy.lowercased() == "native" {
+            let matches = nativeElements(selector)
+            let instance = selector.nativeInstance ?? 0
+            return matches.indices.contains(instance) ? matches[instance] : nil
+        }
+
         let query = directQuery(selector)
 
         if let query {
@@ -1066,6 +1097,10 @@ final class AsturAgent {
     }
 
     private func findElementObjects(_ selector: AsturSelector) -> [XCUIElement] {
+        if selector.strategy.lowercased() == "native" {
+            return nativeElements(selector)
+        }
+
         if let query = directQuery(selector) {
             return boundedElements(query, limit: maxFindAllResults)
                 .filter { matches($0, selector: selector) }
@@ -1088,6 +1123,22 @@ final class AsturAgent {
         default:
             return false
         }
+    }
+
+    /// Resolves a by.native() iOS predicate. `nativeIos` is passed verbatim to
+    /// `NSPredicate(format:)` — XCUITest's own declarative query grammar, the
+    /// same mechanism Apple's own APIs and Appium's `-ios predicate string`
+    /// strategy use — never interpreted as executable code. Kept isolated from
+    /// directQuery/matches() (see the callers in findElementObject/
+    /// findElementObjects) since the predicate is already a complete match on
+    /// its own; nothing else needs to re-filter it.
+    private func nativeElements(_ selector: AsturSelector) -> [XCUIElement] {
+        guard let predicateString = selector.nativeIos, !predicateString.isEmpty else {
+            return []
+        }
+
+        let query = app.descendants(matching: .any).matching(NSPredicate(format: predicateString))
+        return boundedElements(query, limit: maxFindAllResults)
     }
 
     private func directQuery(_ selector: AsturSelector) -> XCUIElementQuery? {
@@ -1792,11 +1843,30 @@ final class AsturAgent {
             throw AsturAgentFailure(code: "INVALID_PARAMS", message: "selector is required and must be an object.")
         }
 
+        let strategy = try raw.requiredString("strategy")
+
+        var nativeIos: String?
+        var nativeInstance: Int?
+        if strategy == "native" {
+            let native = raw.mapValue("native")
+            nativeIos = try native?.stringValue("ios")
+            guard let resolvedIos = nativeIos, !resolvedIos.isEmpty else {
+                throw AsturAgentFailure(
+                    code: "INVALID_SELECTOR",
+                    message: "by.native() selector has no `ios` predicate, but this is the iOS agent. "
+                        + "Provide `ios` in by.native({ ios, android }) to run this selector on iOS."
+                )
+            }
+            nativeInstance = try native?.intValue("instance")
+        }
+
         return AsturSelector(
-            strategy: try raw.requiredString("strategy"),
+            strategy: strategy,
             value: try raw.requiredString("value"),
             exact: try raw.boolValue("exact") ?? true,
-            name: raw["name"]
+            name: raw["name"],
+            nativeIos: nativeIos,
+            nativeInstance: nativeInstance
         )
     }
 

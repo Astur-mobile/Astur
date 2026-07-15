@@ -362,6 +362,38 @@ If the XCUITest output contains `Local network prohibited`, keep the device conn
 
 For fastest real-device execution, expose stable accessibility identifiers for controls and dynamic values. XCTest can tap and fill by id quickly, but broad text enumeration such as "find every visible number on the screen" is inherently slower on real devices.
 
+## Native Selector Escape Hatch (`by.native`)
+
+For the rare element `by.label`/`by.id`/`by.text`/`by.role`/`by.type` cannot
+express, `by.native()` accepts a raw XCUITest `NSPredicate` format string,
+applied via `app.descendants(matching: .any).matching(NSPredicate(format:))`
+— the same declarative predicate grammar Apple's own APIs and Appium's `-ios
+predicate string` strategy use. It is data for a restricted query language,
+never executed as code:
+
+```ts
+await device.find(by.native({
+  ios: "type == 'Button' AND label CONTAINS[cd] 'Save'"
+})).tap();
+
+// Disambiguate identical matches by position (0-based):
+await device.find(by.native({
+  ios: "type == 'StaticText' AND label == 'Delete'",
+  instance: 2
+})).tap();
+```
+
+Because `NSPredicate` can combine any number of conditions in one string
+(`AND`/`OR`, `CONTAINS`/`BEGINSWITH`/`MATCHES`, case-insensitive `[cd]`),
+most disambiguation needs are one predicate away without needing positional
+indexing at all.
+
+`by.native()` requires a connected native agent — it cannot be resolved
+against a cached UI-tree snapshot, so a legacy/no-agent session throws
+`NATIVE_SELECTOR_REQUIRES_AGENT` rather than silently matching nothing. To
+target Android with the same locator, add an `android` chain alongside
+`ios` — see [Android: Native Selector Escape Hatch](./android/#native-selector-escape-hatch-bynative).
+
 ## Known Apple Limits
 
 - Real iOS apps and XCTest runners must be signed with your team.

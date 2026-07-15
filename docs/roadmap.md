@@ -17,6 +17,7 @@ Simple Playwright-style test API
 - **Flutter on iOS** through the XCUITest accessibility tree (shared demo suite: 6/9 specs on the simulator), with an agent-side substring fallback over Flutter's merged accessibility labels.
 - **WebView DOM control** via `device.webContext()` — an engine-agnostic, inject-JS-over-`evaluate` bridge driving Flutter and React Native WebViews. Android (Chromium/CDP) and iOS **simulator + real devices** (WKWebView via `ios-webkit-debug-proxy`; the simulator is bridged automatically through its per-simulator `webinspectord_sim` socket) are supported; the inspector splices the WebView DOM into the UI tree with real locators + fill/tap.
 - **Inspector/codegen hardening** (0.5.0-beta): the assertion composer records the full matcher set (visibility, text, value, label, type, enabled/disabled/selected/focused, match count), drag gestures are recorded into generated code, locator-less fill/expect steps are rejected instead of emitting broken code, exports come out as TypeScript or JavaScript, and browser auto-open no longer crashes the CLI on Windows (#10).
+- **`by.native({ ios, android })` — the raw native selector escape hatch** (0.5.0-beta), for the rare element `by.label`/`by.id`/`by.text`/`by.role`/`by.type` cannot express — most often a screen with no accessibility metadata, where the only reliable match is by structure or by combining several native conditions at once. `ios` is a raw XCUITest `NSPredicate` format string (`app.descendants(matching: .any).matching(NSPredicate(format:))`) — Apple's own declarative query grammar, not executable code. `android` is a structured chain (`className`, `textContains`, `resourceId`, `hasChild`, `hasDescendant`, …) built entirely from androidx.test.uiautomator's `By`/`BySelector` fluent API — deliberately not an arbitrary expression language; no eval, no custom parser, no bytecode compiler (unlike Appium's `-android uiautomator` strategy, which needs one). An optional `instance` picks the nth match on either platform. Requires a connected native agent — legacy/no-agent sessions throw `NATIVE_SELECTOR_REQUIRES_AGENT` rather than silently matching nothing. The reserved `xpath` strategy stays unimplemented; its error message now points here instead.
 - Android and iOS agents return structured timing and failure diagnostics through the shared protocol.
 - Actionability failures include selector, candidate snapshot, and visible/enabled/hittable/stability state where the platform exposes it.
 - Host-side `AsturError` keeps native-agent timing and diagnostics instead of dropping them at the transport boundary.
@@ -31,7 +32,7 @@ Simple Playwright-style test API
 - Deeper strict-locator reporting, including ranked candidate lists for every selector strategy, is still being expanded.
 - Richer device-pool scheduling for cloud/device-farm targets is still planned.
 - Real iOS Inspector/codegen needs a compact native-tree stream so broad XCTest snapshots do not block the live tree on larger screens.
-- No raw native selector escape hatch for cases the semantic-tree match cannot express (iOS NSPredicate / class chain, Android UiSelector child/descendant chains). The `xpath` strategy is currently reserved and throws on both platforms, so it is not a usable fallback today.
+- `by.native()`'s Android `instance` selects the nth match after all `hasChild`/`hasDescendant` constraints are applied, but there is no equivalent for nesting "the nth child of a specific parent" *inside* a `hasChild`/`hasDescendant` clause itself — only at the root of the chain.
 
 ## Next Best Steps (In Order)
 
@@ -57,8 +58,7 @@ Simple Playwright-style test API
 - Keep fallback paths for local development until agent suites are stable enough to make the agent path mandatory everywhere.
 
 6. Locator ergonomics
-- Add a fluent relative API on `MobileLocator` (`.filter({ hasText, has })`, `.nth`/`.first`/`.last`, `.locator(child)`). Reads can build on the shipped multi-match commands (`element.findAll`/`findMany`); index-addressed *actions* additionally need an element-index parameter in the agent protocol so `.nth(n).tap()` stays on the native path.
-- Add an opt-in raw escape hatch (`by.native({ ios, android })`) routed straight to the agents — NSPredicate / class chain on iOS, UiSelector on Android — for the rare case the tree match cannot express. Decide whether to finish or formally drop the reserved `xpath` strategy as part of this.
+- Add a fluent relative API on `MobileLocator` (`.filter({ hasText, has })`, `.nth`/`.first`/`.last`, `.locator(child)`). Reads can build on the shipped multi-match commands (`element.findAll`/`findMany`); index-addressed *actions* additionally need an element-index parameter in the agent protocol so `.nth(n).tap()` stays on the native path. `by.native()`'s `instance` field (shipped 0.5.0-beta) solves the same problem today for the escape-hatch case specifically.
 
 ## End-User Experience Goal
 

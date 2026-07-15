@@ -5,8 +5,46 @@ All notable changes to Astur are documented here. Versions follow the
 
 ## 0.5.0-beta.2
 
+### Added
+
+- **`by.native({ ios, android })` — raw native selector escape hatch.** For
+  the rare element `by.label`/`by.id`/`by.text`/`by.role`/`by.type` cannot
+  express (most often a screen with no accessibility metadata, where the
+  only reliable match is by structure or by combining several conditions at
+  once):
+  - `ios` is a raw XCUITest `NSPredicate` format string, applied via
+    `app.descendants(matching: .any).matching(NSPredicate(format:))` — the
+    same declarative predicate grammar Apple's own APIs and Appium's `-ios
+    predicate string` strategy use. Data for a restricted query language,
+    never executed as code.
+  - `android` is a structured `AndroidNativeSelector` chain
+    (`className`, `text(Contains|Matches)`, `description(Contains|Matches)`,
+    `resourceId(Matches)`, `packageName`, `hasChild`, `hasDescendant`) built
+    entirely from androidx.test.uiautomator's own `By`/`BySelector` fluent
+    API — deliberately not an arbitrary expression language (no `eval`, no
+    custom parser, no runtime bytecode compilation, unlike Appium's
+    `-android uiautomator` strategy).
+  - An optional `instance` picks the nth match (after `hasChild`/
+    `hasDescendant` constraints) on either platform.
+  - Requires a connected native agent: legacy/no-agent sessions throw
+    `NATIVE_SELECTOR_REQUIRES_AGENT` instead of silently matching nothing.
+    A selector missing the current platform's payload throws immediately at
+    the agent with a clear message, instead of returning empty results.
+  - The reserved `xpath` strategy remains unimplemented; its error message
+    now points here instead.
+
 ### Fixed
 
+- **`astur test` could throw `spawn EINVAL` on Node 22/24** (worked on
+  Node 20). The CLI ran Playwright by spawning `npx` (`npx.cmd` on Windows)
+  — both `npx` and Playwright's own `node_modules/.bin/playwright` are
+  `#!/usr/bin/env node` shebang scripts, so this chained two separate
+  shebang/shell-driven re-execs to reach Playwright's real entry point. That
+  class of nested indirection is a documented source of spawn regressions
+  across recent Node versions. `astur test` now resolves
+  `@playwright/test`'s CLI module directly from the project (via the
+  package's own `./cli` export) and spawns it under `process.execPath` — one
+  exec, no shell, no `npx`, no `.cmd`, no PATH lookup at all.
 - **Android inspector/codegen: "UI tree unavailable … uiautomator dump failed"
   flapping.** A previous session that died without cleanup (crashed or killed
   CLI) left its instrumentation alive on-device, holding Android's single

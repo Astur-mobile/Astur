@@ -1,4 +1,5 @@
 import type {
+  AndroidNativeSelector,
   Bounds,
   Coordinates,
   DoubleTapOptions,
@@ -52,8 +53,53 @@ export const by = {
 
   coordinates(x: number, y: number): Coordinates {
     return { x, y };
+  },
+
+  /**
+   * Escape hatch for elements the semantic tree match (id/label/text/role/type)
+   * cannot express — most often a screen with no accessibility metadata, where
+   * the only way to pin an element down is by structure or by combining several
+   * native conditions at once. Requires a connected native agent; see
+   * {@link NativeSelectorPayload} for the exact platform semantics.
+   *
+   * Provide whichever platform(s) the test needs to run on:
+   * ```ts
+   * by.native({
+   *   ios: "type == 'Button' AND label CONTAINS 'Save'",
+   *   android: { className: 'android.widget.Button', textContains: 'Save' }
+   * })
+   * ```
+   */
+  native(payload: { ios?: string; android?: AndroidNativeSelector; instance?: number }): ElementSelector {
+    if (!payload.ios && !payload.android) {
+      throw new AsturError(
+        'NATIVE_SELECTOR_EMPTY',
+        'by.native() requires at least one of `ios` or `android`.'
+      );
+    }
+
+    return {
+      strategy: 'native',
+      value: formatNativeSelectorValue(payload),
+      exact: true,
+      native: { ios: payload.ios, android: payload.android, instance: payload.instance }
+    };
   }
 };
+
+function formatNativeSelectorValue(payload: { ios?: string; android?: AndroidNativeSelector; instance?: number }): string {
+  const parts: string[] = [];
+  if (payload.ios) {
+    parts.push(`ios:${JSON.stringify(payload.ios)}`);
+  }
+  if (payload.android) {
+    parts.push(`android:${JSON.stringify(payload.android)}`);
+  }
+  if (payload.instance !== undefined) {
+    parts.push(`instance:${payload.instance}`);
+  }
+  return parts.join(' ');
+}
 
 export type ScrollDirection = 'up' | 'down' | 'left' | 'right';
 
@@ -468,7 +514,12 @@ export function matches(element: MobileElementSnapshot, selector: ElementSelecto
     case 'xpath':
       throw new AsturError(
         'UNSUPPORTED_LOCATOR',
-        'XPath is reserved for a future compatibility layer. Prefer by.label, by.id, by.text, or by.type.'
+        'XPath is reserved and not implemented. For cases by.label/by.id/by.text/by.type/by.role cannot express, use by.native({ ios, android }) instead.'
+      );
+    case 'native':
+      throw new AsturError(
+        'NATIVE_SELECTOR_REQUIRES_AGENT',
+        'by.native() selectors resolve on the native agent and cannot be matched against a cached UI-tree snapshot. Use agent.mode: "required" (recommended), or ensure a native agent is connected in "auto" mode.'
       );
   }
 }
