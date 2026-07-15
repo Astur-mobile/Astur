@@ -1,6 +1,6 @@
 {
   "name": "astur-mobile",
-  "version": "0.5.0-beta.1",
+  "version": "0.5.0-beta.2",
   "description": "Astur CLI for device-native mobile automation.",
   "keywords": [
     "astur",
@@ -43,7 +43,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/cli": "0.5.0-beta.1"
+    "@astur-mobile/cli": "0.5.0-beta.2"
   },
   "repository": {
     "type": "git",

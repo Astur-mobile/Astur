@@ -2,6 +2,12 @@
 
 What's new in each Astur release.
 
+## 0.5.0-beta.2
+
+### Fixed
+
+- **Android inspector no longer flaps "UI tree unavailable".** If an earlier run crashed or was killed, its on-device agent kept holding Android's automation slot and silently broke the next session's UI tree. Astur now clears stale agent instrumentation and leaked port-forwards when a session starts, and tears its own down fully on close — a bad exit can't poison the next run.
+
 ## 0.5.0-beta.1
 
 ### New

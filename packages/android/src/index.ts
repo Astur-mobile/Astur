@@ -89,6 +89,7 @@ interface AndroidNativeAgentRuntime {
   client: NativeAgentClient;
   hostPort?: number;
   packageName?: string;
+  testPackage?: string;
   process?: ChildProcess;
 }
 
@@ -360,6 +361,17 @@ export class AndroidDriver implements PlatformDriver {
     let agentProcess: ChildProcess | undefined;
 
     try {
+      // A previous session that died without cleanup (crashed or killed CLI)
+      // can leave its instrumentation alive on-device. That zombie holds
+      // Android's single UiAutomation slot, which makes the fresh
+      // instrumentation below crash with "UiAutomation already registered"
+      // AND blocks the legacy `uiautomator dump` fallback — the inspector then
+      // flaps "UI tree unavailable" until the zombie dies. Clear it, and any
+      // stale port-forwards previous sessions leaked, before starting.
+      await adb(['shell', 'am', 'force-stop', config.testPackage]).catch(() => undefined);
+      await adb(['shell', 'am', 'force-stop', config.packageName]).catch(() => undefined);
+      await removeStaleAgentForwards(this.adbPath, device.id, config.devicePort);
+
       if (await shouldInstallAndroidAgent(adb, config)) {
         await adb(['install', '-r', artifacts.appApkPath]);
         await adb(['install', '-r', artifacts.testApkPath]);
@@ -386,6 +398,7 @@ export class AndroidDriver implements PlatformDriver {
         client,
         hostPort,
         packageName: config.packageName,
+        testPackage: config.testPackage,
         process: agentProcess
       };
     } catch (error) {
@@ -649,6 +662,12 @@ class AndroidSession implements PlatformSession {
     }
 
     this.nativeAgentRuntime?.process?.kill('SIGINT');
+
+    // Stop the instrumentation (test package) first — it is the process that
+    // holds the UiAutomation slot — then the agent app package.
+    if (this.nativeAgentRuntime?.testPackage) {
+      await this.adb(['shell', 'am', 'force-stop', this.nativeAgentRuntime.testPackage]).catch(() => undefined);
+    }
 
     if (this.nativeAgentRuntime?.packageName) {
       await this.adb(['shell', 'am', 'force-stop', this.nativeAgentRuntime.packageName]).catch(() => undefined);
@@ -1704,6 +1723,28 @@ function resolveFirstExistingAndroidAgentArtifact(fileName: string, variantPath:
 function resolveDefaultAndroidAgentArtifact(fileName: string, variantPath: string): string {
   const androidPackageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
   return join(androidPackageRoot, '..', 'android-agent', 'build', 'outputs', 'apk', variantPath, fileName);
+}
+
+/**
+ * Removes forwards left behind by sessions that never reached their cleanup
+ * (crashed CLI, killed process). Only forwards for THIS device that target the
+ * agent's device port are touched, so concurrent sessions on other devices are
+ * unaffected.
+ */
+async function removeStaleAgentForwards(adbPath: string, deviceId: string, devicePort: number): Promise<void> {
+  try {
+    const output = await runText(adbPath, ['forward', '--list']);
+    const target = `tcp:${devicePort}`;
+
+    await Promise.all(output.split('\n').map(async (line) => {
+      const [serial, hostSpec, deviceSpec] = line.trim().split(/\s+/);
+      if (serial === deviceId && deviceSpec === target && hostSpec?.startsWith('tcp:')) {
+        await run(adbPath, ['-s', deviceId, 'forward', '--remove', hostSpec]).catch(() => undefined);
+      }
+    }));
+  } catch {
+    // Listing forwards is best-effort cleanup; never block session start on it.
+  }
 }
 
 function resolveAndroidAgentRuntimeConfig(): {

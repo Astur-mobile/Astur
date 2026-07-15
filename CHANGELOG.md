@@ -3,6 +3,22 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## 0.5.0-beta.2
+
+### Fixed
+
+- **Android inspector/codegen: "UI tree unavailable … uiautomator dump failed"
+  flapping.** A previous session that died without cleanup (crashed or killed
+  CLI) left its instrumentation alive on-device, holding Android's single
+  UiAutomation slot — the fresh agent then crashed with "already registered",
+  and the legacy `uiautomator dump` fallback was blocked by the same zombie.
+  Session bootstrap now force-stops stale agent instrumentation and removes
+  leaked agent port-forwards before starting, and session close stops the
+  instrumentation (test) package explicitly, so a crashed run can no longer
+  poison the next one. Verified live against a device in the broken state:
+  native tree in <1s in `required` mode, zero leaked processes/forwards after
+  close.
+
 ## 0.5.0-beta.1
 
 ### Added
