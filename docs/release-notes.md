@@ -10,7 +10,7 @@ What's new in each Astur release.
 
 ### Fixed
 
-- **Windows crash on `codegen`/`inspect`.** The inspector no longer dies with `Error: spawn start ENOENT` right after printing its URL — browser auto-open now goes through `cmd /c start` on Windows, and a failed auto-open can never take the inspector down on any platform (worst case: open the printed URL yourself).
+- **Windows crash on `codegen`/`inspect`** ([#10](https://github.com/Astur-mobile/Astur/issues/10)). The inspector no longer dies with `Error: spawn start ENOENT` right after printing its URL — browser auto-open now goes through `cmd /c start` on Windows, and a failed auto-open can never take the inspector down on any platform (worst case: open the printed URL yourself).
 - **Codegen safety.** The Inspector refuses to record a fill/expect step for a target without a stable locator (clear message instead of silently broken generated code), and count values are validated before a step is added.
 
 ## 0.5.0-beta.0
