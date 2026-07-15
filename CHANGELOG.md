@@ -18,13 +18,7 @@ All notable changes to Astur are documented here. Versions follow the
   poison the next one. Verified live against a device in the broken state:
   native tree in <1s in `required` mode, zero leaked processes/forwards after
   close.
-- **Inspector: unreadable JavaScript/TypeScript toggle on hover.** The
-  TypeScript/JavaScript code-language buttons are real `<button>` elements
-  sharing a class with plain `<div>` tabs elsewhere in the panel; without an
-  explicit background/border reset they picked up the browser's native
-  (light) button chrome, so the dark-theme hover color rendered as
-  near-white text on a light background. `.code-tab` now resets native
-  button appearance so both usages render identically.
+- Inspector: unreadable JavaScript/TypeScript toggle text on hover.
 
 ## 0.5.0-beta.1
 

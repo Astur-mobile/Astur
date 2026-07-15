@@ -7,7 +7,7 @@ What's new in each Astur release.
 ### Fixed
 
 - **Android inspector no longer flaps "UI tree unavailable".** If an earlier run crashed or was killed, its on-device agent kept holding Android's automation slot and silently broke the next session's UI tree. Astur now clears stale agent instrumentation and leaked port-forwards when a session starts, and tears its own down fully on close — a bad exit can't poison the next run.
-- **Inspector: JavaScript/TypeScript toggle was unreadable on hover.** Fixed a contrast bug where hovering the code-language buttons showed near-invisible text.
+- Small Inspector contrast fix on the code-language toggle.
 
 ## 0.5.0-beta.1
 
