@@ -32,21 +32,24 @@ The iOS driver can run diagnostics, list simulators and USB-connected real devic
 
 Both platform drivers support endpoint-based native agent transport wiring (`use.astur.agent.endpoint` or `ASTUR_ANDROID_AGENT_ENDPOINT` / `ASTUR_IOS_AGENT_ENDPOINT`). Astur defaults to the native-agent engine and starts one Astur session per Playwright worker. The example fixture isolates specs with a lightweight terminate + launch cycle instead of reinstalling the native agent or clearing app data every spec. `automation.engine: 'auto'` is available as a migration setting when legacy fallback is still needed.
 
-**Flutter** apps run through the same API: on Android via the Dart VM service (live widget tree), and on iOS via the XCUITest accessibility tree. **In-app WebViews** are automated at the DOM level with `device.webContext()` — engine-agnostic across Flutter and React Native — on Android (Chrome DevTools Protocol) and real iOS devices (`ios-webkit-debug-proxy`). See [Frameworks](docs/frameworks.md) and the [Changelog](CHANGELOG.md).
+**Flutter** apps run through the same API: on Android via the Dart VM service (live widget tree), and on iOS via the XCUITest accessibility tree. **In-app WebViews** are automated at the DOM level with `device.webContext()` — engine-agnostic across Flutter and React Native — on Android (Chrome DevTools Protocol) and iOS simulators and real devices (`ios-webkit-debug-proxy`). See [Frameworks](docs/frameworks.md) and the [Changelog](CHANGELOG.md).
+
+Locators also expose Playwright-style state readers (`textContent()`, `inputValue()`, `count()`, `bounds()`, enabled/selected/focused checks, `clear()`, `waitFor({ state })`) plus a polling `toHaveCount` matcher, and multi-match queries on Android resolve natively on-device through the UiAutomator agent instead of full UI-tree dumps.
 
 ## What Is Still Missing
 
-- Rich on-device actionability diagnostics in agent responses (multiple-match details, candidate snapshots, and structured failure context), especially for Android strict-locator failures.
-- End-to-end CI jobs that enforce `agent.mode: 'required'` for both Android and iOS paths.
+- Fluent relative/filter locator chaining (`.nth`/`.first`/`.last`, `.filter`, `.locator(child)`) — multi-match reads exist; index-addressed native actions do not yet.
+- Pinch/zoom gestures and a dedicated native clear-text command in the agent protocol.
+- Deeper strict-locator diagnostics (ranked candidate lists for every selector strategy).
+- Hosted-CI enforcement of `agent.mode: 'required'` — today this runs as a manual smoke workflow on self-hosted runners (Android, iOS simulator, and signed real iOS hardware), since hosted CI cannot drive real mobile hardware.
 - Cloud/device-farm execution beyond the BrowserStack scaffold.
-- CI jobs that exercise signed real iOS devices in addition to simulator coverage.
 
 ## Next Best Steps
 
-1. Expand Android and iOS agent diagnostics and selector parity.
-2. Add cross-platform contract tests that validate protocol parity across Android and iOS agents.
-3. Add smoke E2E tests that run with `agent.mode: 'required'` in CI.
-4. Add signing-aware real-device jobs where CI hardware is available.
+1. Fluent locator chaining on `MobileLocator`, building on the shipped native multi-match commands.
+2. Expand Android and iOS agent diagnostics and selector parity, with cross-platform contract tests.
+3. Extend the required-agent smoke workflow from manual runs toward scheduled/hosted enforcement.
+4. Add pinch/zoom and native clear to the shared agent protocol.
 
 See [Roadmap](docs/roadmap.md) for a structured implementation sequence.
 
