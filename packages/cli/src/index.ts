@@ -25,6 +25,7 @@ import {
   type InspectorAppActionKind,
   type InspectorDeviceAction
 } from './inspectorServer.js';
+import { openExternal } from './openExternal.js';
 import { buildInitFiles, defaultInitAnswers, promptInitAnswers } from './scaffold.js';
 
 interface CodegenArgs {
@@ -1116,12 +1117,7 @@ async function bestLocatorContext(
 }
 
 function openBrowser(url: string): void {
-  try {
-    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-    spawn(cmd, [url], { detached: true, stdio: 'ignore' }).unref();
-  } catch {
-    // ignore
-  }
+  openExternal(url);
 }
 
 function selectorFromNode(node: MobileElementSnapshot): ElementSelector | undefined {

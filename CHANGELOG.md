@@ -14,6 +14,14 @@ All notable changes to Astur are documented here. Versions follow the
 
 ### Fixed
 
+- **Windows: `codegen`/`inspect` no longer crash right after startup.** The CLI
+  auto-opened the browser by spawning `start`, which is a cmd.exe built-in, not
+  an executable — the resulting async ENOENT had no `error` listener and took
+  the whole process (including the live inspector server) down. Browser
+  launching is now a single shared `openExternal()` helper that runs
+  `cmd /c start "" <url>` on Windows, attaches an `error` handler so a failed
+  open can never crash the CLI on any platform, and is covered by regression
+  tests for the exact reported failure.
 - **Inspector codegen can no longer emit broken steps.** Locator-less `fill` /
   `expect` steps are rejected at recording time with a clear status message,
   and the code generator's empty-locator guard now runs before the fill/expect

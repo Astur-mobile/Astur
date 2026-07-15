@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -6,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Bounds, DeviceInfo, LocatorSuggestion, MobileElementSnapshot } from '@astur-mobile/protocol';
+import { openExternal } from './openExternal.js';
 
 export interface InspectorUiModel {
   device: DeviceInfo;
@@ -196,24 +196,6 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-function openExternal(target: string): boolean {
-  try {
-    if (process.platform === 'darwin') {
-      spawn('open', [target], { detached: true, stdio: 'ignore' }).unref();
-      return true;
-    }
-
-    if (process.platform === 'win32') {
-      spawn('cmd', ['/c', 'start', '', target], { detached: true, stdio: 'ignore' }).unref();
-      return true;
-    }
-
-    spawn('xdg-open', [target], { detached: true, stdio: 'ignore' }).unref();
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function renderInspectorHtml(payload: InspectorUiPayload): string {
   const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
