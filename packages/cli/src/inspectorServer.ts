@@ -2541,7 +2541,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 /* Code panel */
 #code-panel{display:flex;flex-direction:column;overflow:hidden;min-height:0}
 #code-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
-.code-tab{padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text-muted);border-bottom:2px solid transparent;transition:all .1s}
+.code-tab{padding:7px 14px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;color:var(--text-muted);background:transparent;border:none;border-bottom:2px solid transparent;appearance:none;-webkit-appearance:none;transition:all .1s}
 .code-tab:hover{color:var(--text)}
 .code-tab.active{color:var(--accent-hover);border-bottom-color:var(--accent-hover)}
 #code-view{flex:1;display:flex;flex-direction:column;overflow:hidden}

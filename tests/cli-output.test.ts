@@ -451,4 +451,30 @@ describe('CLI platform-aware output', () => {
     expect(html).toContain('id="element-fill-input"');
     expect(html).toContain("type: 'direct_action'");
   });
+
+  it('resets native <button> chrome on .code-tab so the TypeScript/JavaScript toggle keeps contrast on hover', () => {
+    // .code-tab is shared by <div> tabs (Code / Recording Steps) and real
+    // <button> tabs (TypeScript / JavaScript). Without an explicit background/
+    // border/appearance reset, the <button> elements fall back to the
+    // browser's native (light) button chrome, and the dark-theme hover color
+    // (near-white, meant for the dark panel background) becomes unreadable
+    // white-on-white. Assert the reset lands on the shared rule so it covers
+    // both usages.
+    const html = __testing.inspectorServer.buildInspectorHtml({
+      id: 'emulator-5554',
+      name: 'Pixel 7',
+      platform: 'android',
+      kind: 'emulator',
+      state: 'online'
+    });
+
+    const rule = html.match(/\.code-tab\{[^}]*\}/)?.[0];
+    expect(rule).toBeDefined();
+    expect(rule).toContain('background:transparent');
+    expect(rule).toContain('appearance:none');
+    expect(rule).toContain('border:none');
+
+    expect(html).toContain('<button class="code-tab active" data-lang="typescript">TypeScript</button>');
+    expect(html).toContain('<button class="code-tab" data-lang="javascript">JavaScript</button>');
+  });
 });
