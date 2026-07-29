@@ -28,6 +28,7 @@ export type TapLabCounters = {
 
 export class AsturDemoApp {
   readonly home: HomePage;
+  readonly nativeLab: NativeLabPage;
   readonly login: LoginPage;
   readonly forms: FormsPage;
   readonly swipe: SwipePage;
@@ -38,6 +39,7 @@ export class AsturDemoApp {
 
   constructor(private readonly device: AsturDevice) {
     this.home = new HomePage(device);
+    this.nativeLab = new NativeLabPage(device);
     this.login = new LoginPage(device);
     this.forms = new FormsPage(device);
     this.swipe = new SwipePage(device);
@@ -317,6 +319,95 @@ export class HomePage {
     return uniqueCounters
       .map((node) => candidates.find((candidate) => candidate.node === node || sameBounds(candidate.node, node))?.value)
       .filter((value): value is number => value !== undefined);
+  }
+}
+
+export type NativeLabLaneCounts = {
+  a: number;
+  b: number;
+  c: number;
+};
+
+/**
+ * The Home screen's "Native locator lab" card.
+ *
+ * Every target here deliberately ships WITHOUT an accessibility id, and the lane
+ * buttons all share the same visible text — so `getByText('+')` is ambiguous and
+ * `getById` has nothing to bind to. They are reachable only through
+ * `by.native()`, which is the point of this page object.
+ *
+ * The readout pills DO keep stable ids, so assertions can prove which target was
+ * actually hit rather than just that something was tapped.
+ */
+export class NativeLabPage {
+  constructor(private readonly device: AsturDevice) {}
+
+  get card(): MobileLocator {
+    return this.device.getById('home-native-lab-card');
+  }
+
+  get selectedRecordPill(): MobileLocator {
+    return this.device.getById('native-lab-selected-record');
+  }
+
+  /**
+   * The nth unlabeled "+" lane button (0-based). All three are identical, so
+   * position is the only thing that separates them:
+   * - Android: match the "+" text node, take the nth match.
+   * - iOS: the same, expressed as an XCUITest predicate.
+   */
+  laneButton(index: number): MobileLocator {
+    return this.device.find(
+      by.native({
+        android: { text: '+' },
+        ios: "label == '+'",
+        instance: index
+      })
+    );
+  }
+
+  /**
+   * The structure-only row that *contains* the given record name — the row
+   * itself has no id and no distinguishing text of its own.
+   * - Android: `hasDescendant` matches the row by a child node's text.
+   * - iOS: the row's merged accessibility label contains the record name, so a
+   *   `CONTAINS` predicate expresses the same intent natively.
+   */
+  recordRow(record: string): MobileLocator {
+    return this.device.find(
+      by.native({
+        android: { hasDescendant: { text: record } },
+        ios: `label CONTAINS '${record}'`
+      })
+    );
+  }
+
+  /**
+   * Scrolls the card fully into view. Targets the last element in the card (the
+   * selected-record pill) so everything above it — the lane buttons and their
+   * counters — is on screen too.
+   */
+  async reveal(): Promise<void> {
+    await this.selectedRecordPill.scrollIntoView();
+  }
+
+  async laneCounts(): Promise<NativeLabLaneCounts> {
+    return {
+      a: await this.readCount('native-lab-lane-a-count'),
+      b: await this.readCount('native-lab-lane-b-count'),
+      c: await this.readCount('native-lab-lane-c-count')
+    };
+  }
+
+  /**
+   * Reads a MetricPill's numeric value. Both platforms may merge the pill's
+   * label and value into one node ("LANE A 1"), so strip to digits rather than
+   * assuming a discrete value node.
+   */
+  private async readCount(id: string): Promise<number> {
+    const snapshot = await this.device.getById(id).snapshot({ timeout: 4_000 });
+    const digits = (snapshot.value ?? snapshot.text ?? snapshot.label ?? '').replace(/\D+/g, '');
+    return digits.length ? Number(digits) : 0;
   }
 }
 

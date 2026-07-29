@@ -40,7 +40,9 @@ export default defineConfig({
     'orientation-menu.test.ts',
     'swipe.test.ts',
     'drag-and-drop.test.ts',
-    'tap-laboratory.test.ts'
+    'tap-laboratory.test.ts',
+    // Needs a demo-app build that includes the Native locator lab card.
+    'native-locators.test.ts'
   ],
   timeout: 120_000,
   fullyParallel: false,
