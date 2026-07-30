@@ -383,6 +383,65 @@ export class NativeLabPage {
   }
 
   /**
+   * The nth lane button again, but located through a *compound* native query
+   * rather than a single condition — every field below narrows the same match
+   * (logical AND), and `instance` is applied last:
+   * - Android: class + text + position in one `BySelector` chain.
+   * - iOS: the equivalent compound NSPredicate.
+   *
+   * `classNameMatches` is kept deliberately permissive because the two demo
+   * builds render different native classes for the same control: React Native
+   * emits real widget classes (`android.widget.TextView`), while Flutter
+   * surfaces every semantics node as `android.view.View`.
+   */
+  laneButtonByCompoundQuery(index: number): MobileLocator {
+    return this.device.find(
+      by.native({
+        android: {
+          classNameMatches: 'android\\..*',
+          text: '+',
+          packageName: 'com.astur.demo'
+        },
+        ios: "type == 'XCUIElementTypeStaticText' AND label == '+'",
+        instance: index
+      })
+    );
+  }
+
+  /**
+   * A record row located by a *regex* over the text nested inside it, rather
+   * than an exact string — `textMatches` on Android, `MATCHES` on iOS.
+   */
+  recordRowMatching(pattern: string): MobileLocator {
+    return this.device.find(
+      by.native({
+        // `hasDescendant` (any depth) rather than `hasChild` (direct children
+        // only) so this holds regardless of how deeply each build nests the
+        // row's text node.
+        android: { hasDescendant: { textMatches: pattern } },
+        ios: `label MATCHES '.*${pattern}.*'`
+      })
+    );
+  }
+
+  /**
+   * Shows that `by.native()` is not limited to id-less nodes: the readout pills
+   * DO carry ids, and can be addressed by an id *pattern* — useful when ids are
+   * generated with a stable prefix but an unstable suffix.
+   *
+   * The Android pattern tolerates both the bare id and the package-qualified
+   * `com.astur.demo:id/<name>` form.
+   */
+  lanePillByIdPattern(lane: 'a' | 'b' | 'c'): MobileLocator {
+    return this.device.find(
+      by.native({
+        android: { resourceIdMatches: `.*native-lab-lane-${lane}-count` },
+        ios: `identifier BEGINSWITH 'native-lab-lane-${lane}'`
+      })
+    );
+  }
+
+  /**
    * Scrolls the card fully into view. Targets the last element in the card (the
    * selected-record pill) so everything above it — the lane buttons and their
    * counters — is on screen too.
