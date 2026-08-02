@@ -3,7 +3,7 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
-## 0.5.0-beta.2
+## 0.5.0-beta.3
 
 ### Added
 
@@ -68,6 +68,8 @@ All notable changes to Astur are documented here. Versions follow the
   profiler setting is scoped to the isolate, and every test reset
   hot-restarts into a new one, so observation silently stopped after the
   first test. The session now re-applies it after each restart.
+
+## 0.5.0-beta.2
 
 ### Added
 

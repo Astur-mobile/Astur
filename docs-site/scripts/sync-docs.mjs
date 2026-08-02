@@ -72,6 +72,13 @@ const pages = [
     order: 9
   },
   {
+    source: 'docs/network.md',
+    target: 'network.md',
+    title: 'Network Observation',
+    description: "See the HTTP traffic your app makes while a test drives it — what it called, what came back, how long it took.",
+    order: 10
+  },
+  {
     source: 'docs/platform-limits.md',
     target: 'platform-limits.md',
     title: 'Platform Limits',
