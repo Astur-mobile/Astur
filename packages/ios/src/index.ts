@@ -781,7 +781,9 @@ class IosSession implements PlatformSession {
     nativeAgent?: IosNativeAgentRuntime
   ) {
     this.xcrunPath = xcrunPath;
-    this.deviceInfo = deviceInfo;
+    // XCUITest reads the merged accessibility tree for every app, Flutter
+    // included, so iOS sessions are always 'native' from a test's perspective.
+    this.deviceInfo = { ...deviceInfo, uiEngine: 'native' };
     this.capabilities = capabilities;
     this.nativeAgent = nativeAgent?.client;
     this.nativeAgentBridge = nativeAgent?.bridge;

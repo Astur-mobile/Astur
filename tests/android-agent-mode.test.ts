@@ -568,6 +568,58 @@ describe('Android native-agent mode', () => {
     expect(methods).not.toContain('element.findMany');
     expect(methods.filter((method) => method === 'tree.get').length).toBeGreaterThan(0);
   });
+
+  it('reports the ui engine so tests can branch on it instead of on env vars', async () => {
+    const server = await createAgentServer((request) => ({
+      body: ok(request.id, request.method === 'agent.ping' ? ANDROID_AGENT_INFO : ANDROID_TREE)
+    }));
+    servers.push(server);
+
+    const driver = createDriver();
+    const session = await driver.createSession(normalizeCapabilities({
+      platform: 'android',
+      device: { id: ANDROID_DEVICE.id },
+      agent: {
+        mode: 'required',
+        endpoint: server.endpoint,
+        launchTimeout: 500,
+        commandTimeout: 500
+      }
+    }));
+
+    // A non-Flutter session is served by the platform hierarchy. The Flutter
+    // counterpart reports 'flutter', which is what tells a spec that only
+    // on-screen nodes exist.
+    expect(session.deviceInfo.uiEngine).toBe('native');
+  });
+
+  it('caches the viewport instead of re-reading the tree for every gesture', async () => {
+    const server = await createAgentServer((request) => ({
+      body: ok(request.id, request.method === 'agent.ping' ? ANDROID_AGENT_INFO : ANDROID_TREE)
+    }));
+    servers.push(server);
+
+    const driver = createDriver();
+    const session = await driver.createSession(normalizeCapabilities({
+      platform: 'android',
+      device: { id: ANDROID_DEVICE.id },
+      agent: {
+        mode: 'required',
+        endpoint: server.endpoint,
+        launchTimeout: 500,
+        commandTimeout: 500
+      }
+    }));
+
+    const first = await session.getViewport!();
+    const second = await session.getViewport!();
+
+    expect(second).toEqual(first);
+    expect(first).toEqual(ANDROID_TREE.bounds);
+    // Serializing the whole hierarchy to recover one rectangle is the expensive
+    // part; scroll helpers ask for the viewport on every reveal.
+    expect(server.requests.filter((request) => request.method === 'tree.get')).toHaveLength(1);
+  });
 });
 
 function createDriver() {

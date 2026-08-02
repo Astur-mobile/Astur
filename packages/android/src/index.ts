@@ -28,6 +28,9 @@ import type {
   LaunchOptions,
   LongPressOptions,
   MobileContextInfo,
+  NetworkCapabilities,
+  NetworkRedactionOptions,
+  NetworkRequestRecord,
   MobileElementSnapshot,
   NativeAgentCommandParams,
   NativeAgentCommandResponse,
@@ -58,6 +61,12 @@ import { run, runText, spawnCommand, spawnDetached } from './command.js';
 import { parseUiAutomatorXml } from './uiautomatorXml.js';
 import { FlutterProcess } from './flutter/process.js';
 import { FlutterVmService } from './flutter/vmService.js';
+import {
+  applyBodyLimit,
+  FLUTTER_NETWORK_CAPABILITIES,
+  resolveRedactionOptions,
+  toNetworkRecords
+} from './flutter/network.js';
 import { isFlutterApk } from './flutter/detect.js';
 
 export interface AndroidDriverOptions {
@@ -230,10 +239,11 @@ export class AndroidDriver implements PlatformDriver {
     }
 
     const flutter = await this.resolveFlutterRuntime(resolvedCapabilities, device);
-    // Flutter on Android is driven through the Dart VM service, not the native
-    // UIAutomator agent (Flutter does not publish its tree to accessibility), so
-    // skip agent bootstrap when a Flutter app is detected.
-    const nativeAgent = flutter ? undefined : await this.resolveNativeAgent(resolvedCapabilities, device);
+    // Keep the Dart VM service as Flutter's semantic-tree driver, but also
+    // connect the native agent. by.native() deliberately bypasses Flutter's
+    // widget protocol and must resolve through UiAutomator; the agent is also
+    // how tests reach system/native UI that sits outside the Flutter tree.
+    const nativeAgent = await this.resolveNativeAgent(resolvedCapabilities, device);
 
     return new AndroidSession(this.adbPath, device, resolvedCapabilities, nativeAgent, flutter);
   }
@@ -550,6 +560,16 @@ class AndroidSession implements PlatformSession {
     remotePath: string;
   };
   private readonly forwardedWebViewPorts = new Set<number>();
+  /** Screen bounds; invalidated on rotation. See {@link getViewport}. */
+  private cachedViewport?: Bounds;
+  /**
+   * Whether this session has been asked to observe network traffic.
+   *
+   * The Dart profiler setting is per-ISOLATE and every reset hot-restarts
+   * into a new one, so the intent is remembered here and re-applied after
+   * each restart — otherwise observation silently stops after the first test.
+   */
+  private networkObservationRequested = false;
 
   private readonly flutter?: FlutterRuntime;
 
@@ -561,7 +581,9 @@ class AndroidSession implements PlatformSession {
     flutter?: FlutterRuntime
   ) {
     this.adbPath = adbPath;
-    this.deviceInfo = deviceInfo;
+    // Report the engine that actually serves the tree, so tests can adapt to
+    // Flutter's on-screen-only snapshots without inspecting how they were run.
+    this.deviceInfo = { ...deviceInfo, uiEngine: flutter ? 'flutter' : 'native' };
     this.capabilities = capabilities;
     this.nativeAgentRuntime = nativeAgentRuntime;
     this.nativeAgent = nativeAgentRuntime?.client;
@@ -595,7 +617,20 @@ class AndroidSession implements PlatformSession {
     // transition) left the app behind, then rebind: hot restart spins up a fresh
     // Dart isolate, so reads must target it, not the dead one (empty tree).
     await this.foregroundFlutterApp(flutter.component);
-    let ready = (await flutter.vm?.reattach()) ?? false;
+    let ready: boolean;
+    try {
+      ready = (await flutter.vm?.reattach()) ?? false;
+    } catch {
+      // Rebinding can fail outright rather than just come back unready — most
+      // often `getVM` never answers, because the VM service went away with the
+      // isolate the restart replaced. Nothing on this connection will work
+      // again, so retrying or re-foregrounding cannot help. Tear the whole
+      // `flutter run` session down and bring up a fresh one: that costs a few
+      // seconds, whereas leaving it dead fails this test and every test after
+      // it in the same worker.
+      await this.restartFlutterSession();
+      return;
+    }
     // A hot restart can bring the engine back surfaceless (the view never reports
     // a non-zero size), in which case the new isolate is bound but every tree read
     // is unlaid-out (0x0 bounds → nothing visible) and the app-shell wait times
@@ -605,6 +640,36 @@ class AndroidSession implements PlatformSession {
       await this.foregroundFlutterApp(flutter.component);
       ready = await flutter.vm.ensureReady();
     }
+
+    // The hot restart bound a fresh isolate, which does not inherit the HTTP
+    // profiler setting. Re-apply it so observation survives a reset instead of
+    // going quiet — a silently empty request list is the worst failure mode
+    // this feature has.
+    if (this.networkObservationRequested) {
+      await flutter.vm?.enableHttpProfiling().catch(() => undefined);
+    }
+  }
+
+  /**
+   * Tears down the `flutter run` session and starts a clean one.
+   *
+   * The recovery path for a Dart VM service that has stopped answering. Resets
+   * the runtime to its pre-launch state first so a failure part-way through
+   * cannot leave a half-attached session behind for the next test to inherit.
+   */
+  private async restartFlutterSession(): Promise<void> {
+    const flutter = this.flutter!;
+
+    await flutter.vm?.dispose().catch(() => undefined);
+    await flutter.process.stop().catch(() => undefined);
+    flutter.vm = undefined;
+    flutter.started = false;
+
+    const url = await flutter.process.start();
+    flutter.vm = new FlutterVmService({ url });
+    await flutter.vm.connect();
+    flutter.started = true;
+    flutter.component = await this.detectForegroundComponent().catch(() => undefined);
   }
 
   /** Reads the currently focused app component (package/activity) from the platform. */
@@ -794,6 +859,11 @@ class AndroidSession implements PlatformSession {
   }
 
   async setOrientation(orientation: DeviceOrientation): Promise<void> {
+    // Rotation swaps the screen's width and height, so any cached viewport is
+    // now wrong. Drop it before the rotation rather than after, so a failure
+    // part-way through cannot leave a stale rectangle behind.
+    this.cachedViewport = undefined;
+
     if (this.nativeAgent?.info.capabilities.includes('device.setOrientation')) {
       try {
         const command = await this.tryNativeCommand('device.setOrientation', { orientation });
@@ -851,10 +921,34 @@ class AndroidSession implements PlatformSession {
     return parseUiAutomatorXml(xml);
   }
 
+  /**
+   * Screen bounds, in the same coordinate space as element snapshots.
+   *
+   * Deliberately sourced from {@link getTree}, which already routes to whichever
+   * engine is authoritative for this session. Callers compare this rectangle
+   * against element bounds to size scroll gestures, so the two must come from
+   * the same space — under Flutter, elements are measured by the Dart VM, and
+   * mixing in a rectangle from the UiAutomator hierarchy silently skews every
+   * geometry decision. `adb shell wm size` is cheaper than both but reports the
+   * *unrotated* physical display, so it cannot answer this at all in landscape.
+   *
+   * Cached because it is read once per scroll gesture and only changes on
+   * rotation, which invalidates it explicitly.
+   */
+  async getViewport(): Promise<Bounds> {
+    this.cachedViewport ??= (await this.getTree()).bounds;
+    return this.cachedViewport;
+  }
+
   async findElement(selector: ElementSelector): Promise<MobileElementSnapshot | undefined> {
-    const command = await this.tryNativeCommand('element.find', { selector });
-    if (command.ok) {
-      return command.result;
+    if (this.shouldUseNativeElementCommand(selector)) {
+      const command = await this.tryNativeCommand('element.find', { selector });
+      if (command.ok) {
+        return command.result;
+      }
+      if (this.flutter?.vm) {
+        return undefined;
+      }
     }
 
     return findElement(await this.getTree(), selector);
@@ -864,10 +958,14 @@ class AndroidSession implements PlatformSession {
     // Agent builds that predate element.findAll do not advertise it; fall back to
     // the tree snapshot (the same path queryAll used before this hook existed)
     // instead of failing required-mode runs against an older installed agent.
-    if (this.nativeAgent?.info.capabilities.includes('element.findAll')) {
+    if (this.shouldUseNativeElementCommand(selector)
+      && this.nativeAgent?.info.capabilities.includes('element.findAll')) {
       const command = await this.tryNativeCommand('element.findAll', { selector });
       if (command.ok) {
         return command.result;
+      }
+      if (this.flutter?.vm) {
+        return [];
       }
     }
 
@@ -875,11 +973,31 @@ class AndroidSession implements PlatformSession {
   }
 
   async findManyElements(selectors: ElementSelector[]): Promise<MobileElementSnapshot[]> {
-    if (this.nativeAgent?.info.capabilities.includes('element.findMany')) {
+    if (selectors.every((selector) => this.shouldUseNativeElementCommand(selector))
+      && this.nativeAgent?.info.capabilities.includes('element.findMany')) {
       const command = await this.tryNativeCommand('element.findMany', { selectors });
       if (command.ok) {
         return command.result;
       }
+    }
+
+    // A mixed batch under Flutter: `native` selectors must go to the agent
+    // while the rest resolve against the Dart VM tree. Read that tree once and
+    // reuse it, rather than letting each selector trigger its own on-device
+    // walk — the walk is the expensive part, and N snapshots taken at N
+    // different moments would also stop the batch describing a single instant.
+    if (this.flutter?.vm && selectors.some((selector) => selector.strategy === 'native')) {
+      const nativeSelectors = selectors.filter((selector) => selector.strategy === 'native');
+      const treeSelectors = selectors.filter((selector) => selector.strategy !== 'native');
+      const [nativeGroups, tree] = await Promise.all([
+        Promise.all(nativeSelectors.map((selector) => this.findElements(selector))),
+        treeSelectors.length ? this.getTree() : undefined
+      ]);
+
+      return [
+        ...nativeGroups.flat(),
+        ...(tree ? treeSelectors.flatMap((selector) => findElements(tree, selector)) : [])
+      ];
     }
 
     const root = await this.getTree();
@@ -892,15 +1010,17 @@ class AndroidSession implements PlatformSession {
   ): Promise<MobileElementSnapshot> {
     const state = options.state ?? 'attached';
 
-    const command = await this.tryNativeCommand('element.wait', {
-      selector,
-      options: {
-        ...options,
-        state
+    if (this.shouldUseNativeElementCommand(selector)) {
+      const command = await this.tryNativeCommand('element.wait', {
+        selector,
+        options: {
+          ...options,
+          state
+        }
+      });
+      if (command.ok && command.result) {
+        return command.result;
       }
-    });
-    if (command.ok && command.result) {
-      return command.result;
     }
 
     return waitFor(
@@ -930,15 +1050,17 @@ class AndroidSession implements PlatformSession {
   }
 
   async waitForElementHidden(selector: ElementSelector, options: ElementWaitOptions = {}): Promise<void> {
-    const command = await this.tryNativeCommand('element.wait', {
-      selector,
-      options: {
-        ...options,
-        state: 'hidden'
+    if (this.shouldUseNativeElementCommand(selector)) {
+      const command = await this.tryNativeCommand('element.wait', {
+        selector,
+        options: {
+          ...options,
+          state: 'hidden'
+        }
+      });
+      if (command.ok) {
+        return;
       }
-    });
-    if (command.ok) {
-      return;
     }
 
     await waitFor(
@@ -955,9 +1077,11 @@ class AndroidSession implements PlatformSession {
   }
 
   async tapElement(selector: ElementSelector, options: ElementTapOptions = {}): Promise<void> {
-    const command = await this.tryNativeCommand('element.tap', { selector, options });
-    if (command.ok) {
-      return;
+    if (this.usesNativeElementActions) {
+      const command = await this.tryNativeElementAction('element.tap', { selector, options });
+      if (command.ok) {
+        return;
+      }
     }
 
     let element = await this.waitForElement(selector, { ...options, state: 'visible' });
@@ -970,9 +1094,11 @@ class AndroidSession implements PlatformSession {
   }
 
   async doubleTapElement(selector: ElementSelector, options: ElementDoubleTapOptions = {}): Promise<void> {
-    const command = await this.tryNativeCommand('element.doubleTap', { selector, options });
-    if (command.ok) {
-      return;
+    if (this.usesNativeElementActions) {
+      const command = await this.tryNativeElementAction('element.doubleTap', { selector, options });
+      if (command.ok) {
+        return;
+      }
     }
 
     let element = await this.waitForElement(selector, { ...options, state: 'visible' });
@@ -985,9 +1111,11 @@ class AndroidSession implements PlatformSession {
   }
 
   async longPressElement(selector: ElementSelector, options: ElementLongPressOptions = {}): Promise<void> {
-    const command = await this.tryNativeCommand('element.longPress', { selector, options });
-    if (command.ok) {
-      return;
+    if (this.usesNativeElementActions) {
+      const command = await this.tryNativeElementAction('element.longPress', { selector, options });
+      if (command.ok) {
+        return;
+      }
     }
 
     let element = await this.waitForElement(selector, { ...options, state: 'visible' });
@@ -1000,9 +1128,15 @@ class AndroidSession implements PlatformSession {
   }
 
   async fillElement(selector: ElementSelector, value: string, options: ElementFillOptions = {}): Promise<void> {
-    const command = await this.tryNativeCommand('element.fill', { selector, value, options });
-    if (command.ok) {
-      return;
+    // UiAutomator can see Flutter's Semantics wrapper for an id, but setText()
+    // on that wrapper may report success without updating the nested TextField.
+    // Keep ordinary Flutter fills on the VM/IME path; by.native() remains an
+    // explicit request to operate through the native agent.
+    if (this.usesNativeElementActions) {
+      const command = await this.tryNativeElementAction('element.fill', { selector, value, options });
+      if (command.ok) {
+        return;
+      }
     }
 
     const element = await this.waitForElement(selector, { ...options, state: 'visible' });
@@ -1038,9 +1172,11 @@ class AndroidSession implements PlatformSession {
     target: ElementDragTarget,
     options: ElementDragOptions = {}
   ): Promise<void> {
-    const command = await this.tryNativeCommand('element.drag', { selector, target, options });
-    if (command.ok) {
-      return;
+    if (this.usesNativeElementActions) {
+      const command = await this.tryNativeElementAction('element.drag', { selector, target, options });
+      if (command.ok) {
+        return;
+      }
     }
 
     let source = await this.waitForElement(selector, { ...options, state: 'visible' });
@@ -1064,18 +1200,88 @@ class AndroidSession implements PlatformSession {
     });
   }
 
+  private shouldUseNativeElementCommand(selector: ElementSelector): boolean {
+    return !this.flutter?.vm
+      || selector.strategy === 'native';
+  }
+  // ^ The single rule for "resolve this through the UiAutomator agent", used by
+  // finds, waits and actions alike.
+  //
+  // Under Flutter the Dart VM is authoritative and `by.native()` is the *only*
+  // opt-in to the agent. Routing ordinary id-based actions through the agent as
+  // well looks tempting — the node is right there in the hierarchy — but a
+  // Flutter Semantics wrapper is frequently not clickable in its own right (the
+  // actionable node is merged beneath it), so `element.tap` either fails
+  // outright or dispatches to a container and is swallowed. Resolving bounds
+  // from the VM and tapping the coordinate works for every widget.
+
+  // Coordinate gestures bypass the agent under Flutter — measured, not assumed:
+  // an agent `gesture.tap` on a Flutter view is accepted and reported as
+  // successful while delivering nothing to the app (tapping a nav tab at its
+  // exact centre left the route unchanged; `adb shell input tap` at the very
+  // same coordinate navigated). UiAutomator injects through the accessibility
+  // layer, which Flutter's single surface does not consume as a real pointer
+  // event, so `input` is the only path that reaches the engine.
+  //
+  // Note this is NOT a coordinate-space problem: the Dart VM extractor
+  // multiplies every offset by devicePixelRatio, so VM snapshots, UiAutomator
+  // and `input` all agree in physical pixels.
+  /**
+   * True when Flutter's Dart VM — not the UiAutomator agent — owns interaction.
+   *
+   * Connecting the agent for Flutter sessions (so `by.native()` can resolve)
+   * silently re-routed every operation that short-circuits on `tryNativeCommand`
+   * before reaching its `if (this.flutter?.vm)` branch, orphaning the
+   * Flutter-specific handling. Gate those call sites on this so the agent is
+   * used for element *resolution* only, never for driving the app.
+   */
+  private get flutterDrivesInteraction(): boolean {
+    return Boolean(this.flutter?.vm);
+  }
+
+  /**
+   * Whether the agent's element *action* commands (element.tap, element.drag,
+   * element.fill …) may be used.
+   *
+   * Resolution and action are separate decisions. `by.native()` always resolves
+   * through the agent — that is its whole point — but acting through it on a
+   * Flutter node fails: UiObject2 drives the accessibility layer, and a Flutter
+   * Semantics wrapper is usually not clickable in its own right, so the command
+   * errors or dispatches to a container and is swallowed. Under Flutter, resolve
+   * with the agent and then act on the resulting coordinates via the shell.
+   */
+  private get usesNativeElementActions(): boolean {
+    return !this.flutterDrivesInteraction;
+  }
+
   async tap(target: Coordinates): Promise<void> {
-    const command = await this.tryNativeCommand('gesture.tap', { target });
-    if (command.ok) {
-      return;
+    if (!this.flutterDrivesInteraction) {
+      const command = await this.tryNativeCommand('gesture.tap', { target });
+      if (command.ok) {
+        return;
+      }
     }
 
     await this.adb(['shell', 'input', 'tap', String(target.x), String(target.y)]);
   }
 
   async doubleTap(target: Coordinates, options: DoubleTapOptions = {}): Promise<void> {
-    const command = await this.tryNativeCommand('gesture.doubleTap', { target, options });
-    if (command.ok) {
+    if (!this.flutterDrivesInteraction) {
+      const command = await this.tryNativeCommand('gesture.doubleTap', { target, options });
+      if (command.ok) {
+        return;
+      }
+    }
+
+    // Two shell taps: a host round-trip plus an on-device `input` start can
+    // approach Android's ~300 ms double-tap window, so this is the least
+    // reliable gesture on the Flutter path. Issue both in ONE adb invocation to
+    // remove the second host round-trip from the gap.
+    if (this.flutterDrivesInteraction) {
+      const x = String(target.x);
+      const y = String(target.y);
+      const gapSeconds = ((options.intervalMs ?? 80) / 1000).toFixed(3);
+      await this.adb(['shell', `input tap ${x} ${y}; sleep ${gapSeconds}; input tap ${x} ${y}`]);
       return;
     }
 
@@ -1085,9 +1291,11 @@ class AndroidSession implements PlatformSession {
   }
 
   async longPress(target: Coordinates, options: LongPressOptions = {}): Promise<void> {
-    const command = await this.tryNativeCommand('gesture.longPress', { target, options });
-    if (command.ok) {
-      return;
+    if (!this.flutterDrivesInteraction) {
+      const command = await this.tryNativeCommand('gesture.longPress', { target, options });
+      if (command.ok) {
+        return;
+      }
     }
 
     const durationMs = options.durationMs ?? 800;
@@ -1332,10 +1540,87 @@ class AndroidSession implements PlatformSession {
     return evaluator;
   }
 
+  async getNetworkCapabilities(): Promise<NetworkCapabilities> {
+    const vm = this.flutter?.vm;
+    if (!vm) {
+      return {
+        observe: false,
+        intercept: false,
+        transports: [],
+        responseBodies: false,
+        coverage: 'Native Android sessions have no instrumented network layer; observation needs the Astur in-app adapter',
+        adapterRequired: true
+      };
+    }
+
+    // Detected at runtime, not inferred from "this is Flutter": the dart:io
+    // profiler extensions are registered by the SDK and are not guaranteed to
+    // be present in every build.
+    if (!(await vm.supportsHttpProfiling().catch(() => false))) {
+      return {
+        ...FLUTTER_NETWORK_CAPABILITIES,
+        observe: false,
+        responseBodies: false,
+        coverage: 'This Dart isolate did not register the dart:io HTTP profiler extensions'
+      };
+    }
+
+    return FLUTTER_NETWORK_CAPABILITIES;
+  }
+
+  async getNetworkRequests(options?: NetworkRedactionOptions): Promise<NetworkRequestRecord[]> {
+    const vm = this.flutter?.vm;
+    if (!vm) {
+      throw new AsturError(
+        'NETWORK_OBSERVATION_UNSUPPORTED',
+        'Network observation on Android currently requires a Flutter session (Dart VM service). '
+        + 'Native and React Native apps need the Astur in-app adapter.'
+      );
+    }
+
+    const resolved = resolveRedactionOptions(options);
+    const records = toNetworkRecords(await vm.getHttpProfile(), resolved);
+
+    // Bodies live on a per-request endpoint, so fetch them only for completed
+    // exchanges and let one failure degrade a single record, not the batch.
+    return Promise.all(records.map(async (record) => {
+      if (record.status === undefined) {
+        return record;
+      }
+      const detail = await vm.getHttpProfileRequest(record.id).catch(() => undefined);
+      const body = (detail?.responseBody ?? (detail?.response as { body?: unknown } | undefined)?.body);
+      return {
+        ...record,
+        ...applyBodyLimit(typeof body === 'string' ? body : undefined, resolved.maxBodyBytes)
+      };
+    }));
+  }
+
+  async clearNetworkRequests(): Promise<void> {
+    const vm = this.flutter?.vm;
+    if (!vm) {
+      return;
+    }
+    // Enable on every clear, and never cache "already enabled".
+    //
+    // Two reasons. The profiler only records from the moment it is switched on,
+    // so enabling at read time captures nothing — the traffic under test has
+    // already happened. And the setting is scoped to the ISOLATE, not the
+    // session: each test hot-restarts into a fresh isolate, which silently
+    // drops it. Caching the flag made observation work for the first test and
+    // quietly return nothing afterwards. One extra RPC per test is cheap;
+    // silently empty results are not.
+    this.networkObservationRequested = true;
+    await vm.enableHttpProfiling().catch(() => undefined);
+    await vm.clearHttpProfile().catch(() => undefined);
+  }
+
   async getKeyboardState(): Promise<KeyboardState> {
-    const command = await this.tryNativeCommand('keyboard.state');
-    if (command.ok) {
-      return command.result;
+    if (!this.flutterDrivesInteraction) {
+      const command = await this.tryNativeCommand('keyboard.state');
+      if (command.ok) {
+        return command.result;
+      }
     }
 
     const output = await this.adbText(['shell', 'dumpsys', 'window']);
@@ -1343,9 +1628,17 @@ class AndroidSession implements PlatformSession {
   }
 
   async dismissKeyboard(): Promise<void> {
-    const command = await this.tryNativeCommand('keyboard.dismiss');
-    if (command.ok) {
-      return;
+    // Never let the agent dismiss the IME on Flutter. Its Back press is exactly
+    // the failure the VM-unfocus branch below exists to avoid: it pops the route
+    // or backgrounds the task, the widget tree vanishes, and every later tree
+    // read hangs until the VM service is disposed. Taps near the bottom of the
+    // screen (a bottom nav bar) fall inside the IME bounds and trigger this via
+    // preparePointerTargetForKeyboard, so it takes down ordinary navigation.
+    if (!this.flutterDrivesInteraction) {
+      const command = await this.tryNativeCommand('keyboard.dismiss');
+      if (command.ok) {
+        return;
+      }
     }
 
     if (!(await this.getKeyboardState()).visible) {
@@ -1378,6 +1671,32 @@ class AndroidSession implements PlatformSession {
       }
 
       await delay(100);
+    }
+  }
+
+  /**
+   * Runs an agent element *action*, treating a command failure as "fall back to
+   * coordinates" rather than as fatal.
+   *
+   * Deliberately a different policy from {@link tryNativeCommand}. When a READ
+   * fails (tree.get, element.find) there is no equivalent and the error must
+   * surface. An ACTION always has one: resolve the element and tap its centre.
+   * UiObject2 routinely refuses to act on a node that is present and correct —
+   * a Text inside a Pressable is not itself clickable — and that must not fail
+   * a test when tapping the same pixels would have worked. The fallback still
+   * goes through the agent's gesture commands, so this is not a legacy path.
+   */
+  private async tryNativeElementAction<M extends NativeAgentMethod>(
+    method: M,
+    params?: NativeAgentCommandParams<M>
+  ): Promise<{ ok: boolean }> {
+    try {
+      return await this.tryNativeCommand(method, params);
+    } catch (error) {
+      if (error instanceof AsturError && error.code === 'ANDROID_AGENT_COMMAND_FAILED') {
+        return { ok: false };
+      }
+      throw error;
     }
   }
 
