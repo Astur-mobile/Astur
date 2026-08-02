@@ -8,9 +8,15 @@
 
 [![npm: astur-mobile](https://img.shields.io/npm/v/astur-mobile/next?logo=npm&label=astur-mobile&color=cb3837)](https://www.npmjs.com/package/astur-mobile)
 [![npm: @astur-mobile/test](https://img.shields.io/npm/v/@astur-mobile/test/next?logo=npm&label=%40astur-mobile%2Ftest&color=cb3837)](https://www.npmjs.com/package/@astur-mobile/test)
+[![latest release](https://img.shields.io/github/v/release/Astur-mobile/Astur?include_prereleases&sort=semver&logo=github&label=release)](https://github.com/Astur-mobile/Astur/releases/latest)
+[![downloads](https://img.shields.io/npm/dm/astur-mobile?logo=npm&label=downloads&color=cb3837)](https://www.npmjs.com/package/astur-mobile)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-supported-3DDC84?logo=android&logoColor=white)](docs/android.md)
 [![iOS](https://img.shields.io/badge/iOS-supported-black?logo=apple&logoColor=white)](docs/ios.md)
+
+> The npm badges track the **`next`** dist-tag, so betas must be published with
+> `npm publish --tag next` for them to move. The release badge follows the
+> latest GitHub release, pre-releases included.
 
 Astur is a device-native mobile automation toolkit that brings the speed and ergonomics of Playwright Test directly to mobile pipelines.
 
