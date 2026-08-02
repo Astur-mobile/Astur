@@ -36,6 +36,11 @@ import { createIosDriver } from '@astur-mobile/ios';
 export {
   by,
   centerOf,
+  // Re-exported so specs stop hand-rolling a private copy. Prefer an
+  // auto-retrying assertion (`expect`/`expect.poll`) over a fixed sleep; reach
+  // for this only when the wait is a real precondition, such as outlasting a
+  // platform gesture-recognition window before the next gesture.
+  delay,
   findElement,
   flattenTree,
   MobileLocator,
@@ -147,6 +152,12 @@ export const test = base.extend<AsturTestFixtures, AsturWorkerFixtures>({
     const asturConfig = withDefaultArtifactsDir(astur, testInfo);
     const videoMode = asturConfig.artifacts?.video ?? 'off';
     let recordingStarted = false;
+
+    // Start each test with an empty capture buffer. The device is worker-scoped
+    // and shared across tests, so without this a test could assert on requests
+    // its predecessor made — and the buffer would grow for the whole run.
+    // Best-effort: a session with no network backend has nothing to clear.
+    await device.network.clear().catch(() => undefined);
 
     if (videoMode !== 'off') {
       try {
@@ -1057,8 +1068,14 @@ async function attachNativeScreenshot(
       body: await device.screenshot(),
       contentType: 'image/png'
     });
-  } catch {
-    // Artifact capture must not hide the original test result.
+  } catch (error) {
+    // Artifact capture must never mask the original test result — but failing
+    // silently leaves a failed test with no screenshot and no way to tell
+    // whether capture was disabled, unsupported, or broken. Record the reason.
+    await testInfo.attach('astur-native-screenshot-error', {
+      body: error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error),
+      contentType: 'text/plain'
+    }).catch(() => undefined);
   }
 }
 

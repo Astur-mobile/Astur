@@ -1,6 +1,7 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@astur-mobile/test';
+import { ensureIosApp } from '../../scripts/ensure-ios-app.mjs';
 
 // Flutter validation config for the iOS simulator: runs the same shared demo-app
 // suite as the React Native iOS config (examples/specs/*.test.ts),
@@ -22,10 +23,13 @@ import { defineConfig } from '@astur-mobile/test';
 //    the drag but do not move), so the four-piece solve cannot complete. The same
 //    suite passes on the Flutter Android driver, which injects real motion events.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-// Resolve ASTUR_IOS_APP_PATH against the repo root (consistent with the RN iOS
-// config), so scripts pass a repo-relative path like `assets/Runner.app`. An
-// absolute override is honored as-is by resolve().
-const appPath = resolve(repoRoot, process.env.ASTUR_IOS_APP_PATH ?? 'assets/Runner.app');
+// Extract the committed artifact here in the config (consistent with the RN iOS
+// config and with how the Android configs resolve their APK), so the npm script
+// is a plain `astur-mobile test` call. An ASTUR_IOS_APP_PATH override is
+// resolved against the repo root; an absolute path is honored as-is.
+const appPath = process.env.ASTUR_IOS_APP_PATH
+  ? resolve(repoRoot, process.env.ASTUR_IOS_APP_PATH)
+  : ensureIosApp(resolve(repoRoot, 'assets/Runner.app'), resolve(repoRoot, 'assets/astur.demo.ios.simulator_flutter.zip'));
 const bundleId = process.env.ASTUR_IOS_BUNDLE_ID ?? 'com.astur.demo';
 const deviceId = process.env.ASTUR_IOS_DEVICE_ID;
 const deviceName = process.env.ASTUR_IOS_DEVICE_NAME ?? 'iPhone 16';
@@ -35,13 +39,12 @@ const device = deviceId
 
 export default defineConfig({
   testDir: resolve(repoRoot, 'examples/specs'),
-  testMatch: [
-    'login.test.ts',
-    'forms.test.ts',
-    'forms-slider.test.ts',
-    'orientation-menu.test.ts',
-    'swipe.test.ts',
-    'tap-laboratory.test.ts'
+  // Deny-list, not an allow-list — see the RN iOS config for why. Reasons for
+  // each exclusion are documented in the header comment above.
+  testIgnore: [
+    'media-upload.test.ts',
+    'webview.test.ts',
+    'drag-and-drop.test.ts'
   ],
   timeout: 180_000,
   fullyParallel: false,
@@ -57,6 +60,11 @@ export default defineConfig({
       artifacts: {
         screenshot: 'only-on-failure',
         video: 'off'
+      },
+      // native-locators.test.ts is intentionally agent-only; fail session
+      // setup with the underlying XCUITest error instead of falling back.
+      agent: {
+        mode: 'required'
       },
       device,
       app: { path: appPath, bundleId }

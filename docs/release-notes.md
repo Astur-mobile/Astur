@@ -2,6 +2,35 @@
 
 What's new in each Astur release.
 
+## 0.5.0-beta.3
+
+**See what your app talks to.** New `device.network` reports the HTTP traffic an app makes while a test drives it, so you can assert on the call rather than just the pixels — and debug a failure without reproducing it by hand.
+
+```ts
+const capabilities = await device.network.capabilities();
+test.skip(!capabilities.observe, capabilities.coverage);
+
+await device.network.clear();
+await app.login.signIn('qa@astur.dev', 'Astur12345');
+
+const [request] = await device.network.requests({ url: '/api/session' });
+expect(request).toMatchObject({ method: 'POST', status: 201 });
+```
+
+- Available on **Flutter Android** today, via the Dart VM HTTP profiler. Covers `dart:io` `HttpClient` traffic — `package:http` and Dio included.
+- Ask `capabilities()` rather than assuming: it reports coverage per session, so one spec runs everywhere and skips with a reason where observation is unavailable.
+- Credential headers redacted and bodies capped by default; the buffer clears between tests.
+- Interception (stub/delay/fail) is **not** in this release — it needs an in-app adapter. `capabilities().intercept` says so rather than failing mysteriously.
+
+See [Network Observation](./network/) for the full picture.
+
+**Fixes that were costing whole runs.**
+
+- The UiAutomator agent had silently taken over keyboard, gestures, and element actions on Flutter sessions. Its `keyboard.dismiss` presses Back — which backgrounds the Flutter app and kills the Dart VM — and its `gesture.tap` never reaches the Flutter view at all.
+- An agent element-action failure now falls back to a coordinate tap instead of aborting the test. Fixes the native media picker on React Native Android.
+- Scroll reveals were flings, not drags: the same gesture at 300 ms flung to the end of the content, at 1200 ms it moves predictably. Search loops no longer bounce between the extremes.
+- A Flutter VM read could block for ~7 minutes; retries are now bounded by wall clock, with the deadline threaded into each request.
+
 ## 0.5.0-beta.2
 
 ### New

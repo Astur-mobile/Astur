@@ -581,8 +581,13 @@ private class UiAutomatorBackend(
 
     override fun tapElement(selector: AsturSelector, options: AsturElementActionOptions) {
         val element = resolveElement(selector, options)
-        val directClick = runCatching { element.click() }
-        if (directClick.isSuccess) {
+        // UiObject2.click() can return normally for a non-clickable container
+        // without dispatching an action (Flutter commonly exposes a structural
+        // Button parent with the actionable semantics node beneath it). Only
+        // treat direct click as success when the resolved node is clickable;
+        // otherwise tap its center so the descendant receives the gesture.
+        val directClick = if (element.isClickable) runCatching { element.click() } else null
+        if (directClick?.isSuccess == true) {
             return
         }
 
@@ -597,7 +602,11 @@ private class UiAutomatorBackend(
             mapOf(
                 "selector" to selector.toMap(),
                 "target" to target.toMap(),
-                "cause" to (directClick.exceptionOrNull()?.message ?: directClick.exceptionOrNull()?.javaClass?.simpleName)
+                "cause" to if (directClick == null) {
+                    "Resolved element is not directly clickable."
+                } else {
+                    directClick.exceptionOrNull()?.message ?: directClick.exceptionOrNull()?.javaClass?.simpleName
+                }
             )
         )
     }
@@ -1053,11 +1062,13 @@ private class UiAutomatorBackend(
     /**
      * Builds a `BySelector` from an AndroidNativeSelector chain by chaining its
      * instance methods (each further constrains the same selector — logical
-     * AND). `By.pkg(".*")` is a neutral, always-true starting point since
-     * `BySelector` has no public no-arg constructor of its own.
+     * AND). `By.pkg(".*")` is a neutral, always-true starting point when the
+     * chain does not constrain the package. When it does, use that package as
+     * the seed: UiAutomator rejects setting the same selector property twice.
      */
     private fun buildBySelector(chain: Map<String, Any?>): BySelector {
-        var selector: BySelector = By.pkg(Pattern.compile(".*"))
+        val packageName = chain.stringValue("packageName")
+        var selector: BySelector = packageName?.let(By::pkg) ?: By.pkg(Pattern.compile(".*"))
 
         chain.stringValue("className")?.let { selector = selector.clazz(it) }
         chain.stringValue("classNameMatches")?.let { selector = selector.clazz(Pattern.compile(it)) }
@@ -1069,7 +1080,6 @@ private class UiAutomatorBackend(
         chain.stringValue("descriptionMatches")?.let { selector = selector.desc(Pattern.compile(it)) }
         chain.stringValue("resourceId")?.let { selector = selector.res(it) }
         chain.stringValue("resourceIdMatches")?.let { selector = selector.res(Pattern.compile(it)) }
-        chain.stringValue("packageName")?.let { selector = selector.pkg(it) }
         chain.mapValue("hasChild")?.let { selector = selector.hasChild(buildBySelector(it)) }
         chain.mapValue("hasDescendant")?.let { selector = selector.hasDescendant(buildBySelector(it)) }
 
@@ -1341,17 +1351,25 @@ private class UiAutomatorBackend(
         val target = clampPoint(point)
         val downTime = SystemClock.uptimeMillis()
         val down = motionEvent(downTime, downTime, MotionEvent.ACTION_DOWN, target)
-        val up = motionEvent(downTime, downTime + 45L, MotionEvent.ACTION_UP, target)
-
-        val sent = runCatching {
-            val uiAutomation = instrumentation.uiAutomation
-            uiAutomation.injectInputEvent(down, true) && uiAutomation.injectInputEvent(up, true)
+        val uiAutomation = instrumentation.uiAutomation
+        val downSent = runCatching {
+            uiAutomation.injectInputEvent(down, true)
         }.getOrDefault(false)
-
         down.recycle()
+
+        if (!downSent) {
+            return false
+        }
+
+        sleep(45L)
+        val upTime = SystemClock.uptimeMillis()
+        val up = motionEvent(downTime, upTime, MotionEvent.ACTION_UP, target)
+        val upSent = runCatching {
+            uiAutomation.injectInputEvent(up, true)
+        }.getOrDefault(false)
         up.recycle()
 
-        return sent
+        return upSent
     }
 
     private fun motionEvent(downTime: Long, eventTime: Long, action: Int, point: AsturPoint): MotionEvent {

@@ -125,8 +125,21 @@ export interface FlutterVmServiceOptions {
   readyPollMs?: number;
   /** How long the laid-out element set must stay unchanged before the UI is considered settled. */
   readySettleMs?: number;
-  /** Retries for the on-device tree walk when it lands mid-build (transient build-lock errors). */
-  evalRetries?: number;
+  /**
+   * Total wall-clock budget for retrying an on-device tree walk that lands
+   * mid-build (transient build-lock errors).
+   *
+   * This is deliberately a time budget rather than an attempt count. Each
+   * attempt can itself block for up to `requestTimeoutMs`, so `N retries`
+   * bounds the worst case at `N * requestTimeoutMs` — with a handful of
+   * retries that is already minutes, which silently blows past the caller's
+   * own timeout (see `evaluateStringStable`).
+   *
+   * Defaults to `requestTimeoutMs + 10s`. Setting it below `requestTimeoutMs`
+   * caps the first attempt at less than a full request, turning a slow-but-fine
+   * tree walk into a timeout.
+   */
+  evalBudgetMs?: number;
   /** Delay between tree-walk retries. */
   evalRetryDelayMs?: number;
 }
@@ -143,7 +156,7 @@ export class FlutterVmService {
   private readonly readyTimeoutMs: number;
   private readonly readyPollMs: number;
   private readonly readySettleMs: number;
-  private readonly evalRetries: number;
+  private readonly evalBudgetMs: number;
   private readonly evalRetryDelayMs: number;
 
   constructor(options: FlutterVmServiceOptions) {
@@ -152,8 +165,12 @@ export class FlutterVmService {
     this.readyTimeoutMs = options.readyTimeoutMs ?? 15_000;
     this.readyPollMs = options.readyPollMs ?? 150;
     this.readySettleMs = options.readySettleMs ?? 500;
-    this.evalRetries = options.evalRetries ?? 6;
-    this.evalRetryDelayMs = options.evalRetryDelayMs ?? 200;
+    // Derived from the request timeout, never a bare constant: the budget has to
+    // leave room for at least one full-length request plus a retry, or it
+    // truncates the very first attempt and reports a timeout for a tree walk
+    // that was merely slow (a large widget tree can take many seconds).
+    this.evalBudgetMs = options.evalBudgetMs ?? this.timeoutMs + 10_000;
+    this.evalRetryDelayMs = options.evalRetryDelayMs ?? 250;
   }
 
   async connect(): Promise<void> {
@@ -215,7 +232,12 @@ export class FlutterVmService {
 
     const tryBind = async (candidates: Array<{ id: string }>): Promise<boolean> => {
       for (const candidate of candidates) {
-        const isolate = await this.call('getIsolate', { isolateId: candidate.id }).catch(() => undefined);
+        const isolate = await this.call('getIsolate', { isolateId: candidate.id }, deadline).catch(() => undefined);
+        const pauseKind = (isolate?.pauseEvent as { kind?: string } | undefined)?.kind;
+        if (pauseKind === 'PauseExit' || pauseKind === 'Exit' || isolate?.runnable === false) {
+          lastReason = 'the isolate had already exited';
+          continue;
+        }
         const rootLibId = (isolate?.rootLib as { id?: string } | undefined)?.id;
         if (!rootLibId) {
           lastReason = 'the isolate exposed no root library for evaluation';
@@ -224,7 +246,7 @@ export class FlutterVmService {
         this.isolateId = candidate.id;
         this.rootLibId = rootLibId;
         try {
-          await this.evaluateString(READY_EXPR);
+          await this.evaluateString(READY_EXPR, deadline);
           return true;
         } catch {
           lastReason = 'the candidate isolate did not accept evaluations yet';
@@ -234,16 +256,29 @@ export class FlutterVmService {
     };
 
     for (;;) {
-      const vm = await this.call('getVM');
+      // Bounded by the same deadline the loop below enforces. Without it a
+      // single unresponsive request blocks for the full request timeout and
+      // overruns the deadline it is supposed to be respecting.
+      const vm = await this.call('getVM', {}, deadline);
       const isolates = (vm.isolates as Array<{ id: string }> | undefined) ?? [];
-      const fresh = previousIsolateId ? isolates.filter((iso) => iso.id !== previousIsolateId) : isolates;
+      // VM service lists isolates in creation order. Multiple frozen isolates can
+      // linger after repeated hot restarts and still accept read-only evaluations,
+      // so trying the oldest first can bind a perfectly readable but stale tree.
+      // Prefer the most recently created replacement.
+      const newestFirst = [...isolates].reverse();
+      const fresh = previousIsolateId
+        ? newestFirst.filter((iso) => iso.id !== previousIsolateId)
+        : newestFirst;
 
       if (await tryBind(fresh)) {
         return;
       }
       // No replacement isolate yet: only reconsider the previous id after the
       // grace window, in case this restart reused it.
-      if (previousIsolateId && fresh.length === 0 && Date.now() >= reuseGraceUntil && (await tryBind(isolates))) {
+      if (previousIsolateId
+        && fresh.length === 0
+        && Date.now() >= reuseGraceUntil
+        && (await tryBind(newestFirst))) {
         return;
       }
 
@@ -450,36 +485,65 @@ export class FlutterVmService {
    * so a short bounded retry makes reads reliable without callers having to sleep.
    */
   private async evaluateStringStable(expression: string): Promise<string> {
+    // Bound the whole retry sequence by wall clock, and hand the same deadline
+    // down to each RPC so a single hung request cannot consume the budget on
+    // its own. Callers poll this through `waitFor`, which only re-checks its
+    // own deadline *between* attempts — an unbounded evaluate here therefore
+    // reads as a frozen test rather than a timeout, no matter how short the
+    // caller's timeout is.
+    const deadline = Date.now() + this.evalBudgetMs;
     let lastError: unknown;
-    for (let attempt = 0; attempt <= this.evalRetries; attempt += 1) {
+    let attempts = 0;
+
+    for (;;) {
+      attempts += 1;
       try {
-        return await this.evaluateString(expression);
+        return await this.evaluateString(expression, deadline);
       } catch (err) {
-        if (!(err instanceof AsturError) || err.code !== 'FLUTTER_VM_EVAL_FAILED') {
+        const transientCompilationError = err instanceof AsturError
+          && err.code === 'FLUTTER_VM_RPC_ERROR'
+          && /expression compilation error/i.test(err.message);
+        if (!(err instanceof AsturError)
+          || (err.code !== 'FLUTTER_VM_EVAL_FAILED' && !transientCompilationError)) {
           throw err;
         }
         lastError = err;
-        if (attempt < this.evalRetries) {
-          await this.sleep(this.evalRetryDelayMs);
+        if (Date.now() + this.evalRetryDelayMs >= deadline) {
+          break;
         }
+        await this.sleep(this.evalRetryDelayMs);
       }
     }
-    throw lastError instanceof Error
-      ? lastError
-      : new AsturError('FLUTTER_VM_EVAL_FAILED', 'Flutter VM expression evaluation failed after retries.');
+
+    const expressionName = expression === EXTRACT_EXPR
+      ? 'Flutter tree extraction'
+      : expression === UNFOCUS_EXPR
+        ? 'Flutter keyboard unfocus'
+        : 'Flutter expression';
+    throw new AsturError(
+      'FLUTTER_VM_EVAL_FAILED',
+      `${expressionName} failed after ${attempts} attempt(s) within ${this.evalBudgetMs} ms: ${
+        lastError instanceof Error ? lastError.message : 'unknown evaluation error'
+      }`,
+      { cause: lastError }
+    );
   }
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /** Evaluates a Dart expression and returns its full String result (handles VM string truncation). */
-  private async evaluateString(expression: string): Promise<string> {
+  /**
+   * Evaluates a Dart expression and returns its full String result (handles VM
+   * string truncation). `deadline` caps every RPC this makes, so paging a large
+   * tree cannot outlive the caller's retry budget.
+   */
+  private async evaluateString(expression: string, deadline?: number): Promise<string> {
     const result = await this.call('evaluate', {
       isolateId: this.isolateId,
       targetId: this.rootLibId,
       expression
-    });
+    }, deadline);
 
     if (result.kind === 'Error' || result.type === '@Error') {
       throw new AsturError('FLUTTER_VM_EVAL_FAILED', 'Flutter VM expression evaluation failed.', { result });
@@ -499,7 +563,7 @@ export class FlutterVmService {
     // The total length is reported on the (truncated) instance.
     const total = typeof result.length === 'number' ? (result.length as number) : Number.MAX_SAFE_INTEGER;
     while (out.length < total) {
-      const obj = await this.call('getObject', { isolateId: this.isolateId, objectId, offset, count });
+      const obj = await this.call('getObject', { isolateId: this.isolateId, objectId, offset, count }, deadline);
       const chunk = (obj.valueAsString as string) ?? '';
       if (chunk.length === 0) {
         break;
@@ -510,17 +574,69 @@ export class FlutterVmService {
     return out;
   }
 
-  private call(method: string, params: Record<string, unknown> = {}): Promise<RpcResult> {
+  /**
+   * Turns on the Dart VM's HTTP profiler for this isolate.
+   *
+   * Off by default: with it on the VM retains every request (and its body) for
+   * the life of the isolate, so it is enabled only when a test asks to observe,
+   * and the buffer is cleared between tests.
+   */
+  async enableHttpProfiling(): Promise<void> {
+    await this.call('ext.dart.io.httpEnableTimelineLogging', {
+      isolateId: this.isolateId,
+      enabled: true
+    });
+  }
+
+  /** Drops everything the profiler has buffered so far. */
+  async clearHttpProfile(): Promise<void> {
+    await this.call('ext.dart.io.clearHttpProfile', { isolateId: this.isolateId });
+  }
+
+  /**
+   * Returns the profiler's buffered requests, newest state included.
+   *
+   * The response shape is owned by the Dart SDK and has changed between
+   * versions, so callers must treat every field as optional rather than
+   * trusting a schema — see `toNetworkRecords` in the Android driver.
+   */
+  async getHttpProfile(): Promise<RpcResult> {
+    return this.call('ext.dart.io.getHttpProfile', { isolateId: this.isolateId });
+  }
+
+  /** Full detail (including the response body) for one profiled request. */
+  async getHttpProfileRequest(id: string): Promise<RpcResult> {
+    return this.call('ext.dart.io.getHttpProfileRequest', { isolateId: this.isolateId, id });
+  }
+
+  /**
+   * Whether this isolate actually registered the dart:io HTTP profiler
+   * extensions. They are absent in some builds, so capability is detected at
+   * runtime rather than assumed from the platform.
+   */
+  async supportsHttpProfiling(): Promise<boolean> {
+    const isolate = await this.call('getIsolate', { isolateId: this.isolateId }).catch(() => undefined);
+    const extensions = (isolate?.extensionRPCs as string[] | undefined) ?? [];
+    return extensions.includes('ext.dart.io.getHttpProfile');
+  }
+
+  private call(method: string, params: Record<string, unknown> = {}, deadline?: number): Promise<RpcResult> {
     const ws = this.ws;
     if (!ws) {
       return Promise.reject(new AsturError('FLUTTER_VM_NOT_CONNECTED', 'Flutter VM service is not connected.'));
     }
+    // Never exceed the caller's remaining budget, but always allow a small floor
+    // so an almost-expired deadline still issues a real request rather than a
+    // guaranteed-zero-timeout one.
+    const timeoutMs = deadline === undefined
+      ? this.timeoutMs
+      : Math.max(250, Math.min(this.timeoutMs, deadline - Date.now()));
     const id = this.nextId++;
     return new Promise<RpcResult>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new AsturError('FLUTTER_VM_TIMEOUT', `Flutter VM service request '${method}' timed out.`));
-      }, this.timeoutMs);
+        reject(new AsturError('FLUTTER_VM_TIMEOUT', `Flutter VM service request '${method}' timed out after ${timeoutMs} ms.`));
+      }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
     });
@@ -543,7 +659,16 @@ export class FlutterVmService {
     this.pending.delete(message.id);
     clearTimeout(entry.timer);
     if (message.error) {
-      entry.reject(new AsturError('FLUTTER_VM_RPC_ERROR', message.error.message ?? 'Flutter VM service returned an error.', { data: message.error.data }));
+      const detail = message.error.data === undefined
+        ? ''
+        : `: ${typeof message.error.data === 'string'
+          ? message.error.data
+          : JSON.stringify(message.error.data)}`;
+      entry.reject(new AsturError(
+        'FLUTTER_VM_RPC_ERROR',
+        `${message.error.message ?? 'Flutter VM service returned an error'}${detail}`,
+        { data: message.error.data }
+      ));
       return;
     }
     entry.resolve(message.result ?? {});

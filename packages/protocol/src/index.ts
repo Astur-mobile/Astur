@@ -56,6 +56,21 @@ export interface DoctorCheck {
   fix?: string;
 }
 
+/**
+ * Which engine serves this session's UI tree.
+ *
+ * `'flutter'` means snapshots come from the Dart VM service: Flutter does not
+ * publish its widget tree to the platform accessibility layer, so only
+ * on-screen nodes exist and `by.native()` resolves through a separate agent.
+ * `'native'` means the platform hierarchy (UiAutomator / XCUITest) is
+ * authoritative — including for Flutter apps on iOS, where XCUITest reads the
+ * merged accessibility tree exactly as it does for any other app.
+ *
+ * Tests should branch on this rather than on how the run was launched; it is
+ * the property that actually changes what is in the tree.
+ */
+export type UiEngine = 'native' | 'flutter';
+
 export interface DeviceInfo {
   id: string;
   name: string;
@@ -64,6 +79,8 @@ export interface DeviceInfo {
   state: DeviceState;
   osVersion?: string;
   model?: string;
+  /** Defaults to `'native'` when a driver does not report one. */
+  uiEngine?: UiEngine;
   raw?: unknown;
 }
 
@@ -829,3 +846,88 @@ export interface NativeAgentCommandResultMap {
 export type NativeAgentCommandParams<M extends NativeAgentMethod> = NativeAgentCommandParamsMap[M];
 
 export type NativeAgentCommandResponse<M extends NativeAgentMethod> = NativeAgentCommandResultMap[M];
+
+// ---------------------------------------------------------------------------
+// Network observation
+//
+// Scope note, deliberately narrow: Astur reports **instrumented application
+// traffic**, never "all device traffic". Each backend covers a specific set of
+// transports and nothing else — a WebView, a native SDK, or a client that
+// bypasses the instrumented layer is invisible. `NetworkCapabilities` exists so
+// a test can ask what is actually covered instead of assuming, and so an
+// unsupported call fails loudly rather than returning a misleadingly empty list.
+// ---------------------------------------------------------------------------
+
+/**
+ * A class of traffic a backend can see. Listed explicitly because coverage is
+ * per-transport: the Dart VM profiler reports `dart:io` HTTP and sockets but
+ * says nothing about a WebView's own requests.
+ */
+export type NetworkTransport = 'http' | 'websocket';
+
+/** What a session can actually do with network traffic right now. */
+export interface NetworkCapabilities {
+  /** Requests can be listed after the fact. */
+  observe: boolean;
+  /**
+   * Requests can be stubbed, delayed, or failed. Always false until an
+   * in-app adapter is present — no backend can intercept without one.
+   */
+  intercept: boolean;
+  /** Transports the observe/intercept flags apply to. */
+  transports: NetworkTransport[];
+  /** Whether response bodies are retrievable, or only metadata. */
+  responseBodies: boolean;
+  /**
+   * Human-readable statement of what is instrumented, for error messages and
+   * reports — e.g. "dart:io HTTP client traffic (Dart VM service profiler)".
+   */
+  coverage: string;
+  /** True when the app must embed the Astur network adapter to go further. */
+  adapterRequired: boolean;
+}
+
+/** One observed request/response exchange. */
+export interface NetworkRequestRecord {
+  id: string;
+  transport: NetworkTransport;
+  method: string;
+  url: string;
+  /** Header values are redacted per NetworkRedactionOptions before this is built. */
+  requestHeaders: Record<string, string>;
+  responseHeaders?: Record<string, string>;
+  status?: number;
+  /** Wall-clock start, epoch ms. */
+  startedAt: number;
+  /** Total duration in ms, absent while still in flight. */
+  durationMs?: number;
+  /** Absent when the backend cannot supply bodies, or the body exceeded the cap. */
+  responseBody?: string;
+  /** Set when the body was dropped, saying which limit was hit. */
+  bodyOmittedReason?: 'too-large' | 'not-captured';
+  /** Populated when the exchange failed before completing. */
+  error?: string;
+}
+
+/** Filter for {@link NetworkObserver.requests}. */
+export interface NetworkRequestFilter {
+  /** Substring or pattern the URL must match. */
+  url?: string | RegExp;
+  method?: string;
+  transport?: NetworkTransport;
+}
+
+export interface NetworkRedactionOptions {
+  /**
+   * Header names replaced with `<redacted>`, compared case-insensitively.
+   * Defaults to authorization/cookie/set-cookie/x-api-key — credentials should
+   * not reach a CI log or an HTML report by default.
+   */
+  redactHeaders?: string[];
+  /**
+   * Largest response body retained, in bytes. Bodies above it are dropped with
+   * `bodyOmittedReason: 'too-large'` so a long run cannot accumulate megabytes
+   * of payload in memory.
+   */
+  maxBodyBytes?: number;
+}

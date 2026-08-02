@@ -67,6 +67,38 @@ Semantics(
 
 Text fields report a value: the current `controller.text`, or the placeholder/`hintText` when empty — so `toHaveValue()` works the same as on native.
 
+#### What the app has to provide
+
+A Flutter app is only as testable as the semantics it exposes. In practice a
+screen needs all of this, not just the first item:
+
+- **An identifier on every widget a test touches or asserts on.** Wrap it in
+  `Semantics(identifier: 'some-id', child: …)`. This maps to `getById()` on
+  Android *and* to `accessibilityIdentifier` on iOS, so one id serves both.
+- **An identified readout for anything you verify.** Flutter merges nearby text,
+  so a label and its value often collapse into one node. If a test needs to
+  assert "the counter went up", give the *value* its own id
+  (`native-lab-lane-a-count`) rather than parsing a merged string.
+- **Identified anchors around anything deliberately id-less.** If a screen ships
+  widgets without ids on purpose (to exercise `by.native()`), put id-bearing
+  elements immediately before and after them so tests can scroll the group into
+  view deterministically.
+- **A layout that does not reflow when acted on.** Reserve space for
+  counters/readouts up front instead of inserting a row on first interaction —
+  a shifting layout invalidates coordinates and can push a widget off screen
+  mid-test.
+- **`container: true` on wrappers you want as discrete nodes**, otherwise
+  Flutter may merge them into a parent and the id disappears from the tree.
+
+```dart
+// A readout the test can assert on, with its own id.
+Semantics(
+  identifier: 'home-tap-single-count',
+  container: true,
+  child: Text('$_tapCount'),
+)
+```
+
 ### What works (Android, Dart VM service)
 
 - Install/launch, hot-restart reset, orientation, screenshots
@@ -77,7 +109,7 @@ Text fields report a value: the current `controller.text`, or the placeholder/`h
 
 ### Flutter on iOS (XCUITest accessibility tree)
 
-iOS has no Dart VM service, so Astur reads a Flutter app through the **XCUITest accessibility tree** — the same agent used for native/RN iOS. The shared demo suite runs on the iOS simulator with **6 of the 9 specs green** (login, forms, slider, orientation/menu, swipe, tap-laboratory). Two things make this work:
+iOS has no Dart VM service, so Astur reads a Flutter app through the **XCUITest accessibility tree** — the same agent used for native/RN iOS. The shared demo suite runs on the iOS simulator with **all 11 enabled specs green** (login, forms, slider, orientation/menu, swipe, tap-laboratory, and the five `by.native()` specs). Two things make this work:
 
 - **Add `Semantics(identifier:)`** to widgets your tests need. Astur reads ids, and reads counter values / slider position by id where Flutter merges the surrounding text.
 - Flutter **merges descendant text into a container's accessibility label** on iOS, so a `Text('Credentials')` is not a discrete element. Astur's iOS agent compensates with a substring fallback over merged labels, so `getByText('Credentials')` still resolves — but prefer ids for anything you assert on.
@@ -87,6 +119,164 @@ Excluded on iOS (documented limits, not bugs):
 - **drag-and-drop** — only the *first* synthetic XCUITest drag in a sequence registers with Flutter's pan recognizer, so a multi-piece drag puzzle can't be solved. (It passes on the Android Dart VM driver, which injects real motion events.)
 - **media-upload** and **webview** — match the React Native iOS exclusions (native picker; no WKWebView CDP — see [WebViews](#webviews-dom)).
 
+### Writing reliable Flutter tests
+
+Everything below is measured against the demo suite on a Pixel 9 emulator. These
+are the failure modes that actually bite, in rough order of how much time they
+cost to diagnose.
+
+#### Scroll with a drag, never a fling
+
+**This is the single biggest source of flaky Flutter tests.** Flutter's scroll
+physics react to *release velocity*, not gesture distance. The same swipe over
+an 873 px span behaves completely differently depending on `durationMs`:
+
+| `durationMs` | Result on a full-height page |
+| --- | --- |
+| `300` | Flings to the **very end** of the content |
+| `600` | Overshoots well past the target |
+| `1200`–`1400` | Drags a predictable ~1.3× the gesture distance and stops |
+
+A search loop built on fast swipes cannot converge — it flings to the bottom,
+detects it went too far, flings back to the top, and repeats until it runs out
+of attempts. On screen this looks like the app scrolling up and down forever.
+Use a slow drag (`durationMs: 1_200`) for any swipe whose distance you need to
+reason about. Fast swipes are fine only when you genuinely want a fling.
+
+#### Only on-screen widgets exist
+
+The widget tree contains what is laid out **right now**. "Off screen" is not
+`visible: false` — the node is *absent*, and a locator for it simply never
+resolves. Consequences:
+
+- **Reveal before reading**, always. Assert nothing about an element you have
+  not scrolled to.
+- **`scrollIntoView()` is a weaker guarantee than it looks**: it stops as soon
+  as the node enters the tree, which routinely leaves it clipped by a floating
+  bottom bar — present, but not usable.
+- **Anchor on what you need, not on the container.** A card's bounds can sit
+  inside the viewport while a child of it is still absent. Name the elements the
+  test actually touches.
+- **Bracket id-less targets.** To guarantee an element with no id is on screen,
+  require the id-bearing elements immediately above *and* below it.
+- **Derive insets from the UI, not from pixel constants.** Read the bottom bar's
+  own bounds instead of reserving a magic number; a tuned constant silently
+  mis-scrolls on any other density.
+
+#### Never background or force-stop the app mid-session
+
+The driver holds a `flutter run` attached to the app's Dart VM, and app launch
+between tests is a **hot restart** over that connection. So:
+
+- Killing the process first destroys the VM the restart targets — reattach then
+  hangs until `getVM` times out.
+- Pressing HOME can bring the engine back with a zero-size surface
+  (`Width is zero. 0,0`), which tears the service connection down the same way.
+
+Reset a Flutter session with a hot restart alone. It is both the supported path
+and the faster one. (Astur recovers by restarting the whole `flutter run`
+session if rebinding fails, but it costs seconds you don't need to spend.)
+
+#### Layout must be stable across an interaction
+
+If acting on a widget changes the layout, a coordinate captured beforehand is
+stale by the time you use it — and an element pushed off screen leaves the tree
+entirely. Prefer driving a **locator** (`locator.tap()`), which re-resolves
+immediately before acting, over capturing `bounds()` once and reusing the point.
+
+#### `by.native()` on Flutter
+
+`by.native()` deliberately bypasses the widget tree and resolves through the
+UiAutomator agent, which Astur connects alongside the VM service. Two things
+follow:
+
+- **Flutter merges a container's child labels into one `content-desc`.** A row
+  reports `"Beta record\nChoose"`, so match it directly with
+  `descriptionContains`. Do **not** reach for `hasDescendant`: UiAutomator
+  re-walks the whole subtree per candidate, which against a Flutter tree is slow
+  enough to time the command out — and has been observed taking the Dart VM
+  connection down with it.
+- **Resolution and action are separate.** Astur resolves through the agent but
+  acts through the shell, because a Flutter `Semantics` wrapper is usually not
+  clickable in its own right — the actionable node is merged beneath it, so an
+  agent-side tap either errors or is swallowed by a container.
+
+#### Keep the emulator healthy
+
+Long-running emulators degrade in ways that look exactly like product bugs:
+`getVM` timeouts, `device offline`, and `Width is zero. 0,0`. If several
+unrelated specs start failing at once, restart the emulator before debugging the
+code — in this suite that alone turned a reproducible 12/14 back into 14/14.
+
+Also: **never run `adb shell uiautomator dump` while a suite is running.** It
+opens its own `UiAutomation` session and disconnects the Astur agent mid-test.
+`adb devices` and `logcat` are safe; the dump is not.
+
+### Observing network traffic
+
+`device.network` reports the app's HTTP traffic — useful for debugging what a
+screen actually called, and for asserting that it called the right thing.
+
+**Read the coverage boundary first.** Astur reports **instrumented application
+traffic**, never "all device traffic". What is instrumented depends entirely on
+the backend, so ask instead of assuming:
+
+```ts
+const capabilities = await device.network.capabilities();
+// { observe, intercept, transports, responseBodies, coverage, adapterRequired }
+
+test.skip(!capabilities.observe, capabilities.coverage);
+
+await device.network.clear();
+await app.networkLab.getProfile();
+
+const [request] = await device.network.requests({ url: '/api/profile' });
+expect(request).toMatchObject({ method: 'GET', status: 200 });
+```
+
+| | Observe | Intercept |
+| --- | --- | --- |
+| Flutter Android | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
+| Flutter iOS | not yet (no VM service) | needs the in-app adapter |
+| React Native (both) | not yet | needs the in-app adapter |
+
+On Flutter Android the source is the Dart VM's `dart:io` HTTP profiler — the
+same one Flutter DevTools' Network view uses. That covers `dart:io`'s
+`HttpClient`, and therefore `package:http` and Dio, because both are built on
+it. It does **not** cover a WebView's own requests, native SDK calls, or
+platform-channel traffic. Support is detected at runtime by checking the
+isolate's registered extensions, not inferred from "this is a Flutter app".
+
+Three deliberate design choices worth knowing:
+
+- **`requests()` throws rather than returning `[]`** when a session cannot
+  observe (`NETWORK_OBSERVATION_UNSUPPORTED`). An empty array has to mean "no
+  traffic happened", or an assertion over it would pass for the wrong reason.
+- **Credential headers are redacted by default** — `authorization`, `cookie`,
+  `set-cookie`, `x-api-key` become `<redacted>` before a record is ever
+  returned, so secrets do not reach a CI log or an HTML report.
+- **Response bodies are capped** (64 KiB by default) and dropped with
+  `bodyOmittedReason: 'too-large'`. The profiler retains everything it captures
+  for the life of the isolate, so an uncapped run would grow without bound.
+  Astur enables profiling lazily on first use and the test fixture clears the
+  buffer between tests, so one test can never assert on another's traffic.
+
+Both defaults are adjustable per call:
+
+```ts
+await device.network.requests({ url: '/api' }, { maxBodyBytes: 4096, redactHeaders: ['x-tenant'] });
+```
+
+**Interception is not available yet.** `capabilities().intercept` is `false`
+everywhere, and `adapterRequired` says why: stubbing or failing a request means
+holding it open, which the profiler cannot do — it reports what already
+happened. That needs a small opt-in in-app adapter, which is the next phase.
+Astur deliberately does not ship a MITM proxy for this: Android 7+ ignores
+user-installed CAs unless the app opts in via `network_security_config`, and
+Dart's `HttpClient` ignores the system proxy entirely unless the app sets
+`findProxy` — so a proxy needs app changes *anyway*, while adding certificate
+and TLS failures as new ways for unrelated tests to break.
+
 ### Limitations to plan around
 
 - **The Dart VM-service driver is Android-only.** On **iOS**, Flutter is read through the XCUITest accessibility tree — see [Flutter on iOS](#flutter-on-ios-xcuitest-accessibility-tree) above for what runs today and what's excluded.
@@ -95,7 +285,17 @@ Excluded on iOS (documented limits, not bugs):
 - **On-screen elements only.** Like the iOS accessibility tree, the widget tree exposes what is currently laid out on screen — scroll a target into view before reading or asserting on it.
 - **Native UI outside Flutter is not visible to the VM service.** System permission dialogs, the native photo/file picker, and share sheets are separate from the Flutter view, so `getBy*` against the Flutter tree will not find them. Interact with those by coordinate, or drive them through the native agent path.
 - **Synthetic gestures into custom pan widgets can be imprecise.** Fine-grained drag-and-drop on a custom `GestureDetector`/`Listener` may not land exactly; prefer stable taps/fills and keep draggable targets out of competing scroll views.
-- **Debug Flutter APKs are large** (a fat APK bundles every ABI). Build for the ABIs you test (e.g. `--target-platform android-arm64,android-x64`) so installs fit emulator storage.
+- **Debug Flutter APKs are large.** A debug build carries the JIT kernel
+  (`kernel_blob.bin`), the debug engine, and a Vulkan validation layer, so it
+  will not be small — but the ABI set still roughly doubles it. Measured on the
+  demo app: **154 MB** for all ABIs versus **86 MB** for
+  `--target-platform android-arm64`. Note the flag is **ignored on an
+  incremental build** — run `flutter clean` first or Gradle reuses the previous
+  fat APK and the flag appears to do nothing.
+- **Emulator storage is a separate pool from your host disk.** An
+  `INSTALL_FAILED_INSUFFICIENT_STORAGE` usually means the AVD's data partition
+  is full, not that the APK is too big. Wipe the emulator's data (which also
+  reclaims host space, since the qcow2 shrinks) before shaving the artifact.
 
 ## WebViews (DOM)
 

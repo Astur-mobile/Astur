@@ -6,10 +6,16 @@ import { defineConfig } from '@astur-mobile/test';
 // Flutter build of the demo app (assets/astur.demo.android_flutter.apk) instead
 // of the React Native build. Used to validate native Flutter automation support.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const flutterAppPath = process.env.ASTUR_ANDROID_APP_PATH
+  ? resolve(repoRoot, process.env.ASTUR_ANDROID_APP_PATH)
+  : resolve(repoRoot, 'assets/astur.demo.android_flutter.apk');
 
 export default defineConfig({
   testDir: resolve(repoRoot, 'examples/specs'),
-  timeout: 240_000,
+  // Roughly 2.5x the slowest observed test. A generous per-test timeout does not
+  // make a slow suite pass — it only delays how long a genuine hang takes to
+  // surface, and every driver call is individually bounded anyway.
+  timeout: 120_000,
   fullyParallel: false,
   workers: 1,
   outputDir: resolve(repoRoot, 'test-results/android-flutter'),
@@ -32,7 +38,7 @@ export default defineConfig({
         bootTimeout: 120_000
       },
       app: {
-        path: resolve(repoRoot, 'assets/astur.demo.android_flutter.apk')
+        path: flutterAppPath
       },
       ...(process.env.ASTUR_ANDROID_AGENT_MODE
         ? { agent: { mode: process.env.ASTUR_ANDROID_AGENT_MODE as 'auto' | 'required' | 'off' } }

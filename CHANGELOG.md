@@ -3,6 +3,72 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## 0.5.0-beta.3
+
+### Added
+
+- **`device.network` — observe the app's HTTP traffic.** Read back what a
+  screen actually called, and assert on it:
+
+  ```ts
+  const capabilities = await device.network.capabilities();
+  test.skip(!capabilities.observe, capabilities.coverage);
+
+  await device.network.clear();
+  await app.networkLab.getProfile();
+
+  const [request] = await device.network.requests({ url: '/api/profile' });
+  expect(request).toMatchObject({ method: 'GET', status: 200 });
+  ```
+
+  Coverage is **instrumented application traffic**, never "all device
+  traffic". Available today on **Flutter Android**, via the Dart VM's
+  `dart:io` HTTP profiler — the same source Flutter DevTools' Network view
+  uses. That covers `dart:io`'s `HttpClient`, and therefore `package:http`
+  and Dio; it does not cover WebView requests, native SDK calls, or
+  platform-channel traffic. Support is detected at runtime from the isolate's
+  registered extensions rather than inferred from "this is Flutter".
+
+  - `capabilities()` reports `observe`, `intercept`, `transports`,
+    `responseBodies`, `coverage`, and `adapterRequired`, so a test can ask
+    what is covered instead of assuming.
+  - `requests(filter, options)` **throws** `NETWORK_OBSERVATION_UNSUPPORTED`
+    rather than returning `[]` where observation is unavailable — an empty
+    array has to mean "no traffic happened", or an assertion over it passes
+    for the wrong reason.
+  - Credential headers (`authorization`, `cookie`, `set-cookie`, `x-api-key`)
+    are redacted by default, so secrets never reach a CI log or an HTML
+    report. Response bodies are capped at 64 KiB and dropped with
+    `bodyOmittedReason`. Both are adjustable per call.
+  - The test fixture clears the buffer between tests, so one test can never
+    assert on another's traffic and a long run cannot accumulate payloads.
+
+  **Interception is not available yet** — `capabilities().intercept` is
+  `false` everywhere and `adapterRequired` says why. Stubbing a request means
+  holding it open, which a profiler cannot do. Astur deliberately does not
+  ship a MITM proxy for this: Android 7+ ignores user-installed CAs unless
+  the app opts in via `network_security_config`, and Dart's `HttpClient`
+  ignores the system proxy unless the app sets `findProxy` — so a proxy needs
+  app changes anyway while adding TLS and certificate failures as new ways
+  for unrelated tests to break.
+
+### Fixed
+
+- **Element actions no longer fail when UiAutomator refuses to act on a
+  resolvable node.** An agent `element.tap`/`fill`/`drag` failure now falls
+  back to resolving the element and acting on its coordinates, instead of
+  aborting the test. UiObject2 routinely declines to click a node that is
+  present and correct — a `Text` inside a `Pressable`, or a Flutter
+  `Semantics` wrapper whose actionable child is merged beneath it — and a
+  coordinate tap performs the identical action. Reads still surface their
+  errors, because a failed read has no equivalent. This fixes the native
+  media picker on React Native Android.
+
+- **Flutter network observation survives a hot restart.** The Dart HTTP
+  profiler setting is scoped to the isolate, and every test reset
+  hot-restarts into a new one, so observation silently stopped after the
+  first test. The session now re-applies it after each restart.
+
 ## 0.5.0-beta.2
 
 ### Added

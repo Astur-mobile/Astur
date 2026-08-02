@@ -35,21 +35,25 @@ const VM_URI_PATTERN = /A Dart VM Service[^\n]*available at:\s*(http:\/\/127\.0\
  */
 function describeRunExit(code: number | null, signal: NodeJS.Signals | null, tail: string): string {
   const base = `'flutter run' exited before the app exposed its Dart VM service (code ${code ?? signal}).`;
+  const withOutput = (message: string): string => {
+    const excerpt = tail.trim();
+    return excerpt ? `${message}\n\nFlutter output tail:\n${excerpt}` : message;
+  };
   if (/INSTALL_FAILED_INSUFFICIENT_STORAGE/i.test(tail)) {
-    return (
+    return withOutput(
       `${base} The device ran out of storage while installing the app (INSTALL_FAILED_INSUFFICIENT_STORAGE). ` +
       `Free space on the emulator/device (uninstall unused apps, or wipe & recreate the AVD with a larger data partition). ` +
       `A debug APK that bundles every ABI is large — a single-ABI debug build (e.g. android-arm64) installs in far less space.`
     );
   }
   if (/INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match/i.test(tail)) {
-    return `${base} The app is already installed with a different signature (INSTALL_FAILED_UPDATE_INCOMPATIBLE). Uninstall the existing app and retry.`;
+    return withOutput(`${base} The app is already installed with a different signature (INSTALL_FAILED_UPDATE_INCOMPATIBLE). Uninstall the existing app and retry.`);
   }
   const installFailure = tail.match(/INSTALL_FAILED_[A-Z_]+/);
   if (installFailure) {
-    return `${base} The app failed to install (${installFailure[0]}). See the captured output tail for details.`;
+    return withOutput(`${base} The app failed to install (${installFailure[0]}).`);
   }
-  return `${base} This usually means the install or launch failed — check the device has free storage and the APK is a debug build.`;
+  return withOutput(`${base} This usually means the install or launch failed — check the device has free storage and the APK is a debug build.`);
 }
 
 export function resolveFlutterPath(explicit?: string): string {
@@ -144,6 +148,9 @@ export class FlutterProcess {
     const onChunk = (data: Buffer) => {
       const text = data.toString();
       this.stdoutBuffer += text;
+      if (process.env.ASTUR_FLUTTER_TRACE === '1') {
+        process.stderr.write(text);
+      }
       for (const listener of this.listeners) {
         listener(text);
       }

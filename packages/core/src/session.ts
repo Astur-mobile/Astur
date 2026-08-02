@@ -20,6 +20,10 @@ import type {
   LongPressOptions,
   KeyboardState,
   MobileContextInfo,
+  NetworkCapabilities,
+  NetworkRedactionOptions,
+  NetworkRequestFilter,
+  NetworkRequestRecord,
   MobileElementSnapshot,
   MobileRole,
   NormalizedCapabilities,
@@ -107,6 +111,15 @@ export interface PlatformSession {
   listFiles?(remotePath: string): Promise<DeviceFileEntry[]>;
   getKeyboardState?(): Promise<KeyboardState>;
   dismissKeyboard?(): Promise<void>;
+  /**
+   * What this session can see of the app's network traffic. A driver that
+   * cannot observe anything omits these entirely, and {@link AsturDevice.network}
+   * reports `observe: false` rather than returning an empty request list — an
+   * empty list must mean "nothing happened", never "not supported".
+   */
+  getNetworkCapabilities?(): Promise<NetworkCapabilities>;
+  getNetworkRequests?(options?: NetworkRedactionOptions): Promise<NetworkRequestRecord[]>;
+  clearNetworkRequests?(): Promise<void>;
   listContexts?(): Promise<MobileContextInfo[]>;
   connectWebView?(selector?: WebViewSelector): Promise<WebViewEndpoint>;
   /**
@@ -245,6 +258,63 @@ export class AsturDevice {
       }
 
       await this.session.revokePermission(appIdentifier(this.capabilities, target), permission);
+    }
+  };
+
+  /**
+   * Observation of the app's **instrumented** network traffic — never "all
+   * device traffic". What is covered depends entirely on the backend, so ask
+   * {@link network.capabilities} instead of assuming; anything outside that
+   * coverage is invisible and always will be.
+   *
+   * Read-only today. Stubbing/failing requests needs an in-app adapter that can
+   * hold a request open, which no current backend provides — hence
+   * `capabilities().intercept === false` everywhere for now.
+   */
+  readonly network = {
+    capabilities: async (): Promise<NetworkCapabilities> => {
+      if (!this.session.getNetworkCapabilities) {
+        return {
+          observe: false,
+          intercept: false,
+          transports: [],
+          responseBodies: false,
+          coverage: `${this.deviceInfo.platform} sessions do not expose network observation yet`,
+          adapterRequired: true
+        };
+      }
+
+      return this.session.getNetworkCapabilities();
+    },
+
+    /**
+     * Requests seen so far, newest last. Throws rather than returning `[]` when
+     * the session cannot observe at all — an empty array has to mean "no
+     * traffic", or a test asserting on it would pass for the wrong reason.
+     */
+    requests: async (
+      filter?: NetworkRequestFilter,
+      options?: NetworkRedactionOptions
+    ): Promise<NetworkRequestRecord[]> => {
+      if (!this.session.getNetworkRequests) {
+        throw new AsturError(
+          'NETWORK_OBSERVATION_UNSUPPORTED',
+          `Network observation is not available for this session (${this.deviceInfo.platform}`
+          + `${this.deviceInfo.uiEngine ? `/${this.deviceInfo.uiEngine}` : ''}). `
+          + 'Check device.network.capabilities() before calling requests().'
+        );
+      }
+
+      return filterNetworkRecords(await this.session.getNetworkRequests(options), filter);
+    },
+
+    /**
+     * Drops everything buffered so far. Called automatically between tests by
+     * the Astur fixture, so one test's traffic can never be asserted on by the
+     * next; call it directly to isolate a step within a test.
+     */
+    clear: async (): Promise<void> => {
+      await this.session.clearNetworkRequests?.();
     }
   };
 
@@ -641,4 +711,35 @@ export class AsturRuntime {
 
     return driver;
   }
+}
+
+/**
+ * Applies a {@link NetworkRequestFilter} to collected records.
+ *
+ * Lives in core so every backend filters identically — a driver only has to
+ * produce records, never interpret the filter.
+ */
+export function filterNetworkRecords(
+  records: NetworkRequestRecord[],
+  filter: NetworkRequestFilter | undefined
+): NetworkRequestRecord[] {
+  if (!filter) {
+    return records;
+  }
+
+  return records.filter((record) => {
+    if (filter.method && record.method.toUpperCase() !== filter.method.toUpperCase()) {
+      return false;
+    }
+    if (filter.transport && record.transport !== filter.transport) {
+      return false;
+    }
+    if (filter.url instanceof RegExp) {
+      return filter.url.test(record.url);
+    }
+    if (typeof filter.url === 'string') {
+      return record.url.includes(filter.url);
+    }
+    return true;
+  });
 }
