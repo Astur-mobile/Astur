@@ -9,7 +9,12 @@ test('forms update text input, switch, checkbox, and button state', async ({ app
   await expect(app.forms.textInput).toHaveValue('Astur native form automation');
 
   await app.forms.toggle.tap();
+  // Toggling the switch re-lays out the form. revealCheckbox() re-reads the tree
+  // until the checkbox is fully on screen, so it already absorbs that settling —
+  // no fixed sleep needed in between.
+  await app.forms.revealCheckbox();
   await app.forms.checkbox.tap();
+
   await app.forms.revealActionButtons();
   await expect(app.forms.activeButton).toBeEnabled();
 

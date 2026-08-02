@@ -1,6 +1,7 @@
 import {
   by,
   centerOf,
+  delay,
   flattenTree,
   pointInBounds,
   type AsturDevice,
@@ -26,9 +27,20 @@ export type TapLabCounters = {
   longPresses: number;
 };
 
+/**
+ * Horizontal position for scroll gestures on the Forms screen, as a fraction of
+ * the viewport width.
+ *
+ * Kept near the left edge because the form contains a full-width slider: a
+ * centred vertical swipe starts on the slider track and drags its value instead
+ * of scrolling the list.
+ */
+const FORMS_SWIPE_X = 0.08;
+
 export class AsturDemoApp {
   readonly home: HomePage;
   readonly nativeLab: NativeLabPage;
+  readonly networkLab: NetworkLabPage;
   readonly login: LoginPage;
   readonly forms: FormsPage;
   readonly swipe: SwipePage;
@@ -40,6 +52,7 @@ export class AsturDemoApp {
   constructor(private readonly device: AsturDevice) {
     this.home = new HomePage(device);
     this.nativeLab = new NativeLabPage(device);
+    this.networkLab = new NetworkLabPage(device);
     this.login = new LoginPage(device);
     this.forms = new FormsPage(device);
     this.swipe = new SwipePage(device);
@@ -56,7 +69,7 @@ export class AsturDemoApp {
   async launch(): Promise<void> {
     await this.device.app.launch();
     await this.waitForAppShell();
-    await this.nav.open('home');
+    await this.openHomeAtTop();
   }
 
   async reset(): Promise<void> {
@@ -70,7 +83,22 @@ export class AsturDemoApp {
         return;
       }
 
-      await this.nav.open('home');
+      await this.openHomeAtTop();
+      return;
+    }
+
+    if (isFlutterTree(this.device)) {
+      // Do NOT background or force-stop a Flutter session. The driver keeps a
+      // `flutter run` attached to the app's Dart VM, and launch() is a hot
+      // restart over that connection — re-running main() for a clean tree.
+      // Killing the process first destroys the VM the restart targets, so
+      // reattach then blocks until `getVM` times out; pressing HOME can leave
+      // the engine with a zero-size surface ("Width is zero. 0,0"), which tears
+      // the service connection down the same way. Hot restart alone is both the
+      // supported reset and the faster one.
+      await this.device.app.launch();
+      await this.waitForAppShell();
+      await this.openHomeAtTop();
       return;
     }
 
@@ -81,7 +109,28 @@ export class AsturDemoApp {
     await this.device.app.terminate().catch(() => undefined);
     await this.device.app.launch();
     await this.waitForAppShell();
+    await this.openHomeAtTop();
+  }
+
+  /**
+   * Opens Home *and* returns it to the top of its scroll view.
+   *
+   * Flutter keeps a tab's ScrollController offset across activity restarts, so
+   * terminating and relaunching the app does NOT reset the scroll position —
+   * Home reopens exactly where the previous test left it. Every reveal helper
+   * then starts from an unpredictable offset, and one that begins already past
+   * its target can run out of correction attempts and settle with the element
+   * under the bottom nav bar, where gestures land on the nav instead.
+   *
+   * This must live on the shared path both entry points use: the fixture calls
+   * reset(), not launch(), so a scroll reset attached only to launch() never
+   * runs during an actual suite.
+   */
+  private async openHomeAtTop(): Promise<void> {
     await this.nav.open('home');
+    if (isFlutterTree(this.device)) {
+      await this.home.heroCard.scrollIntoView({ direction: 'up', maxScrolls: 12 });
+    }
   }
 
   private async waitForAppShell(): Promise<void> {
@@ -236,68 +285,57 @@ export class HomePage {
   }
 
   async revealTapLaboratory(): Promise<void> {
-    // The tap counters render in a row just below the tap target. It is not
-    // enough for the target to be "visible" — it must have room beneath it in the
-    // viewport so the counters are on screen too (and the target sits clear of the
-    // bottom navigation bar so taps land on it). This matters on iOS and on the
-    // Flutter Android driver alike, which only expose on-screen nodes — a plain
-    // scrollIntoView(card) leaves the counters off screen and the target under the
-    // nav bar. (On native Android the off-screen counters are already in the tree,
-    // so this just scrolls a little further, harmlessly.)
-    const viewport = await this.device.viewport();
-    const bottomLimit = viewport.y + viewport.height - 180;
-
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      const target = await this.tapTarget.snapshot({ timeout: 400 }).catch(() => undefined);
-      if (target?.visible && target.bounds.y + target.bounds.height <= bottomLimit) {
-        return;
-      }
-
-      await this.device.swipe({
-        start: pointInBounds(viewport, 0.5, 0.82),
-        end: pointInBounds(viewport, 0.5, 0.25),
-        durationMs: 350
-      });
-    }
-
-    await this.tapTarget.waitForVisible({ timeout: 4_000 });
+    // The tap counters render in a row just below the tap target, and the bottom
+    // navigation bar floats over the scroll view. So "target is visible" is not a
+    // sufficient stop condition: the target must sit in the free area *above* the
+    // nav bar, or the counters are off screen and taps land on the bar instead.
+    // Under Flutter this is stricter still — only on-screen nodes exist at all,
+    // so a counter below the fold is absent from the tree rather than invisible.
+    //
+    // Home also has a "Native locator lab" card directly BELOW this section (see
+    // the by.native() demos). Before it existed the tap-lab card was last, so an
+    // imprecise forward swipe clamped at the end of the content and still landed
+    // in the acceptance window — an accidental safety net. With content past it,
+    // a forward-only search can jump clean through the window and never recover,
+    // so treat that card becoming visible as an unambiguous "went too far" and
+    // swipe back.
+    // Name both things the test actually needs: the tap target (to aim
+    // gestures at) and the counter row below it (to read the result). The old
+    // hard-coded "reserve 180px beneath the target" was approximating exactly
+    // this. Anchoring on their shared card instead looked tidier but is not
+    // equivalent — the card's bounds can sit inside the window while the target
+    // itself is still absent from the Flutter tree, which then fails later, at
+    // the gesture, far from the cause.
+    await revealFully(this.device, ['home-tap-target', 'home-tap-long-press-count'], {
+      overshootId: 'home-native-lab-card'
+    });
   }
 
   async tapLabCounters(): Promise<TapLabCounters> {
-    if (isIos(this.device)) {
-      return this.iosTapLabCounters();
-    }
-
-    const card = findNodeById(await this.device.tree(), 'home-tap-lab-card');
-
-    if (!card) {
-      throw new Error('Tap laboratory card is not visible in the current UI tree.');
-    }
-
-    return {
-      singleTaps: readCounter(card, 'SINGLE TAPS'),
-      doubleTaps: readCounter(card, 'DOUBLE TAPS'),
-      longPresses: readCounter(card, 'LONG PRESS')
-    };
-  }
-
-  private async iosTapLabCounters(): Promise<TapLabCounters> {
     // Read each counter by its stable id. The Flutter iOS accessibility tree
-    // merges the "SINGLE TAPS / 0" label+digit pairs into the card's label, so the
-    // geometry approach the Android path uses cannot see the discrete digits — but
-    // the value pills keep their own identified nodes (home-tap-*-count), whose
-    // label is the current count.
-    const readCount = async (id: string): Promise<number> => {
-      const snapshot = await this.device.getById(id).snapshot({ timeout: 4_000 });
-      const digits = (snapshot.value ?? snapshot.text ?? snapshot.label ?? '').replace(/\D+/g, '');
-      return digits.length ? Number(digits) : 0;
-    };
+    // and newer React Native Android builds merge the label and digit into one
+    // accessibility node, so relying on separate text nodes and their geometry is
+    // brittle. The value pills retain stable ids on every build.
+    //
+    // All three come from a single tree read: one round-trip instead of three,
+    // and the values then describe one instant rather than three successive
+    // ones — which matters when asserting that exactly one counter moved.
+    const counterIds = ['home-tap-single-count', 'home-tap-double-count', 'home-tap-long-press-count'] as const;
+    const tree = await this.device.tree();
+    const fromTree = counterIds.map((id) => findNodeById(tree, id));
 
-    return {
-      singleTaps: await readCount('home-tap-single-count'),
-      doubleTaps: await readCount('home-tap-double-count'),
-      longPresses: await readCount('home-tap-long-press-count')
-    };
+    if (fromTree.every((node) => node !== undefined)) {
+      const [singleTaps, doubleTaps, longPresses] = fromTree.map((node) => numericValueOf(node!));
+      return { singleTaps, doubleTaps, longPresses };
+    }
+
+    // A single tree read cannot wait. Some builds only surface these pills a
+    // moment after the row settles, so fall back to per-id snapshots, which do
+    // wait — slower, but it keeps a mid-render read from failing the test.
+    const [singleTaps, doubleTaps, longPresses] = await Promise.all(
+      counterIds.map(async (id) => numericValueOf(await this.device.getById(id).snapshot({ timeout: 4_000 })))
+    );
+    return { singleTaps, doubleTaps, longPresses };
   }
 
   async visibleIosTapLabCounterValues(values: number[]): Promise<number[]> {
@@ -340,7 +378,11 @@ export type NativeLabLaneCounts = {
  * actually hit rather than just that something was tapped.
  */
 export class NativeLabPage {
-  constructor(private readonly device: AsturDevice) {}
+  private readonly androidUsesContentDescriptions: boolean;
+
+  constructor(private readonly device: AsturDevice) {
+    this.androidUsesContentDescriptions = isFlutterTree(device);
+  }
 
   get card(): MobileLocator {
     return this.device.getById('home-native-lab-card');
@@ -359,7 +401,7 @@ export class NativeLabPage {
   laneButton(index: number): MobileLocator {
     return this.device.find(
       by.native({
-        android: { text: '+' },
+        android: this.androidUsesContentDescriptions ? { description: '+' } : { text: '+' },
         ios: "label == '+'",
         instance: index
       })
@@ -376,7 +418,21 @@ export class NativeLabPage {
   recordRow(record: string): MobileLocator {
     return this.device.find(
       by.native({
-        android: { hasDescendant: { text: record } },
+        // Both express "find the row by the text nested inside it" — but the
+        // two trees nest it differently, so the cheap query differs.
+        //
+        // Flutter MERGES a row's child labels into one node's content-desc
+        // content-desc (the row reports "Beta record\nChoose"), so matching the
+        // row directly is both sufficient and correct. Do NOT use hasDescendant
+        // here: UiAutomator re-walks the whole subtree for every candidate, and
+        // against a Flutter tree that is slow enough to time the command out —
+        // and it has been observed taking the Dart VM connection down with it.
+        //
+        // React Native keeps the text in a separate child node, so there the
+        // subtree walk is the only way to express it.
+        android: this.androidUsesContentDescriptions
+          ? { descriptionContains: record }
+          : { hasDescendant: { text: record } },
         ios: `label CONTAINS '${record}'`
       })
     );
@@ -397,12 +453,22 @@ export class NativeLabPage {
   laneButtonByCompoundQuery(index: number): MobileLocator {
     return this.device.find(
       by.native({
-        android: {
-          classNameMatches: 'android\\..*',
-          text: '+',
-          packageName: 'com.astur.demo'
-        },
-        ios: "type == 'XCUIElementTypeStaticText' AND label == '+'",
+        android: this.androidUsesContentDescriptions
+          ? {
+            className: 'android.widget.Button',
+            description: '+',
+            packageName: 'com.astur.demo'
+          }
+          : {
+            classNameMatches: 'android\\..*',
+            text: '+',
+            packageName: 'com.astur.demo'
+          },
+        // React Native exposes the merged Pressable as `Other`, while Flutter
+        // may expose a different element type. `label` + `enabled` still proves
+        // that several native conditions are combined without coupling the
+        // shared suite to one framework's accessibility implementation.
+        ios: "label == '+' AND enabled == true",
         instance: index
       })
     );
@@ -415,10 +481,18 @@ export class NativeLabPage {
   recordRowMatching(pattern: string): MobileLocator {
     return this.device.find(
       by.native({
-        // `hasDescendant` (any depth) rather than `hasChild` (direct children
-        // only) so this holds regardless of how deeply each build nests the
-        // row's text node.
-        android: { hasDescendant: { textMatches: pattern } },
+        // UiAutomator's regex criteria match the WHOLE native value, so the
+        // surrounding wildcards are explicit to get contains-style behaviour
+        // equivalent to the iOS predicate below. `(?s)` lets `.` span the
+        // newline Flutter inserts when it merges a row's child labels.
+        //
+        // Flutter matches the row's own merged description; React Native needs
+        // `hasDescendant` (any depth, not `hasChild`) because the text lives in
+        // a separate child node. See recordRow() for why the subtree walk is
+        // avoided on Flutter.
+        android: this.androidUsesContentDescriptions
+          ? { descriptionMatches: `(?s).*(?:${pattern}).*` }
+          : { hasDescendant: { textMatches: `.*(?:${pattern}).*` } },
         ios: `label MATCHES '.*${pattern}.*'`
       })
     );
@@ -447,7 +521,39 @@ export class NativeLabPage {
    * counters — is on screen too.
    */
   async reveal(): Promise<void> {
-    await this.selectedRecordPill.scrollIntoView();
+    await this.revealRecords();
+  }
+
+  /**
+   * Brings the lane buttons *and* their readout pills fully on screen.
+   *
+   * Targets the pills rather than the buttons: the pills sit below the buttons,
+   * so satisfying them satisfies both. A plain `scrollIntoView` on the pills is
+   * not enough — it stops as soon as they enter the tree, which routinely
+   * leaves them clipped by the bottom nav bar, where `by.native()` (reading the
+   * UiAutomator hierarchy, not the Dart VM snapshot) reports them as not
+   * visible even though the buttons above them are perfectly tappable.
+   */
+  async revealLanes(): Promise<void> {
+    await revealFully(this.device, 'native-lab-lane-b-count');
+  }
+
+  async revealRecords(): Promise<void> {
+    // The record rows carry no ids — that is the point of this card — so they
+    // cannot be named directly. Bracket them instead: the lane counters sit
+    // immediately above the rows and the selected-record pill immediately
+    // below, so putting BOTH on screen guarantees everything between them is
+    // too. Anchoring on the pill alone scrolls until the pill is in view, which
+    // can push the rows off the top — and under Flutter that removes them from
+    // the tree, so by.native() cannot resolve them at all.
+    await revealFully(this.device, ['native-lab-lane-a-count', 'native-lab-selected-record']);
+  }
+
+  async selectedRecord(): Promise<string> {
+    const snapshot = await this.selectedRecordPill.snapshot({ timeout: 4_000 });
+    return flattenTree(snapshot)
+      .flatMap((node) => [node.text, node.label, node.value])
+      .find((value): value is string => Boolean(value)) ?? '';
   }
 
   async laneCounts(): Promise<NativeLabLaneCounts> {
@@ -464,9 +570,59 @@ export class NativeLabPage {
    * assuming a discrete value node.
    */
   private async readCount(id: string): Promise<number> {
-    const snapshot = await this.device.getById(id).snapshot({ timeout: 4_000 });
-    const digits = (snapshot.value ?? snapshot.text ?? snapshot.label ?? '').replace(/\D+/g, '');
-    return digits.length ? Number(digits) : 0;
+    return numericValueOf(await this.device.getById(id).snapshot({ timeout: 4_000 }));
+  }
+}
+
+/**
+ * Home's "Network lab" card: buttons that drive real HTTP against a loopback
+ * API the app serves itself, so `device.network` has deterministic, offline
+ * traffic to observe.
+ */
+export class NetworkLabPage {
+  constructor(private readonly device: AsturDevice) {}
+
+  get card(): MobileLocator {
+    return this.device.getById('home-network-lab-card');
+  }
+
+  get statusPill(): MobileLocator {
+    return this.device.getById('network-lab-status');
+  }
+
+  /**
+   * Brings the buttons AND the status readout on screen together — the buttons
+   * are what a test presses, the readout is how it knows the call finished.
+   */
+  async reveal(): Promise<void> {
+    await revealFully(this.device, ['network-lab-get', 'network-lab-status']);
+  }
+
+  async getProfile(): Promise<void> {
+    await this.device.getById('network-lab-get').tap();
+  }
+
+  async postSession(): Promise<void> {
+    await this.device.getById('network-lab-post').tap();
+  }
+
+  async getMissing(): Promise<void> {
+    await this.device.getById('network-lab-404').tap();
+  }
+
+  /**
+   * The card's own report of the last call, e.g. "GET /api/profile -> 200".
+   *
+   * Read from the app rather than from `device.network`, so a test can wait for
+   * the request to *complete* before asserting on what Astur observed — the two
+   * are independent, which is what makes the assertion meaningful.
+   */
+  async lastStatus(): Promise<string> {
+    const snapshot = await this.statusPill.snapshot({ timeout: 4_000 });
+    return flattenTree(snapshot)
+      .flatMap((node) => [node.value, node.text, node.label])
+      .filter((value): value is string => Boolean(value))
+      .join(' ');
   }
 }
 
@@ -509,6 +665,14 @@ export class LoginPage {
     return this.device.getByText('SIGN-IN STATUS');
   }
 
+  async revealCredentials(): Promise<void> {
+    // Target the password field, not the email one: it is the lower of the two,
+    // so bringing it fully on screen puts the email field above it in view as
+    // well. Revealing the email field alone can stop with it just above the nav
+    // bar and the password still below the fold.
+    await revealFully(this.device, 'login-password-input');
+  }
+
   async enterCredentials(email: string, password: string): Promise<void> {
     await this.email.fill(email);
     await this.password.fill(password);
@@ -518,15 +682,22 @@ export class LoginPage {
     await this.device.keyboard.dismiss().catch(() => undefined);
     // Typing into the password field focuses it and scrolls the form up to keep
     // it above the soft keyboard, which can push the email field off the top of
-    // the viewport. The Flutter driver only exposes on-screen nodes, so bring the
-    // email field back into view before any value assertion. This is a no-op on
-    // native Android/iOS, where the field is already in the tree.
-    await this.email.scrollIntoView({ direction: 'up', maxScrolls: 4 }).catch(() => undefined);
+    // the viewport. The Flutter driver only exposes on-screen nodes, so bring
+    // the email field back before any value assertion.
+    await revealFully(this.device, 'login-email-input');
+  }
+
+  async revealSubmit(): Promise<void> {
+    await revealFully(this.device, 'login-submit-button');
+  }
+
+  async submitCredentials(): Promise<void> {
+    await this.submit.tap();
   }
 
   async signIn(email: string, password: string): Promise<void> {
     await this.enterCredentials(email, password);
-    await this.submit.tap();
+    await this.submitCredentials();
   }
 
   async revealFeedbackControls(): Promise<void> {
@@ -661,7 +832,16 @@ export class FormsPage {
   }
 
   async revealActionButtons(): Promise<void> {
-    await this.activeButton.scrollIntoView({ direction: 'down', maxScrolls: 4 });
+    // The button row is narrow and sits directly before the upload card, so the
+    // upload card becoming visible is a reliable "scrolled past it" marker.
+    await revealFully(this.device, 'forms-active-button', {
+      overshootId: 'forms-upload-card',
+      swipeX: FORMS_SWIPE_X
+    });
+  }
+
+  async revealCheckbox(): Promise<void> {
+    await revealFully(this.device, 'forms-main-checkbox', { swipeX: FORMS_SWIPE_X });
   }
 
   private async sliderTrackBounds(): Promise<Bounds> {
@@ -901,30 +1081,6 @@ function findNodeById(root: MobileElementSnapshot, id: string): MobileElementSna
   return flattenTree(root).find((node) => node.id === id);
 }
 
-function readCounter(root: MobileElementSnapshot, label: string): number {
-  return readCounterFromNodes(flattenTree(root), label);
-}
-
-function readCounterFromNodes(nodes: MobileElementSnapshot[], label: string): number {
-  const labelNode = nodes.find((node) => textOf(node) === label);
-
-  if (!labelNode) {
-    throw new Error(`Tap laboratory label was not visible: ${label}`);
-  }
-
-  const valueNode = nodes
-    .filter((node) => /^\d+$/.test(textOf(node)))
-    .filter((node) => node.bounds.y >= labelNode.bounds.y)
-    .filter((node) => horizontalOverlap(node.bounds, labelNode.bounds) > 0)
-    .sort((a, b) => a.bounds.y - b.bounds.y)[0];
-
-  if (!valueNode) {
-    throw new Error(`Tap laboratory counter was not visible for: ${label}`);
-  }
-
-  return Number(textOf(valueNode));
-}
-
 function textOf(node: MobileElementSnapshot): string {
   return node.text ?? node.label ?? node.value ?? '';
 }
@@ -990,6 +1146,245 @@ function isIos(device: AsturDevice): boolean {
   return device.deviceInfo.platform === 'ios';
 }
 
+/**
+ * True when the UI tree is served by Flutter's Dart VM service rather than the
+ * platform accessibility hierarchy.
+ *
+ * The distinction that matters to tests is that Flutter publishes *only
+ * on-screen* nodes, so anything below the fold is absent from the tree instead
+ * of merely `visible: false`, and elements must be scrolled into view before
+ * they can be located at all.
+ *
+ * Ask the driver rather than inspecting how the run was launched: an env var
+ * like ASTUR_FLUTTER_PROJECT describes which npm script was used, not what the
+ * session actually connected to, and leaks into unrelated suites if it happens
+ * to be exported in the shell.
+ */
+function isFlutterTree(device: AsturDevice): boolean {
+  return device.deviceInfo.uiEngine === 'flutter';
+}
+
+/**
+ * Reads the numeric value out of a metric pill.
+ *
+ * Every build merges the pill's label and value into a single accessibility
+ * node at some point ("LANE A 1"), and which field carries it — `value`, `text`
+ * or `label` — differs per platform, so search the whole subtree for the first
+ * field containing a digit and strip everything else.
+ */
+function numericValueOf(snapshot: MobileElementSnapshot): number {
+  const raw = flattenTree(snapshot)
+    .flatMap((node) => [node.value, node.text, node.label])
+    .find((value) => value !== undefined && /\d/.test(value)) ?? '';
+  const digits = raw.replace(/\D+/g, '');
+  return digits.length ? Number(digits) : 0;
+}
+
+interface RevealOptions {
+  /** Id of an element that is only visible once we have scrolled PAST the target. */
+  overshootId?: string;
+  /** Horizontal position of the swipe, as a fraction of the viewport width. */
+  swipeX?: number;
+  maxAttempts?: number;
+}
+
+/**
+ * Scrolls every id in `ids` into the *usable* area at the same time: each fully
+ * on screen, and clear of the bottom navigation bar that floats over the scroll
+ * view.
+ *
+ * `MobileLocator.scrollIntoView()` stops as soon as a node enters the tree,
+ * which is a weaker condition than it appears. Under Flutter a node can enter
+ * the Dart VM snapshot while still clipped by the nav bar — present, but
+ * reported not-visible by UiAutomator (which is what `by.native()` reads) and
+ * untappable either way. Every reveal in this suite needs the stricter
+ * condition, so they share one loop instead of each growing its own tuned
+ * swipe sequence.
+ *
+ * Pass several ids when a test needs several elements on screen together (a
+ * control plus the readout it updates). Naming them beats anchoring on their
+ * common ancestor: a container's bounds can satisfy the window while a child is
+ * still absent from the tree, which fails later and far from the cause.
+ */
+async function revealFully(
+  device: AsturDevice,
+  ids: string | string[],
+  options: RevealOptions = {}
+): Promise<void> {
+  const { overshootId, swipeX = 0.5, maxAttempts = 10 } = options;
+  const required = Array.isArray(ids) ? ids : [ids];
+  const viewport = await device.viewport();
+  // Scroll direction, and the previous frame's fingerprint used to notice that
+  // a swipe achieved nothing (see the direction logic below).
+  let forward = true;
+  let lastSignature: string | undefined;
+  // No headroom above the anchor, deliberately. Reserving a margin here pushes
+  // the anchor down the screen, which pushes whatever sits ABOVE it off the top
+  // — and under Flutter that means out of the tree entirely. When a test needs
+  // an element that has no id of its own (the record rows), bracket it by
+  // naming the id-bearing elements on either side rather than insetting the
+  // window and hoping.
+  const positions = (tree: MobileElementSnapshot, bottomLimit: number): number[] | undefined => {
+    const found = required.map((id) => findNodeById(tree, id));
+    const ok = found.every((node) => node?.visible
+      && node.bounds.y >= viewport.y
+      && node.bounds.y + node.bounds.height <= bottomLimit);
+    return ok ? found.map((node) => node!.bounds.y) : undefined;
+  };
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    // A single tree read answers everything this loop needs: where the targets
+    // are, where the nav bar is, and whether we have gone too far. Querying each
+    // of those as its own locator would multiply the round-trips, and on the
+    // Flutter driver every round-trip is a full on-device tree walk.
+    const tree = await device.tree();
+    const bottomLimit = contentBottomLimit(tree, viewport);
+    const placed = positions(tree, bottomLimit);
+    if (placed) {
+      // In the window — but a fling may still be decelerating, so an element is
+      // in place for *this* frame and somewhere else by the time the caller
+      // reads its bounds to aim a gesture. That produces the worst kind of
+      // failure: the reveal "succeeds", the tap lands on empty space, and the
+      // assertion reports a count that never moved. Require the positions to
+      // repeat before declaring the scroll finished.
+      await delay(150);
+      const settled = positions(await device.tree(), bottomLimit);
+      // Compare with a tolerance, never for exact equality. Demanding identical
+      // pixels means any lingering animation or sub-pixel drift never matches,
+      // so this branch loops until the attempts run out — with the element
+      // sitting perfectly placed the whole time, which is a maddening failure
+      // to read. A real fling moves hundreds of pixels in 150ms and is still
+      // rejected; 1% of the viewport only absorbs jitter.
+      const jitter = viewport.height * 0.01;
+      if (settled && settled.every((y, index) => Math.abs(y - placed[index]) <= jitter)) {
+        return;
+      }
+      continue;
+    }
+
+    // Work out which way to scroll, in order of how trustworthy the signal is.
+    const first = findNodeById(tree, required[0]);
+    const markerVisible = overshootId
+      ? Boolean(findNodeById(tree, overshootId)?.visible)
+      : undefined;
+    const signature = scrollSignature(tree);
+
+    if (markerVisible) {
+      // The marker is only reachable by scrolling PAST the target, so this is
+      // unambiguous.
+      forward = false;
+    } else if (signature === lastSignature) {
+      // The previous swipe changed nothing: we are pinned against one end of
+      // the scroll view. Neither the target nor the marker is reachable from
+      // here, so no amount of scrolling this way will help — turn around.
+      // Without this the loop grinds against the end until it runs out of
+      // attempts, which is what a "scrolled past everything" start looks like.
+      forward = !forward;
+    } else if (first && first.bounds.y < viewport.y) {
+      // Partially on screen above the fold — we are slightly past it.
+      forward = false;
+    }
+    lastSignature = signature;
+
+    await device.swipe({
+      // Fractions of the viewport, so the step scales with the device rather
+      // than encoding one screen's pixel geometry. The backward step is
+      // shorter than the forward one so a correction cannot overshoot back.
+      start: pointInBounds(viewport, swipeX, forward ? 0.82 : 0.30),
+      end: pointInBounds(viewport, swipeX, forward ? 0.46 : 0.58),
+      // Slow enough to be a DRAG, not a fling. This is the single most
+      // important parameter here. Measured on Home: the same gesture over
+      // 300ms flings the list all the way to the end of its content (the
+      // search then bounces between the two extremes and never lands in
+      // between); at 1200ms it moves a predictable ~1.3x the gesture distance
+      // and stops. Release velocity, not distance, is what Flutter's ballistic
+      // scroll simulation reacts to.
+      durationMs: 1_200
+    });
+
+    // Let the fling finish before judging where anything is. `swipe()` returns
+    // when the gesture is delivered, not when the list stops moving, so reading
+    // immediately samples a position that is still changing — the loop then
+    // mistakes a mid-flight frame for the resting one, flips its overshoot
+    // decision, and reverses. That reads on-device as endless scrolling up and
+    // down until the attempts run out.
+    await delay(350);
+  }
+
+  // Out of attempts. A bare "timed out waiting for id=X" here is close to
+  // useless: it cannot distinguish "never scrolled far enough" from "scrolled
+  // past it" from "the element is on screen but clipped by the nav bar", and
+  // under Flutter every one of those looks identical (the node is simply
+  // absent). Report what the last frame actually contained instead.
+  const tree = await device.tree().catch(() => undefined);
+  const bottomLimit = tree ? contentBottomLimit(tree, viewport) : undefined;
+  const seen = required.map((id) => {
+    const node = tree ? findNodeById(tree, id) : undefined;
+    if (!node) {
+      return `${id}=absent`;
+    }
+    return `${id}=y${node.bounds.y}..${node.bounds.y + node.bounds.height}${node.visible ? '' : ' (not visible)'}`;
+  });
+  const marker = overshootId && tree
+    ? ` ${overshootId}=${findNodeById(tree, overshootId)?.visible ? 'visible (scrolled past)' : 'not visible'}`
+    : '';
+
+  // Also say what WAS on screen. "Everything absent" has two very different
+  // causes — scrolled off the target, or not on the right screen at all — and
+  // the id list distinguishes them immediately.
+  const present = tree
+    ? (scrollSignature(tree).split('|').filter(Boolean).slice(0, 14).join(', ') || 'no id-bearing nodes')
+    : 'tree unavailable';
+
+  throw new Error(
+    `revealFully gave up after ${maxAttempts} attempts. `
+    + `Required window y=${viewport.y}..${bottomLimit ?? '?'}; `
+    + `last frame: ${seen.join(', ')}.${marker}\n`
+    + `On screen: ${present}`
+  );
+}
+
+/**
+ * Lowest y a scrolled element may occupy and still be fully usable — the top of
+ * the bottom navigation bar, which floats over the scroll view.
+ *
+ * Measured from the bar itself rather than hard-coded: its height varies with
+ * platform, display density and the system gesture inset, so a fixed pixel
+ * budget silently mis-scrolls on any device it was not tuned against. Falls
+ * back to a conservative inset only where the bar is not an addressable node
+ * (the React Native iOS build exposes screens by title text, not by id).
+ */
+/**
+ * Fingerprint of what is currently scrolled into view.
+ *
+ * Two identical fingerprints across a swipe mean the swipe moved nothing — the
+ * scroll view is pinned at its top or bottom. Ids plus their y offsets are
+ * enough: any real scroll changes at least one offset, while a repaint that
+ * shifts nothing leaves them all alone.
+ */
+function scrollSignature(tree: MobileElementSnapshot): string {
+  const parts: string[] = [];
+  const walk = (node: MobileElementSnapshot): void => {
+    if (node.id) {
+      parts.push(`${node.id}@${node.bounds.y}`);
+    }
+    for (const child of node.children) {
+      walk(child);
+    }
+  };
+  walk(tree);
+  return parts.join('|');
+}
+
+function contentBottomLimit(tree: MobileElementSnapshot, viewport: Bounds): number {
+  const navBar = findNodeById(tree, 'tab-home');
+
+  if (navBar?.visible && navBar.bounds.height > 0 && navBar.bounds.y > viewport.y) {
+    return navBar.bounds.y;
+  }
+  return viewport.y + viewport.height - 180;
+}
+
 async function waitForAnyVisible(
   locators: MobileLocator[],
   timeoutMs: number,
@@ -1008,8 +1403,4 @@ async function waitForAnyVisible(
   }
 
   throw new Error(`Timed out waiting ${timeoutMs}ms for ${label}.`);
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

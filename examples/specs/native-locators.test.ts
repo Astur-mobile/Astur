@@ -34,69 +34,76 @@ import { expect, test } from './fixtures.js';
 
 test('by.native() reaches an unlabeled control by position', async ({ app }) => {
   await app.nav.open('home');
-  await app.nativeLab.reveal();
+  await app.nativeLab.revealLanes();
   await expect(app.nativeLab.card).toBeVisible();
 
   // Three identical "+" buttons, no ids, same text. `instance` is the only
   // thing that separates them — tap lane B (index 1).
   const before = await app.nativeLab.laneCounts();
   await app.nativeLab.laneButton(1).tap();
-  const after = await app.nativeLab.laneCounts();
 
-  expect(after.b).toBe(before.b + 1);
-  // The neighbours must be untouched — this is what proves the positional
-  // selector resolved to lane B specifically, not just "some + button".
-  expect(after.a).toBe(before.a);
-  expect(after.c).toBe(before.c);
+  // Poll rather than sleep: the counter re-renders asynchronously, so a fixed
+  // wait is either slower than needed or too short under load. `expect.poll`
+  // retries until the whole shape matches, then asserts once.
+  await expect.poll(() => app.nativeLab.laneCounts()).toEqual({
+    ...before,
+    // The neighbours must be untouched — this is what proves the positional
+    // selector resolved to lane B specifically, not just "some + button".
+    b: before.b + 1
+  });
 });
 
 test('by.native() reaches a row by the text nested inside it', async ({ app }) => {
   await app.nav.open('home');
-  await app.nativeLab.reveal();
+  await app.nativeLab.revealRecords();
 
   // The rows carry no ids and no distinguishing text of their own — only the
-  // record name *nested inside* them. Android matches the row via
-  // `hasDescendant`; iOS matches the row's merged accessibility label with a
-  // CONTAINS predicate. Same intent, expressed natively per platform.
+  // record name *nested inside* them. React Native matches the row via
+  // `hasDescendant`; Flutter and iOS match the row's merged accessibility
+  // label, which already contains the nested text. Same intent, expressed
+  // natively per platform. See NativeLabPage.recordRow().
+  //
+  // KNOWN FAILING on the Flutter Android build. The selector resolves correctly
+  // when queried directly against a live session (verified: one match, right
+  // bounds, visible), but the tap times out inside the suite. Unresolved — the
+  // cause is NOT the reveal (the rows are on screen) and NOT the selector shape.
+  // Passes on React Native Android.
   await app.nativeLab.recordRow('Beta record').tap();
-  await expect(app.nativeLab.selectedRecordPill).toContainText('Beta record');
+  await expect.poll(() => app.nativeLab.selectedRecord()).toContain('Beta record');
 
   // Switching rows by the same strategy must move the readout — confirming the
   // match follows the requested descendant rather than the first row on screen.
   await app.nativeLab.recordRow('Gamma record').tap();
-  await expect(app.nativeLab.selectedRecordPill).toContainText('Gamma record');
+  await expect.poll(() => app.nativeLab.selectedRecord()).toContain('Gamma record');
 });
 
 test('by.native() combines several native conditions in one query', async ({ app }) => {
   await app.nav.open('home');
-  await app.nativeLab.reveal();
+  await app.nativeLab.revealLanes();
 
-  // className + text + packageName all narrow the SAME match (logical AND),
-  // with `instance` applied last. Tap lane C (index 2).
+  // Android combines className + text + packageName; iOS combines label +
+  // enabled state. Every condition narrows the SAME match (logical AND), with
+  // `instance` applied last. Tap lane C (index 2).
   const before = await app.nativeLab.laneCounts();
   await app.nativeLab.laneButtonByCompoundQuery(2).tap();
-  const after = await app.nativeLab.laneCounts();
 
-  expect(after.c).toBe(before.c + 1);
-  expect(after.a).toBe(before.a);
-  expect(after.b).toBe(before.b);
+  await expect.poll(() => app.nativeLab.laneCounts()).toEqual({ ...before, c: before.c + 1 });
 });
 
 test('by.native() matches nested text by regex', async ({ app }) => {
   await app.nav.open('home');
-  await app.nativeLab.reveal();
+  await app.nativeLab.revealRecords();
 
   // `textMatches` / `MATCHES` — a regex over the row's nested text instead of
   // an exact string.
   await app.nativeLab.recordRowMatching('Alpha|Beta').tap();
 
-  const selected = await app.nativeLab.selectedRecordPill.textContent();
-  expect(selected).toMatch(/Alpha record|Beta record/);
+  await expect.poll(() => app.nativeLab.selectedRecord()).toMatch(/Alpha record|Beta record/);
 });
 
 test('by.native() addresses id-bearing nodes by id pattern', async ({ app }) => {
   await app.nav.open('home');
-  await app.nativeLab.reveal();
+  await app.nativeLab.revealLanes();
 
   // by.native() is not limited to id-less nodes. `resourceIdMatches` (Android)
   // and an `identifier BEGINSWITH` predicate (iOS) address the readout pills by
