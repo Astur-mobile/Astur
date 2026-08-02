@@ -28,9 +28,10 @@
     "astur-mobile": "0.5.0-beta.3",
     "create-astur": "0.5.0-beta.3",
     "typescript": "^6.0.3",
+    "vite": "^8.0.13",
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "vite": "^7.3.3"
+    "vite": "^8.0.13"
   }
 }
