@@ -22,7 +22,7 @@ expect(request).toMatchObject({ method: 'POST', status: 201 });
 - Credential headers redacted and bodies capped by default; the buffer clears between tests.
 - Interception (stub/delay/fail) is **not** in this release — it needs an in-app adapter. `capabilities().intercept` says so rather than failing mysteriously.
 
-See [Network Observation](./network/) for the full picture.
+See [Network Observation](../network/) for the full picture.
 
 **Fixes that were costing whole runs.**
 
@@ -35,7 +35,7 @@ See [Network Observation](./network/) for the full picture.
 
 ### New
 
-- **`by.native({ ios, android })` — a raw escape hatch for the elements no other locator can pin down.** `ios` takes an XCUITest predicate string; `android` takes a structured selector (class, text, resource id, parent/child relationships). Useful for screens with little or no accessibility metadata. See the [Android](android.md#native-selector-escape-hatch-bynative) and [iOS](ios.md#native-selector-escape-hatch-bynative) guides.
+- **`by.native({ ios, android })` — a raw escape hatch for the elements no other locator can pin down.** `ios` takes an XCUITest predicate string; `android` takes a structured selector (class, text, resource id, parent/child relationships). Useful for screens with little or no accessibility metadata. See the [Android](../android/#native-selector-escape-hatch-bynative) and [iOS](../ios/#native-selector-escape-hatch-bynative) guides.
 
 ### Fixed
 
@@ -100,6 +100,6 @@ See [Network Observation](./network/) for the full picture.
 ### Notes & limits
 
 - WebView DOM on iOS needs `brew install ios-webkit-debug-proxy`. The Playwright `web.page` (`webview()`) fixture stays Android-only — use `device.webContext()` on iOS.
-- Flutter: Android needs a **debug** APK + the `flutter` CLI + `ASTUR_FLUTTER_PROJECT`; iOS exposes widgets through accessibility (add `Semantics(identifier:)`). See [Prerequisites](./prerequisites/) and [Platform Limits](./platform-limits/).
+- Flutter: Android needs a **debug** APK + the `flutter` CLI + `ASTUR_FLUTTER_PROJECT`; iOS exposes widgets through accessibility (add `Semantics(identifier:)`). See [Prerequisites](../prerequisites/) and [Platform Limits](../platform-limits/).
 
 > Beta line: APIs may still change between beta releases.

@@ -319,4 +319,4 @@ Transport per platform:
 | iOS real device | WKWebView · WebKit RWI via `ios-webkit-debug-proxy` | **Works** — `WKWebView.isInspectable = true` (iOS 16.4+) + Settings ▸ Safari ▸ Advanced ▸ Web Inspector, and `brew install ios-webkit-debug-proxy` |
 | iOS simulator | WKWebView · `webinspectord_sim` | **Not yet** — `ios-webkit-debug-proxy` bridges physical devices only; a direct simulator client is on the roadmap |
 
-See [Platform Limits](./platform-limits/) for the full Android/iOS boundary reference, and [Inspector And Codegen](./inspector/) for the live authoring loop.
+See [Platform Limits](../platform-limits/) for the full Android/iOS boundary reference, and [Inspector And Codegen](../inspector/) for the live authoring loop.
