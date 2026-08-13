@@ -30,7 +30,26 @@ function htmlFiles(dir) {
   });
 }
 
+/**
+ * The site's base path, e.g. `/Astur/` on project Pages.
+ *
+ * Detected from an emitted asset rather than read from env, so the check
+ * behaves the same locally (base `/`) and on CI (base `/Astur/`) with nothing
+ * to thread through. Astro writes hrefs WITH the base but lays `dist/` out
+ * WITHOUT it, so every absolute link looks broken until the prefix is stripped.
+ */
+function detectBase(files) {
+  for (const file of files) {
+    const match = readFileSync(file, 'utf8').match(/(?:href|src)="([^"]*)\/_astro\//);
+    if (match) {
+      return match[1] ? `${match[1]}/` : '/';
+    }
+  }
+  return '/';
+}
+
 const pages = htmlFiles(dist);
+const base = detectBase(pages);
 const broken = [];
 
 for (const file of pages) {
@@ -43,7 +62,12 @@ for (const file of pages) {
     if (!href || /^(https?:|mailto:|data:|\/\/)/.test(href)) {
       continue;
     }
-    const target = new URL(href, `http://x${pageUrl}`).pathname.replace(/^\/+/, '');
+    let target = new URL(href, `http://x${base.replace(/\/$/, '')}${pageUrl}`).pathname;
+    // Strip the base: hrefs carry it, the emitted tree does not.
+    if (base !== '/' && target.startsWith(base)) {
+      target = target.slice(base.length);
+    }
+    target = target.replace(/^\/+/, '');
     const asDir = join(dist, target, 'index.html');
     const asFile = join(dist, target);
     if (!existsSync(asDir) && !existsSync(asFile)) {
