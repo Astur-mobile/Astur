@@ -465,6 +465,10 @@ final class AsturAgent {
                 dismissKeyboard()
                 return ok(command.id)
 
+            case "keyboard.type":
+                try typeIntoFocusedInput(command.params.requiredString("text"))
+                return ok(command.id)
+
             default:
                 return error(command.id, "UNKNOWN_COMMAND", "Unknown Astur agent command: \(command.method)")
             }
@@ -757,6 +761,36 @@ final class AsturAgent {
             "visible": true,
             "bounds": bounds(keyboard.frame).toDictionary()
         ]
+    }
+
+    /// Types into whatever currently holds keyboard focus, with no element to target.
+    ///
+    /// This is the escape hatch for controls whose real input is not reachable
+    /// through the accessibility tree — a multi-box OTP field, for example, where
+    /// the visible boxes are plain views and the hidden `UITextField` behind them
+    /// is not exposed to XCUITest. `element.fill` cannot help there because there
+    /// is no element to resolve; the app has already been focused by a tap, and
+    /// all that is left is to send characters at the keyboard.
+    ///
+    /// `XCUIApplication.typeText` routes to the focused responder rather than to a
+    /// specific element, which is exactly that. It requires the keyboard to be up,
+    /// so the absence of one is reported as a clear failure instead of a silent
+    /// no-op — "I typed and nothing happened" is the worst outcome here.
+    private func typeIntoFocusedInput(_ text: String) throws {
+        guard !text.isEmpty else {
+            return
+        }
+
+        guard app.keyboards.firstMatch.waitForExistence(timeout: 5) else {
+            throw AsturAgentFailure(
+                code: "KEYBOARD_NOT_VISIBLE",
+                message: "No iOS keyboard is on screen, so there is nothing focused to type into. "
+                    + "Tap the input first — for a custom control, tap the box that focuses its hidden field.",
+                details: nil
+            )
+        }
+
+        app.typeText(text)
     }
 
     private func dismissKeyboard() {
@@ -2025,7 +2059,8 @@ private let supportedCapabilities = [
     "gesture.swipe",
     "gesture.drag",
     "keyboard.state",
-    "keyboard.dismiss"
+    "keyboard.dismiss",
+    "keyboard.type"
 ]
 
 private func elementTypeForRole(_ role: String) -> XCUIElement.ElementType? {

@@ -720,7 +720,8 @@ export type NativeAgentMethod =
   | 'gesture.swipe'
   | 'gesture.drag'
   | 'keyboard.state'
-  | 'keyboard.dismiss';
+  | 'keyboard.dismiss'
+  | 'keyboard.type';
 
 export interface NativeAgentCommandEnvelope<TParams = unknown> extends CommandEnvelope<TParams>, AgentCommandEnvelope<TParams> {
   method: NativeAgentMethod;
@@ -815,6 +816,7 @@ export interface NativeAgentCommandParamsMap {
   'gesture.drag': NativeAgentGestureDragParams;
   'keyboard.state': undefined;
   'keyboard.dismiss': undefined;
+  'keyboard.type': { text: string };
 }
 
 export interface NativeAgentCommandResultMap {
@@ -841,6 +843,7 @@ export interface NativeAgentCommandResultMap {
   'gesture.drag': void;
   'keyboard.state': KeyboardState;
   'keyboard.dismiss': void;
+  'keyboard.type': void;
 }
 
 export type NativeAgentCommandParams<M extends NativeAgentMethod> = NativeAgentCommandParamsMap[M];

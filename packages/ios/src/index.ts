@@ -1224,7 +1224,25 @@ class IosSession implements PlatformSession {
       return;
     }
 
+    // A single printable character is just typing it. Android accepts
+    // `pressKey('1')` via KEYCODE_1, so honouring the same call here keeps a
+    // digit-by-digit flow (the usual shape for OTP entry) working unchanged
+    // across platforms instead of forcing a platform branch in the test.
+    if ([...key].length === 1 && key !== ' ' && key.charCodeAt(0) > 0x1f) {
+      await this.typeText(key);
+      return;
+    }
+
     throw xctestRequired('pressing iOS keys');
+  }
+
+  async typeText(text: string): Promise<void> {
+    const command = await this.tryNativeCommand('keyboard.type', { text });
+    if (command.ok) {
+      return;
+    }
+
+    throw xctestRequired('typing into the focused iOS input');
   }
 
   async getKeyboardState(): Promise<KeyboardState> {

@@ -41,7 +41,7 @@ const IOS_AGENT_INFO: NativeAgentInfo = {
   platform: 'ios',
   version: '0.1.0-alpha.0',
   protocolVersion: 1,
-  capabilities: ['agent.ping', 'tree.get']
+  capabilities: ['agent.ping', 'tree.get', 'keyboard.type']
 };
 
 const IOS_TREE: MobileElementSnapshot = {
@@ -508,6 +508,50 @@ describe('iOS native-agent mode', () => {
       }
     });
   });
+
+  it('keyboard.type sends the text to the agent for the focused input', async () => {
+    // The escape hatch for controls whose real input never reaches the
+    // accessibility tree (a multi-box OTP field): there is no element to
+    // resolve, so this must reach the agent as a plain typing command.
+    const server = await createAgentServer((request) => ({
+      body: ok(request.id, request.method === 'agent.ping' ? IOS_AGENT_INFO : undefined)
+    }));
+    servers.push(server);
+
+    const driver = createDriver();
+    const session = await driver.createSession(normalizeCapabilities({
+      platform: 'ios',
+      device: { id: IOS_DEVICE.id },
+      agent: { mode: 'required', endpoint: server.endpoint, launchTimeout: 500, commandTimeout: 500 }
+    }));
+
+    await session.typeText!('123456');
+
+    const typed = server.requests.find((request) => request.method === 'keyboard.type');
+    expect(typed?.params).toMatchObject({ text: '123456' });
+  });
+
+  it('pressKey types a single printable character rather than refusing it', async () => {
+    // Android accepts pressKey('1') via KEYCODE_1. Honouring the same call on
+    // iOS keeps one shared spec working on both platforms instead of forcing a
+    // platform branch in a digit-by-digit OTP flow.
+    const server = await createAgentServer((request) => ({
+      body: ok(request.id, request.method === 'agent.ping' ? IOS_AGENT_INFO : undefined)
+    }));
+    servers.push(server);
+
+    const driver = createDriver();
+    const session = await driver.createSession(normalizeCapabilities({
+      platform: 'ios',
+      device: { id: IOS_DEVICE.id },
+      agent: { mode: 'required', endpoint: server.endpoint, launchTimeout: 500, commandTimeout: 500 }
+    }));
+
+    await session.pressKey('7');
+
+    expect(server.requests.find((r) => r.method === 'keyboard.type')?.params).toMatchObject({ text: '7' });
+  });
+
 });
 
 function createDriver() {

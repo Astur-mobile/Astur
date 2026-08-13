@@ -1319,6 +1319,23 @@ class AndroidSession implements PlatformSession {
     await this.adb(['shell', 'input', 'keyevent', normalizeAndroidKey(key)]);
   }
 
+  async typeText(text: string): Promise<void> {
+    if (!text) {
+      return;
+    }
+
+    // Deliberately the shell rather than the agent. `input text` delivers to
+    // whatever view holds focus, which is exactly this API's contract — there
+    // is no element for the agent to resolve. Going through the agent would
+    // also make this throw on sessions running `agent.mode: 'required'` against
+    // an installed build that predates the command.
+    //
+    // The device shell parses the argument before `input` sees it, so a bare
+    // string loses everything after the first space and a leading `-` reads as
+    // a flag; hence the quoting.
+    await this.adb(['shell', 'input', 'text', quoteAndroidInputText(text)]);
+  }
+
   async swipe(gesture: SwipeGesture): Promise<void> {
     const command = await this.tryNativeCommand('gesture.swipe', { gesture });
     if (command.ok) {
@@ -2322,6 +2339,19 @@ function waitForProcessExit(child: ChildProcess, timeout: number): Promise<void>
       resolve();
     });
   });
+}
+
+/**
+ * Escapes text for `adb shell input text`.
+ *
+ * `input text` is parsed by the device shell before `input` ever sees it, so a
+ * bare string loses everything after the first space and a leading `-` is read
+ * as a flag. Spaces become `%s` (what `input` itself decodes) and the rest is
+ * single-quoted, with embedded quotes broken out the standard shell way.
+ */
+export function quoteAndroidInputText(text: string): string {
+  const spaced = text.replace(/ /g, '%s');
+  return `'${spaced.replace(/'/g, `'\\''`)}'`;
 }
 
 export function normalizeAndroidKey(key: string): string {

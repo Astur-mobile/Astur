@@ -3,6 +3,31 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## Unreleased
+
+### Added
+
+- **`device.keyboard.type(text)` — type into whatever holds keyboard focus.**
+  For controls with no element to fill: a multi-box OTP field, where the visible
+  boxes are plain views and the real input is never exposed to the accessibility
+  tree, so `getByType('textField')` finds nothing and `fill()` has no target
+  ([#15](https://github.com/Astur-mobile/Astur/issues/15)).
+
+  ```ts
+  await device.getByTestId('otp-input').tap();
+  await device.keyboard.type('123456');
+  ```
+
+  Works the same on both platforms — XCUITest types into the focused responder,
+  Android sends to the focused view — so one spec covers both. `pressKey()` now
+  also accepts a single printable character on iOS, matching Android's
+  `KEYCODE_1`, which keeps a digit-by-digit flow portable.
+
+  Prefer `fill()` wherever the field is addressable: it resolves the element,
+  clears it, and verifies the value landed, none of which is possible when
+  targeting focus. With no keyboard on screen the iOS agent fails with
+  `KEYBOARD_NOT_VISIBLE` rather than silently doing nothing.
+
 ## 0.5.0-beta.3
 
 ### Added
