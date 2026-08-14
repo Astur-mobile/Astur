@@ -107,4 +107,4 @@ cd examples
 npm run test:android:flutter -- specs/network-observation.test.ts
 ```
 
-See [Flutter & React Native](./frameworks/) for the framework-specific detail, and [Platform Limits](./platform-limits/) for the full boundary reference.
+See [Flutter & React Native](../frameworks/) for the framework-specific detail, and [Platform Limits](../platform-limits/) for the full boundary reference.

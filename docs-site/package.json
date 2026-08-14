@@ -9,7 +9,7 @@
   "scripts": {
     "sync": "node ./scripts/sync-docs.mjs",
     "dev": "npm run sync && ASTRO_TELEMETRY_DISABLED=1 astro dev --host 127.0.0.1",
-    "build": "npm run sync && ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "build": "npm run sync && ASTRO_TELEMETRY_DISABLED=1 astro build && node ./scripts/check-links.mjs",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview --host 127.0.0.1"
   },
   "dependencies": {

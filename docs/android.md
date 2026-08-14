@@ -354,4 +354,4 @@ Everything maps 1:1 to a real, type-checked `BySelector` method.
 against a cached UI-tree snapshot, so a legacy/no-agent session throws
 `NATIVE_SELECTOR_REQUIRES_AGENT` rather than silently matching nothing. To
 target iOS with the same locator, add an `ios` predicate string alongside
-`android` — see [iOS: Native Selector Escape Hatch](./ios/#native-selector-escape-hatch-bynative).
+`android` — see [iOS: Native Selector Escape Hatch](../ios/#native-selector-escape-hatch-bynative).

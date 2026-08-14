@@ -392,7 +392,7 @@ indexing at all.
 against a cached UI-tree snapshot, so a legacy/no-agent session throws
 `NATIVE_SELECTOR_REQUIRES_AGENT` rather than silently matching nothing. To
 target Android with the same locator, add an `android` chain alongside
-`ios` — see [Android: Native Selector Escape Hatch](./android/#native-selector-escape-hatch-bynative).
+`ios` — see [Android: Native Selector Escape Hatch](../android/#native-selector-escape-hatch-bynative).
 
 ## Known Apple Limits
 

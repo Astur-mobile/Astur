@@ -138,7 +138,7 @@ Astur drives Flutter apps without Appium or a Flutter-specific third-party drive
 - **iOS Flutter** — read through the XCUITest accessibility tree (no Dart VM service); ship a simulator-built `Runner.app` and enable semantics so identifiers/labels are exposed.
 - Give widgets a stable `Semantics(identifier: 'login-email-input')` so `getById()` resolves them; `getByText` / `getByLabel` match `Text` and labels.
 
-See [Flutter & React Native](./frameworks/) for the full guide and [Platform Limits](./platform-limits/) for what each platform excludes.
+See [Flutter & React Native](../frameworks/) for the full guide and [Platform Limits](../platform-limits/) for what each platform excludes.
 
 ## Current Beta Limits
 
