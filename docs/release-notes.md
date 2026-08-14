@@ -2,6 +2,21 @@
 
 What's new in each Astur release.
 
+## 0.5.0-beta.4
+
+**Type into a field you can't select.** Some inputs have nothing to target — a multi-box OTP field draws six plain views and keeps the real input off the accessibility tree entirely, so `getByType('textField')` finds nothing and `fill()` has no element to fill. `device.keyboard.type()` sends text to whatever holds keyboard focus instead.
+
+```ts
+await device.getByTestId('otp-input').tap();
+await device.keyboard.type('123456');
+```
+
+- Same call on **iOS and Android**, so one spec covers both — XCUITest types into the focused responder, Android delivers to the focused view.
+- `pressKey()` now takes a single printable character on iOS too, matching Android's `KEYCODE_1`. A digit-by-digit loop no longer needs a platform branch.
+- With no keyboard on screen, iOS fails with `KEYBOARD_NOT_VISIBLE` instead of quietly doing nothing — the failure points at the cause, not three assertions later.
+
+Reach for `fill()` whenever the field is addressable: it resolves the element, clears it, and confirms the value landed. None of that is possible when you're aiming at focus. See [Keyboard and fill](../ios/#keyboard-and-fill).
+
 ## 0.5.0-beta.3
 
 **See what your app talks to.** New `device.network` reports the HTTP traffic an app makes while a test drives it, so you can assert on the call rather than just the pixels — and debug a failure without reproducing it by hand.
