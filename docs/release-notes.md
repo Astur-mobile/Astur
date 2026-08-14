@@ -15,6 +15,8 @@ await device.keyboard.type('123456');
 - `pressKey()` now types a single printable character on **both** platforms, so a digit-by-digit loop needs no platform branch. This also fixes a sharp edge on Android: a bare character used to be read as a *keycode number*, and keycode 4 is `BACK` — `pressKey('4')` navigated away instead of typing a 4. Named keys and raw keycode numbers are unchanged.
 - With no keyboard on screen, iOS fails with `KEYBOARD_NOT_VISIBLE` instead of quietly doing nothing — the failure points at the cause, not three assertions later.
 
+**A phantom keyboard was navigating your app mid-test.** On Android, keyboard state came from two signals that lie: a `mImeShowing=true` flag that lingers after the keyboard is gone, and a bounds rectangle that actually belonged to the display — reporting a full-screen keyboard. Every element then looked covered, so Astur dismissed the "keyboard" by pressing Back and left the screen. Both the host and the on-device agent now read the IME's own insets source and treat a zero-height frame as hidden. This needs the rebuilt agent that ships with `@astur-mobile/android`.
+
 Reach for `fill()` whenever the field is addressable: it resolves the element, clears it, and confirms the value landed. None of that is possible when you're aiming at focus. See [Keyboard and fill](../ios/#keyboard-and-fill).
 
 ## 0.5.0-beta.3

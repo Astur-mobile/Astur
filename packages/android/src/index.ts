@@ -1895,24 +1895,41 @@ export function parseAaptBadging(output: string): AndroidApkMetadata {
 
 export function parseAndroidKeyboardState(output: string): KeyboardState {
   const imeSource = output.match(/InsetsSource id=.*? type=ime .*?(?=\n)/);
-  const imeSourceLine = imeSource?.[0] ?? '';
-  const visible = /\bvisible=true\b/.test(imeSourceLine) || /\bmImeShowing=true\b/.test(output);
+  const imeSourceLine = imeSource?.[0];
 
-  if (!visible) {
+  if (imeSourceLine) {
+    // The IME's own insets source is authoritative, so nothing else in the dump
+    // gets a vote. `mImeShowing=true` appears elsewhere and lingers after the
+    // keyboard is gone; trusting it reported a keyboard that is not on screen,
+    // and a falsely-visible keyboard is expensive: callers respond by
+    // dismissing it, which presses Back, which navigates the app instead.
+    if (!/\bvisible=true\b/.test(imeSourceLine)) {
+      return { visible: false };
+    }
+
+    const visibleFrame = imeSourceLine.match(/visibleFrame=(\[[^\]]+\]\[[^\]]+\])/);
+    const frame = imeSourceLine.match(/\bframe=(\[[^\]]+\]\[[^\]]+\])/);
+    const bounds = parseAndroidWindowBounds(visibleFrame?.[1]) ?? parseAndroidWindowBounds(frame?.[1]);
+
+    // A collapsed frame is how a hidden IME reports itself — `[0,2424][1080,2424]`
+    // is zero-height at the bottom edge, not a keyboard covering that row.
+    if (!bounds || bounds.height <= 0) {
+      return { visible: false };
+    }
+
+    return { visible: true, bounds };
+  }
+
+  if (!/\bmImeShowing=true\b/.test(output)) {
     return { visible: false };
   }
 
-  const visibleFrame = imeSourceLine.match(/visibleFrame=(\[[^\]]+\]\[[^\]]+\])/);
-  const frame = imeSourceLine.match(/frame=(\[[^\]]+\]\[[^\]]+\])/);
   const sourceFrame = output.match(/mSourceFrame=Rect\((\d+),\s*(\d+)\s*-\s*(\d+),\s*(\d+)\)/);
+  const bounds = sourceFrame
+    ? rectToBounds(Number(sourceFrame[1]), Number(sourceFrame[2]), Number(sourceFrame[3]), Number(sourceFrame[4]))
+    : undefined;
 
-  const bounds = parseAndroidWindowBounds(visibleFrame?.[1])
-    ?? parseAndroidWindowBounds(frame?.[1])
-    ?? (sourceFrame
-      ? rectToBounds(Number(sourceFrame[1]), Number(sourceFrame[2]), Number(sourceFrame[3]), Number(sourceFrame[4]))
-      : undefined);
-
-  return bounds ? { visible: true, bounds } : { visible: true };
+  return bounds && bounds.height > 0 ? { visible: true, bounds } : { visible: true };
 }
 
 export function parseAndroidLockState(output: string): boolean {

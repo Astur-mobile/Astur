@@ -778,18 +778,58 @@ private class UiAutomatorBackend(
 
     override fun keyboardState(): Map<String, Any?> {
         val dumpsys = runCatching { device.executeShellCommand("dumpsys window") }.getOrDefault("")
-        val visible = Regex("\\btype=ime\\b.*\\bvisible=true\\b").containsMatchIn(dumpsys)
-            || Regex("\\bmImeShowing=true\\b").containsMatchIn(dumpsys)
-        val bounds = parseInputBounds(dumpsys)
+        val imeSource = Regex("InsetsSource id=\\S* type=ime [^\\n]*").find(dumpsys)?.value
 
-        return if (visible && bounds != null) {
-            mapOf(
-                "visible" to true,
-                "bounds" to bounds.toMap()
-            )
-        } else {
-            mapOf("visible" to visible)
+        // The IME's own insets source is authoritative, so nothing else in the
+        // dump gets a vote. `mImeShowing=true` appears elsewhere and lingers
+        // after the keyboard is gone, and a falsely-visible keyboard is
+        // expensive here: callers respond by dismissing it, and dismissing
+        // presses Back, which navigates the app instead of hiding anything.
+        if (imeSource != null) {
+            if (!Regex("\\bvisible=true\\b").containsMatchIn(imeSource)) {
+                return mapOf("visible" to false)
+            }
+
+            // A collapsed frame is how a hidden IME reports itself:
+            // `[0,2424][1080,2424]` is zero-height at the bottom edge, not a
+            // keyboard covering that row.
+            val bounds = parseImeFrame(imeSource)
+            if (bounds == null || bounds.height <= 0) {
+                return mapOf("visible" to false)
+            }
+
+            return mapOf("visible" to true, "bounds" to bounds.toMap())
         }
+
+        if (!Regex("\\bmImeShowing=true\\b").containsMatchIn(dumpsys)) {
+            return mapOf("visible" to false)
+        }
+
+        val bounds = parseInputBounds(dumpsys)
+        return if (bounds != null && bounds.height > 0) {
+            mapOf("visible" to true, "bounds" to bounds.toMap())
+        } else {
+            mapOf("visible" to true)
+        }
+    }
+
+    /**
+     * Geometry from the IME's own insets-source line. Scoped to that line on
+     * purpose: the first `mBounds=Rect(...)` in a full `dumpsys window` belongs
+     * to the display config, so reading it reported the keyboard as covering
+     * the entire screen and every element looked obstructed.
+     */
+    private fun parseImeFrame(imeSource: String): AsturBounds? {
+        val match = Regex("visibleFrame=\\[(\\d+),(\\d+)]\\[(\\d+),(\\d+)]").find(imeSource)
+            ?: Regex("(?<![A-Za-z])frame=\\[(\\d+),(\\d+)]\\[(\\d+),(\\d+)]").find(imeSource)
+            ?: return null
+
+        val left = match.groupValues[1].toIntOrNull() ?: return null
+        val top = match.groupValues[2].toIntOrNull() ?: return null
+        val right = match.groupValues[3].toIntOrNull() ?: return null
+        val bottom = match.groupValues[4].toIntOrNull() ?: return null
+
+        return AsturBounds(left, top, max(0, right - left), max(0, bottom - top))
     }
 
     override fun dismissKeyboard() {

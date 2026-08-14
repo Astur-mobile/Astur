@@ -12,6 +12,15 @@ const flutterAppPath = process.env.ASTUR_ANDROID_APP_PATH
 
 export default defineConfig({
   testDir: resolve(repoRoot, 'examples/specs'),
+  // Deny-list, not an allow-list — a platform opts out, with a reason, so a
+  // newly added spec runs here by default instead of silently never running.
+  testIgnore: [
+    // A Flutter session reads its tree from the Dart VM, which only ever
+    // contains the app's own widgets. The system photo picker is a different
+    // app's UI, so it is structurally invisible here — no locator can reach it,
+    // and the same exclusion already applies on Flutter iOS.
+    'media-upload.test.ts'
+  ],
   // Roughly 2.5x the slowest observed test. A generous per-test timeout does not
   // make a slow suite pass — it only delays how long a genuine hang takes to
   // surface, and every driver call is individually bounded anyway.
