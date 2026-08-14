@@ -727,8 +727,20 @@ export class AsturRuntime {
     const app = session.capabilities.app;
     if (app?.path) {
       const identifier = app.packageName ?? app.bundleId;
+      const forceInstall = capabilities.platform === 'android'
+        && process.env.ASTUR_ANDROID_APP_FORCE_INSTALL === '1';
 
-      if (identifier && session.isAppInstalled) {
+      if (forceInstall) {
+        if (identifier) {
+          try {
+            await session.uninstallApp(identifier);
+          } catch {
+            // The package may not be installed yet; the install below is still
+            // the authoritative operation.
+          }
+        }
+        await session.installApp(app.path);
+      } else if (identifier && session.isAppInstalled) {
         const installed = await session.isAppInstalled(identifier).catch(() => false);
         if (!installed) {
           await session.installApp(app.path);

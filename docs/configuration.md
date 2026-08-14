@@ -206,6 +206,7 @@ Astur works out of the box on a simulator with no environment variables. The one
 | `ASTUR_IOS_AGENT_START_ATTEMPTS` | `2` (sim) / `1` (real) | How many times to retry agent startup before failing. |
 | `ASTUR_IOS_AGENT_REAP` | enabled | Set to `0` to stop Astur from killing leftover agent sessions for the same device before a new run. |
 | `ASTUR_IOS_AGENT_TRACE` | off | Set to `1` to log every bridge command (queue/deliver/response/timeout) — the first tool to reach for when a session hangs. |
+| `ASTUR_ANDROID_APP_FORCE_INSTALL` | off | Set to `1` to uninstall the existing Android package, then install the app from `--app`/`app.path`. This clears app data and supports builds that share a package id but use different signatures. |
 | `ASTUR_IOS_APP_FORCE_INSTALL` | off | Set to `1` to reinstall the app from `--app`/`app.path` even when it is already installed. |
 | `ASTUR_XCRUN` / `ASTUR_XCODEBUILD` | `xcrun` / `xcodebuild` on `PATH` | Absolute paths to the Apple tools, for non-standard Xcode installs. |
 

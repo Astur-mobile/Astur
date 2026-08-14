@@ -37,6 +37,7 @@ test('keyboard.type sends text to whatever holds focus', async ({ app, device })
   // off screen — so the assertion would fail on a missing locator rather than
   // on the value it is actually checking.
   await device.keyboard.dismiss();
+  await app.forms.revealTextInput();
   await expect(app.forms.textInput).toHaveValue('Astur 123456');
 });
 

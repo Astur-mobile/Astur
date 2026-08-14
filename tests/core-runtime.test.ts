@@ -57,6 +57,26 @@ describe('AsturRuntime', () => {
     expect(driver.session.installApp).not.toHaveBeenCalled();
   });
 
+  it('force-installs the configured Android app when requested', async () => {
+    const driver = createDriver('android', 'emulator-5554');
+    driver.session.isAppInstalled = vi.fn(async () => true);
+    const runtime = new AsturRuntime().register(driver);
+    vi.stubEnv('ASTUR_ANDROID_APP_FORCE_INSTALL', '1');
+
+    try {
+      await runtime.createDevice({
+        platform: 'android',
+        app: { path: './react-native.apk', packageName: 'dev.astur.demo' }
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(driver.session.isAppInstalled).not.toHaveBeenCalled();
+    expect(driver.session.uninstallApp).toHaveBeenCalledWith('dev.astur.demo');
+    expect(driver.session.installApp).toHaveBeenCalledWith('./react-native.apk');
+  });
+
   it('exposes app and device management helpers on the device', async () => {
     const driver = createDriver('android', 'emulator-5554');
     const runtime = new AsturRuntime().register(driver);
