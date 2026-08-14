@@ -726,10 +726,15 @@ export const expect = baseExpect.extend({
     const result = comparePng(existing, image, options);
 
     if (!result.pass) {
-      await info.attach(`${name} — expected`, { body: existing, contentType: 'image/png' });
-      await info.attach(`${name} — actual`, { body: image, contentType: 'image/png' });
+      // These exact suffixes are what the HTML report keys off to render its
+      // image-diff viewer — the expected/actual/diff toggle with a slider.
+      // Name them anything else and the same three images show up as unrelated
+      // attachments you have to open one at a time.
+      const base = name.replace(/\.png$/, '');
+      await info.attach(`${base}-expected.png`, { body: existing, contentType: 'image/png' });
+      await info.attach(`${base}-actual.png`, { body: image, contentType: 'image/png' });
       if (result.diff) {
-        await info.attach(`${name} — diff`, { body: result.diff, contentType: 'image/png' });
+        await info.attach(`${base}-diff.png`, { body: result.diff, contentType: 'image/png' });
       }
     }
 

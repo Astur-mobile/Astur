@@ -35,8 +35,12 @@ All notable changes to Astur are documented here. Versions follow the
     has asserted nothing, and on CI that turns a missing baseline into a green
     test that never compared anything.
   - Captures until two consecutive captures are identical, so an animation still
-    settling is not recorded as the baseline. Expected/actual/diff are attached
-    to the report on failure.
+    settling is not recorded as the baseline.
+  - **Failures render as an image diff in the Playwright HTML report**, with the
+    Diff / Actual / Expected / Side by side / Slider tabs. The report keys that
+    off the `-expected` / `-actual` / `-diff` attachment suffixes, so the three
+    images are named to match rather than showing up as unrelated attachments
+    you open one at a time.
 
   Also adds `locator.screenshot()` and `device.screenshot({ mask })`. See
   [Visual Comparison](https://astur-mobile.github.io/Astur/visual-comparison/),

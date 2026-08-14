@@ -8,6 +8,37 @@ await expect(app.home.heroCard).toHaveScreenshot('home-hero-card.png');
 
 Playwright's own `expect(page).toHaveScreenshot()` needs a `Page`, and a native session does not have one. This is the native equivalent: Astur captures through the device, paints over whatever is allowed to change, and compares against one baseline per device. It works the same way on React Native and Flutter, Android and iOS.
 
+## Why bother
+
+Functional assertions check that an element is there and says the right thing. They pass happily while a button turns invisible against its background, a card loses its padding, or an icon stops rendering — because `toBeVisible()` and `toHaveText()` are all still true.
+
+A visual assertion is the one that notices. It is worth reaching for when:
+
+- **A component's appearance is the product** — a design system, a themed component, a chart.
+- **A refactor should change nothing visible.** Swapping a layout primitive or bumping a UI library is exactly where an unnoticed shift happens.
+- **A bug was visual once already.** A baseline is a cheap regression test for the thing that broke.
+
+It is the wrong tool for asserting behaviour. Prefer a functional assertion whenever one can express what you mean: it is faster, it survives a font rendering change, and it says what it wants.
+
+## What a failure looks like
+
+When a comparison fails, the expected, actual, and diff images are attached to the Playwright HTML report, which renders them as an image diff:
+
+![The Playwright HTML report showing an image mismatch for home-hero-card.png. The Diff tab is selected and the "Open menu" button is highlighted in red, while the unchanged parts of the card are faded out.](./images/visual-comparison-diff.png)
+
+The **Diff** tab fades everything that matched and highlights what moved — here, only the primary button changed colour. **Side by side** shows the two images together, which is usually the quickest way to judge whether a change was intended:
+
+![The same report on the Side by side tab, showing the expected card with a teal button next to the actual card with a navy button.](./images/visual-comparison-side-by-side.png)
+
+The failure message names the scale of the difference so it is usable from a CI log alone, without opening the report:
+
+```
+Screenshot home-hero-card.png does not match its baseline: 49888 pixels differ
+(6.34% of the image).
+Baseline: specs/visual-comparison.test.ts-snapshots/android-native-1080x2424/home-hero-card.png
+Re-run with --update-snapshots once you have confirmed the change is intended.
+```
+
 ## First run writes the baseline
 
 There is no baseline the first time, so the assertion writes one and **fails**:
