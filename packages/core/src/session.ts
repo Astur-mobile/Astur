@@ -46,11 +46,23 @@ import type {
 } from '@astur-mobile/protocol';
 import { materializeCapabilities, normalizeCapabilities } from './config.js';
 import { AsturError } from './errors.js';
+
 import { createInspectorSession, type RuntimeInspectorSessionOptions } from './inspector.js';
 import { preparePointerTargetForKeyboard } from './keyboard.js';
-import { by, findElements, MobileLocator } from './locator.js';
+import { by, captureMaskedScreenshot, findElements, MobileLocator, screenshotKey } from './locator.js';
 import { WebContext, type WebEvaluator } from './webBridge.js';
 import { delay } from './wait.js';
+
+export interface AsturScreenshotOptions extends ScreenshotOptions {
+  /**
+   * Regions to paint over before the image is returned, for content that is
+   * legitimately different every run — a clock, a live counter, an avatar.
+   *
+   * A locator that matches nothing is skipped rather than throwing: masking an
+   * element that only appears sometimes is a normal reason to mask it.
+   */
+  mask?: MobileLocator[];
+}
 
 export interface PlatformDriver {
   readonly platform: PlatformName;
@@ -582,13 +594,19 @@ export class AsturDevice {
     await this.session.drag(gesture);
   }
 
-  async screenshot(options: ScreenshotOptions = {}): Promise<Buffer> {
-    const image = await this.session.screenshot();
+  async screenshot(options: AsturScreenshotOptions = {}): Promise<Buffer> {
+    const image = await captureMaskedScreenshot(this.session, options.mask);
+
     if (options.path) {
       await writeLocalFile(options.path, image);
     }
 
     return image;
+  }
+
+  /** Identifies the device a baseline belongs to. See {@link screenshotKey}. */
+  async screenshotKey(): Promise<string> {
+    return screenshotKey(this.session);
   }
 
   async startRecording(): Promise<void> {

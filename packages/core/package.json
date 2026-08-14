@@ -42,7 +42,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/protocol": "0.5.0-beta.4"
+    "@astur-mobile/protocol": "0.5.0-beta.4",
+    "pngjs": "^7.0.0"
   },
   "repository": {
     "type": "git",
@@ -52,5 +53,8 @@
   "homepage": "https://astur-mobile.github.io/Astur/",
   "bugs": {
     "url": "https://github.com/Astur-mobile/Astur/issues"
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5"
   }
 }

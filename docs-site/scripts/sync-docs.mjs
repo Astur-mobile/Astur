@@ -79,6 +79,13 @@ const pages = [
     order: 10
   },
   {
+    source: 'docs/visual-comparison.md',
+    target: 'visual-comparison.md',
+    title: 'Visual Comparison',
+    description: 'Compare the screen against a stored baseline image, so a change in appearance fails a test instead of going unnoticed.',
+    order: 11
+  },
+  {
     source: 'docs/platform-limits.md',
     target: 'platform-limits.md',
     title: 'Platform Limits',
