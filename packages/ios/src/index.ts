@@ -42,6 +42,7 @@ import {
   AsturError,
   connectNativeAgentClient,
   delay,
+  isPrintableCharacter,
   type NativeAgentClient,
   type PlatformDriver,
   type PlatformSession,
@@ -1224,7 +1225,23 @@ class IosSession implements PlatformSession {
       return;
     }
 
+    // A single printable character is just typing it, on both platforms — see
+    // `isPrintableCharacter`. Android routes the same call to `input text`.
+    if (isPrintableCharacter(key)) {
+      await this.typeText(key);
+      return;
+    }
+
     throw xctestRequired('pressing iOS keys');
+  }
+
+  async typeText(text: string): Promise<void> {
+    const command = await this.tryNativeCommand('keyboard.type', { text });
+    if (command.ok) {
+      return;
+    }
+
+    throw xctestRequired('typing into the focused iOS input');
   }
 
   async getKeyboardState(): Promise<KeyboardState> {

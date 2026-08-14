@@ -241,6 +241,27 @@ await device.system.isLocked();
 await device.screenshot();
 ```
 
+### Typing into a control the tree cannot describe
+
+`device.keyboard.type()` sends characters to whatever view holds focus, with no element to target. Use it for controls that expose no fillable field — a multi-box OTP input, where the boxes are plain views and the real input is hidden:
+
+```ts
+await device.getByTestId('otp-input').tap();
+await device.keyboard.type('123456');
+```
+
+The same call works on iOS, so one spec covers both. Prefer `fill()` whenever the field is addressable: it resolves the element, clears it, and verifies the value landed, none of which is possible when targeting focus.
+
+`pressKey()` follows the same rule for a single printable character — it types that character rather than sending a keycode, so a digit-by-digit OTP loop is portable:
+
+```ts
+for (const digit of '123456') {
+  await device.pressKey(digit);
+}
+```
+
+Anything longer than one character is still a key: named keys (`'BACK'`, `'ENTER'`, `'VOLUME_UP'`) and raw Android keycode numbers (`'66'`) behave exactly as before.
+
 When native-agent endpoint mode is enabled and healthy, element/gesture commands can run through the device-side Kotlin agent transport. If endpoint mode is unavailable in `auto`, Astur falls back to current ADB/UIAutomator behavior.
 
 `device.gestures` also exposes `tap`, `longPress`, `pressAndHold`, `swipe`, and `drag` as a grouped API. `device.navigation` exposes `back`, `home`, and `recentApps`.

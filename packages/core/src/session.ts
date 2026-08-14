@@ -112,6 +112,12 @@ export interface PlatformSession {
   getKeyboardState?(): Promise<KeyboardState>;
   dismissKeyboard?(): Promise<void>;
   /**
+   * Types into whatever currently holds keyboard focus, with no element to
+   * target. See {@link AsturDevice.keyboard.type} for when that is the only
+   * option.
+   */
+  typeText?(text: string): Promise<void>;
+  /**
    * What this session can see of the app's network traffic. A driver that
    * cannot observe anything omits these entirely, and {@link AsturDevice.network}
    * reports `observe: false` rather than returning an empty request list — an
@@ -340,6 +346,38 @@ export class AsturDevice {
 
     hide: async (): Promise<void> => {
       await this.keyboard.dismiss();
+    },
+
+    /**
+     * Types into whatever currently holds keyboard focus.
+     *
+     * Prefer `locator.fill()` — it resolves the field, clears it, and verifies
+     * the value landed. Reach for this only when there is no element to target:
+     * a custom control whose real input never reaches the accessibility tree.
+     * A multi-box OTP field is the usual case — the boxes are plain views and
+     * the `UITextField`/`TextInput` behind them is hidden, so `getByType` finds
+     * nothing to fill.
+     *
+     * Focus the control first (a tap on the box normally does it), then:
+     *
+     * ```ts
+     * await device.getByTestId('otp-input').tap();
+     * await device.keyboard.type('123456');
+     * ```
+     *
+     * Because it targets focus rather than an element, nothing verifies where
+     * the characters landed — that is the trade for reaching a control the tree
+     * cannot describe.
+     */
+    type: async (text: string): Promise<void> => {
+      if (!this.session.typeText) {
+        throw new AsturError(
+          'KEYBOARD_NOT_SUPPORTED',
+          `${this.deviceInfo.platform} does not expose keyboard typing yet.`
+        );
+      }
+
+      await this.session.typeText(text);
     },
 
     show: async (target?: MobileLocator | ElementSelector): Promise<void> => {
@@ -689,8 +727,20 @@ export class AsturRuntime {
     const app = session.capabilities.app;
     if (app?.path) {
       const identifier = app.packageName ?? app.bundleId;
+      const forceInstall = capabilities.platform === 'android'
+        && process.env.ASTUR_ANDROID_APP_FORCE_INSTALL === '1';
 
-      if (identifier && session.isAppInstalled) {
+      if (forceInstall) {
+        if (identifier) {
+          try {
+            await session.uninstallApp(identifier);
+          } catch {
+            // The package may not be installed yet; the install below is still
+            // the authoritative operation.
+          }
+        }
+        await session.installApp(app.path);
+      } else if (identifier && session.isAppInstalled) {
         const installed = await session.isAppInstalled(identifier).catch(() => false);
         if (!installed) {
           await session.installApp(app.path);

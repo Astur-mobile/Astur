@@ -75,6 +75,12 @@ export class AsturDemoApp {
   async reset(): Promise<void> {
     await this.device.setOrientation('portrait').catch(() => undefined);
 
+    // A test that typed leaves the keyboard up, and it covers the bottom tab
+    // bar — so the next test's very first navigation taps the keyboard instead
+    // of a tab. Hot restart does not take the IME down with it, so clearing it
+    // here is what makes each test start from the same place.
+    await this.device.keyboard.dismiss().catch(() => undefined);
+
     if (isIos(this.device)) {
       await this.device.app.terminate().catch(() => undefined);
       await this.device.app.launch().catch(() => undefined);
@@ -887,26 +893,61 @@ export class FormsPage {
     await this.uploadCard.scrollIntoView({ direction: 'down', maxScrolls: 4 });
   }
 
+  /**
+   * The system photo picker can open behind a "Choose Google Photos account"
+   * prompt, which covers the grid — the photos are in the tree but nothing can
+   * be tapped. It appears on a freshly provisioned device and never again once
+   * dismissed, so it has to be handled rather than waited out.
+   */
+  private async dismissPickerAccountPrompt(): Promise<void> {
+    const dismiss = this.device.getByText('Dismiss', { exact: true });
+    if (await dismiss.isVisible({ timeout: 2_000 })) {
+      await dismiss.tap();
+      await delay(500);
+    }
+  }
+
   async chooseFirstVisibleMedia(): Promise<void> {
     await this.revealUploadCard();
     await this.pickMediaButton.tap();
+    await this.dismissPickerAccountPrompt();
 
     const asset = this.device.getByLabel('Photo taken', { exact: false });
-    await asset.waitForVisible({ timeout: 10_000 });
 
-    // The picker expands inline below the button; a tap can land mid-expansion and
-    // be dropped, leaving the sheet open with no selected-asset chip. Re-scroll the
-    // option on-screen and re-tap until the selection is confirmed (a successful tap
-    // closes the sheet, so the chip becoming visible is the signal to stop).
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await asset.scrollIntoView().catch(() => undefined);
-      await asset.tap({ timeout: 10_000 });
-      if (await this.selectedAsset.isVisible({ timeout: 5_000 })) {
-        return;
-      }
+    // A device with an empty gallery has nothing for the picker to show, and
+    // "timed out waiting for Photo taken" does not say that. Name the cause.
+    if (!(await asset.isVisible({ timeout: 10_000 }))) {
+      throw new Error(
+        'The system photo picker showed no images. This spec needs at least one '
+        + 'photo in the device gallery — seed one, e.g. '
+        + '`adb push image.png /sdcard/Pictures/ && adb shell am broadcast '
+        + '-a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/image.png`.'
+      );
     }
 
-    await this.selectedAsset.waitForVisible({ timeout: 5_000 });
+    // A tap can land mid-layout and be dropped, leaving the picker open with
+    // nothing selected, so re-tap until the picker closes.
+    //
+    // Only tap while a thumbnail is actually on screen. Retrying blind was the
+    // bug: a successful tap closes the picker, and the next iteration then
+    // tapped at a thumbnail that no longer existed and failed the whole test
+    // *after* the selection had already worked.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (!(await asset.isVisible({ timeout: 2_000 }))) {
+        break;
+      }
+
+      await asset.tap({ timeout: 10_000 });
+      await delay(500);
+    }
+
+    // The picker closes back to the form, where the chip can be left scrolled
+    // out of view. Scroll to the chip itself rather than to the card around it:
+    // revealing the card only guarantees the card's own edge is on screen, and
+    // the chip sits further down inside it. Without this, a selection that
+    // worked reads as "not visible" and fails the test.
+    await this.selectedAsset.scrollIntoView().catch(() => undefined);
+    await this.selectedAsset.waitForVisible({ timeout: 10_000 });
   }
 }
 

@@ -49,6 +49,7 @@ import {
   formatSelector,
   AsturError,
   delay,
+  isPrintableCharacter,
   preparePointerTargetForKeyboard,
   waitFor,
   CdpWebEvaluator,
@@ -1316,7 +1317,36 @@ class AndroidSession implements PlatformSession {
   }
 
   async pressKey(key: string): Promise<void> {
+    // A single printable character is a request to type it, not a raw keycode.
+    // `input keyevent` would read it as a number: keycode 4 is BACK, so
+    // `pressKey('4')` used to leave the screen instead of typing a 4 (digits
+    // are KEYCODE_0 = 7 through KEYCODE_9 = 16). Routing to `input text` types
+    // the character and matches iOS, so a digit-by-digit OTP flow needs no
+    // platform branch. Multi-character input still falls through, which keeps
+    // both the named aliases and any raw numeric keycode working.
+    if (isPrintableCharacter(key)) {
+      await this.typeText(key);
+      return;
+    }
+
     await this.adb(['shell', 'input', 'keyevent', normalizeAndroidKey(key)]);
+  }
+
+  async typeText(text: string): Promise<void> {
+    if (!text) {
+      return;
+    }
+
+    // Deliberately the shell rather than the agent. `input text` delivers to
+    // whatever view holds focus, which is exactly this API's contract — there
+    // is no element for the agent to resolve. Going through the agent would
+    // also make this throw on sessions running `agent.mode: 'required'` against
+    // an installed build that predates the command.
+    //
+    // The device shell parses the argument before `input` sees it, so a bare
+    // string loses everything after the first space and a leading `-` reads as
+    // a flag; hence the quoting.
+    await this.adb(['shell', 'input', 'text', quoteAndroidInputText(text)]);
   }
 
   async swipe(gesture: SwipeGesture): Promise<void> {
@@ -1865,24 +1895,41 @@ export function parseAaptBadging(output: string): AndroidApkMetadata {
 
 export function parseAndroidKeyboardState(output: string): KeyboardState {
   const imeSource = output.match(/InsetsSource id=.*? type=ime .*?(?=\n)/);
-  const imeSourceLine = imeSource?.[0] ?? '';
-  const visible = /\bvisible=true\b/.test(imeSourceLine) || /\bmImeShowing=true\b/.test(output);
+  const imeSourceLine = imeSource?.[0];
 
-  if (!visible) {
+  if (imeSourceLine) {
+    // The IME's own insets source is authoritative, so nothing else in the dump
+    // gets a vote. `mImeShowing=true` appears elsewhere and lingers after the
+    // keyboard is gone; trusting it reported a keyboard that is not on screen,
+    // and a falsely-visible keyboard is expensive: callers respond by
+    // dismissing it, which presses Back, which navigates the app instead.
+    if (!/\bvisible=true\b/.test(imeSourceLine)) {
+      return { visible: false };
+    }
+
+    const visibleFrame = imeSourceLine.match(/visibleFrame=(\[[^\]]+\]\[[^\]]+\])/);
+    const frame = imeSourceLine.match(/\bframe=(\[[^\]]+\]\[[^\]]+\])/);
+    const bounds = parseAndroidWindowBounds(visibleFrame?.[1]) ?? parseAndroidWindowBounds(frame?.[1]);
+
+    // A collapsed frame is how a hidden IME reports itself — `[0,2424][1080,2424]`
+    // is zero-height at the bottom edge, not a keyboard covering that row.
+    if (!bounds || bounds.height <= 0) {
+      return { visible: false };
+    }
+
+    return { visible: true, bounds };
+  }
+
+  if (!/\bmImeShowing=true\b/.test(output)) {
     return { visible: false };
   }
 
-  const visibleFrame = imeSourceLine.match(/visibleFrame=(\[[^\]]+\]\[[^\]]+\])/);
-  const frame = imeSourceLine.match(/frame=(\[[^\]]+\]\[[^\]]+\])/);
   const sourceFrame = output.match(/mSourceFrame=Rect\((\d+),\s*(\d+)\s*-\s*(\d+),\s*(\d+)\)/);
+  const bounds = sourceFrame
+    ? rectToBounds(Number(sourceFrame[1]), Number(sourceFrame[2]), Number(sourceFrame[3]), Number(sourceFrame[4]))
+    : undefined;
 
-  const bounds = parseAndroidWindowBounds(visibleFrame?.[1])
-    ?? parseAndroidWindowBounds(frame?.[1])
-    ?? (sourceFrame
-      ? rectToBounds(Number(sourceFrame[1]), Number(sourceFrame[2]), Number(sourceFrame[3]), Number(sourceFrame[4]))
-      : undefined);
-
-  return bounds ? { visible: true, bounds } : { visible: true };
+  return bounds && bounds.height > 0 ? { visible: true, bounds } : { visible: true };
 }
 
 export function parseAndroidLockState(output: string): boolean {
@@ -2322,6 +2369,19 @@ function waitForProcessExit(child: ChildProcess, timeout: number): Promise<void>
       resolve();
     });
   });
+}
+
+/**
+ * Escapes text for `adb shell input text`.
+ *
+ * `input text` is parsed by the device shell before `input` ever sees it, so a
+ * bare string loses everything after the first space and a leading `-` is read
+ * as a flag. Spaces become `%s` (what `input` itself decodes) and the rest is
+ * single-quoted, with embedded quotes broken out the standard shell way.
+ */
+export function quoteAndroidInputText(text: string): string {
+  const spaced = text.replace(/ /g, '%s');
+  return `'${spaced.replace(/'/g, `'\\''`)}'`;
 }
 
 export function normalizeAndroidKey(key: string): string {

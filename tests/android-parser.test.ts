@@ -116,6 +116,42 @@ launchable-activity: name='com.wdiodemoapp.MainActivity'  label='' icon=''
     `)).toEqual({ visible: false });
   });
 
+  it('trusts the ime insets source over a stale mImeShowing elsewhere in the dump', () => {
+    // Captured from an emulator with a hardware keyboard attached: the field
+    // has focus, no soft keyboard is on screen, and the ime source says so —
+    // but `mImeShowing=true` is still sitting in the dump. Believing it is
+    // expensive, because callers dismiss a "visible" keyboard by pressing
+    // Back, which navigates the app instead of hiding anything.
+    expect(parseAndroidKeyboardState(`
+      InsetsSource id=3 type=ime frame=[0,2424][1080,2424] visibleFrame=[0,2424][1080,2424] visible=false flags= sideHint=NONE boundingRects=null
+      ImeInsetsSourceProvider
+        mImeShowing=true
+    `)).toEqual({ visible: false });
+  });
+
+  it('treats a collapsed ime frame as hidden even when it claims to be visible', () => {
+    // Zero height at the bottom edge is how a hidden IME reports itself; it is
+    // not a keyboard covering that row.
+    expect(parseAndroidKeyboardState(`
+      InsetsSource id=3 type=ime frame=[0,2424][1080,2424] visibleFrame=[0,2424][1080,2424] visible=true flags= sideHint=NONE boundingRects=null
+    `)).toEqual({ visible: false });
+  });
+
+  it('never takes keyboard bounds from the display config', () => {
+    // The first mBounds=Rect(...) in a real `dumpsys window` belongs to the
+    // display, so a dump-wide search reported the keyboard as covering the
+    // whole screen — which makes every element look obstructed.
+    const state = parseAndroidKeyboardState(`
+      overrideConfig={1.0 [en_US] winConfig={ mBounds=Rect(0, 0 - 1080, 2424) mAppBounds=Rect(0, 0 - 1080, 2424)}}
+      InsetsSource id=3 type=ime frame=[0,1541][1080,2424] visibleFrame=[0,1541][1080,2424] visible=true flags= sideHint=BOTTOM boundingRects=null
+    `);
+
+    expect(state).toEqual({
+      visible: true,
+      bounds: { x: 0, y: 1541, width: 1080, height: 883 }
+    });
+  });
+
   it('discovers Android WebView DevTools sockets from proc net unix output', () => {
     expect(parseAndroidWebViewSockets(`
 0000000000000000: 00000002 00000000 00010000 0001 01 12345 @webview_devtools_remote_4012

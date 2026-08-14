@@ -9,7 +9,7 @@
     "devices": "npm --prefix .. exec astur-mobile -- devices",
     "devices:android": "npm --prefix .. exec astur-mobile -- devices --android",
     "devices:ios": "npm --prefix .. exec astur-mobile -- devices --ios",
-    "test:android": "npm --prefix .. exec astur-mobile -- test --config ./config/android/playwright.config.ts",
+    "test:android": "ASTUR_ANDROID_APP_FORCE_INSTALL=1 npm --prefix .. exec astur-mobile -- test --config ./config/android/playwright.config.ts",
     "pretest:android:flutter": "test -f \"${ASTUR_FLUTTER_PROJECT:-../../asturapp}/.dart_tool/package_config.json\" || (cd \"${ASTUR_FLUTTER_PROJECT:-../../asturapp}\" && \"${ASTUR_FLUTTER_PATH:-flutter}\" pub get)",
     "test:android:flutter": "ASTUR_FLUTTER_PROJECT=${ASTUR_FLUTTER_PROJECT:-../../asturapp} npm --prefix .. exec astur-mobile -- test --config ./config/android/playwright.flutter.config.ts",
     "test:ios": "npm --prefix .. exec astur-mobile -- test --config ./config/ios/playwright.config.ts",

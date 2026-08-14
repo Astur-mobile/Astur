@@ -3,6 +3,95 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## 0.5.0-beta.4
+
+### Added
+
+- **`device.keyboard.type(text)` — type into whatever holds keyboard focus.**
+  For controls with no element to fill: a multi-box OTP field, where the visible
+  boxes are plain views and the real input is never exposed to the accessibility
+  tree, so `getByType('textField')` finds nothing and `fill()` has no target
+  ([#15](https://github.com/Astur-mobile/Astur/issues/15)).
+
+  ```ts
+  await device.getByTestId('otp-input').tap();
+  await device.keyboard.type('123456');
+  ```
+
+  Works the same on both platforms — XCUITest types into the focused responder,
+  Android sends to the focused view — so one spec covers both.
+
+  Prefer `fill()` wherever the field is addressable: it resolves the element,
+  clears it, and verifies the value landed, none of which is possible when
+  targeting focus. With no keyboard on screen the iOS agent fails with
+  `KEYBOARD_NOT_VISIBLE` rather than silently doing nothing.
+
+  Showcased in `examples/specs/keyboard-focus.test.ts`, which runs unchanged on
+  both platforms.
+
+### Fixed
+
+- **`pressKey()` with a single character typed the wrong thing on Android — and
+  could leave the screen.** The character fell through to
+  `input keyevent <char>`, where Android reads it as a *keycode number*: keycode
+  4 is `BACK`, so `pressKey('4')` navigated back instead of typing a 4. Digits
+  are `KEYCODE_0 = 7` through `KEYCODE_9 = 16`, so every bare digit fired
+  something unrelated — `'1'` sent `SOFT_LEFT`, `'6'` sent `CALL`.
+
+  A single printable character now types that character on both platforms, which
+  is what a digit-by-digit OTP loop needs:
+
+  ```ts
+  for (const digit of '123456') {
+    await device.pressKey(digit);
+  }
+  ```
+
+  Named keys (`'BACK'`, `'ENTER'`) and raw numeric keycodes (`'66'`) are
+  unaffected — the rule only applies to input exactly one character long.
+  `pressKey(' ')` now also types a space on iOS, which previously threw.
+
+- **A phantom Android keyboard was pressing Back and navigating the app
+  mid-test.** Keyboard state was read from two unreliable signals in
+  `dumpsys window`:
+
+  - `mImeShowing=true`, matched anywhere in the dump. It lingers after the
+    keyboard is gone, so a focused field with no soft keyboard on screen
+    reported one as visible.
+  - the first `mBounds=Rect(...)` in the dump, which belongs to the *display*
+    config — reporting the keyboard as covering the entire screen, so every
+    element looked obstructed.
+
+  Together those made `fill()` and `tap()` treat a plainly visible field as
+  covered, dismiss the "keyboard" — which presses Back — and navigate off the
+  screen. The next locator then failed on a screen that was no longer there.
+
+  Both the host parser and the UIAutomator agent now read the IME's own insets
+  source and nothing else, and treat a collapsed frame (`[0,2424][1080,2424]`,
+  zero height at the bottom edge) as hidden. Measured on the same device at the
+  same instant, the agent went from `0,0 1080×2424` to `0,1541 1080×883`,
+  matching the host parser exactly. Fixes `login` and `forms` on React Native
+  Android, and unblocks the native photo picker.
+
+  **The bundled agent APK is rebuilt**, so this needs the shipped
+  `@astur-mobile/android` rather than only a source update.
+
+### Changed
+
+- The media-upload example dismisses the system picker's "Choose Google Photos
+  account" prompt, which opens over the grid and blocks every tap, and says so
+  explicitly when the device gallery is empty instead of timing out on a
+  locator that was never going to match. It also stops re-tapping after the
+  picker has closed, which failed the test *after* the selection had already
+  worked.
+- The example suite resets the keyboard between tests. A test that typed left
+  the IME up over the bottom tab bar, so the next test's first navigation
+  tapped the keyboard instead of a tab.
+- media-upload is excluded on Flutter Android, matching Flutter iOS. A Flutter
+  session reads its tree from the Dart VM, which only contains the app's own
+  widgets — the system photo picker is another app's UI and no locator can
+  reach it.
+
 ## 0.5.0-beta.3
 
 ### Added

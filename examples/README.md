@@ -40,6 +40,7 @@ npx astur-mobile test --config examples/config/android/playwright.config.ts
 Astur now keeps one native agent session per Playwright worker instead of recreating it for every spec. The demo `app` fixture terminates and relaunches the app before each test, so tests remain isolated without reinstalling the native agent or clearing app data on every spec. Android also skips redundant agent APK installs when the agent packages are already present on the device; set `ASTUR_ANDROID_AGENT_FORCE_INSTALL=1` only when you intentionally want to refresh the installed agent APKs.
 
 Astur skips redundant app installs when the configured app is already installed on the target device. The first run installs normally; later sessions reuse the installed package unless you uninstall it.
+The React Native Android example sets `ASTUR_ANDROID_APP_FORCE_INSTALL=1` because its APK and the Flutter APK intentionally share `com.astur.demo`; this makes either suite safe to run immediately after the other.
 
 The suite is split by user-facing functionality:
 

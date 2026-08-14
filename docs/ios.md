@@ -219,6 +219,30 @@ Paste is also available as an explicit opt-in for non-secure fields:
 await device.getByLabel('Bio').fill('Long local-only text', { textInputMode: 'paste' });
 ```
 
+### Typing into a control the tree cannot describe
+
+Some controls have no element to fill. A multi-box OTP field is the common one: the visible boxes are plain views and the real `UITextField` behind them is never exposed to XCUITest, so `getByType('textField')` finds nothing and `fill()` has no target.
+
+`device.keyboard.type()` types into whatever currently holds **keyboard focus**, so it works where element-based fill cannot. Focus the control first — tapping a box normally does it:
+
+```ts
+await device.getByTestId('otp-input').tap();
+await device.keyboard.type('123456');
+```
+
+The same call works on Android, which sends the characters to the focused view. A digit-by-digit flow is also portable, since `pressKey` accepts a single printable character on both platforms:
+
+```ts
+for (const digit of '123456') {
+  await device.pressKey(digit);
+}
+```
+
+Two things to know before reaching for it:
+
+- **Prefer `fill()` whenever the field is addressable.** `fill()` resolves the element, clears it, and verifies the value landed. `keyboard.type()` targets focus, so nothing confirms where the characters went — that is the trade for reaching a control the tree cannot describe.
+- **The keyboard must be up.** With no keyboard on screen there is nothing focused to type into, and the agent fails with `KEYBOARD_NOT_VISIBLE` rather than silently doing nothing.
+
 Global keyboard behavior can be configured:
 
 ```ts

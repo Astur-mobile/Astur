@@ -1,6 +1,6 @@
 {
   "name": "astur-monorepo",
-  "version": "0.5.0-beta.3",
+  "version": "0.5.0-beta.4",
   "private": true,
   "description": "Astur monorepo for device-native mobile automation.",
   "license": "Apache-2.0",
@@ -22,11 +22,11 @@
     "test:build": "npm run build && vitest run"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.1.1",
     "@vitest/coverage-v8": "^4.1.10",
-    "astur-mobile": "0.5.0-beta.3",
-    "create-astur": "0.5.0-beta.3",
+    "astur-mobile": "0.5.0-beta.4",
+    "create-astur": "0.5.0-beta.4",
     "typescript": "^6.0.3",
     "vite": "^8.0.13",
     "vitest": "^4.1.10"
