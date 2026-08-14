@@ -7,6 +7,20 @@ import type {
 import type { PlatformSession } from './session.js';
 import { delay } from './wait.js';
 
+/**
+ * Whether `pressKey(key)` means "type this character" rather than "send this
+ * key". Both platforms have to agree on the answer or a digit-by-digit flow —
+ * the usual shape for OTP entry — needs a platform branch in the test.
+ *
+ * A single character a user could type qualifies. Control characters do not, so
+ * `'\n'` still resolves as a named key, and neither does anything longer than
+ * one character, which leaves named keys (`'BACK'`) and raw Android keycode
+ * numbers (`'66'`) untouched.
+ */
+export function isPrintableCharacter(key: string): boolean {
+  return [...key].length === 1 && !/\p{C}/u.test(key);
+}
+
 export async function preparePointerTargetForKeyboard(
   session: PlatformSession,
   point: Coordinates,

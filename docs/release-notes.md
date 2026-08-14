@@ -12,7 +12,7 @@ await device.keyboard.type('123456');
 ```
 
 - Same call on **iOS and Android**, so one spec covers both — XCUITest types into the focused responder, Android delivers to the focused view.
-- `pressKey()` now takes a single printable character on iOS too, matching Android's `KEYCODE_1`. A digit-by-digit loop no longer needs a platform branch.
+- `pressKey()` now types a single printable character on **both** platforms, so a digit-by-digit loop needs no platform branch. This also fixes a sharp edge on Android: a bare character used to be read as a *keycode number*, and keycode 4 is `BACK` — `pressKey('4')` navigated away instead of typing a 4. Named keys and raw keycode numbers are unchanged.
 - With no keyboard on screen, iOS fails with `KEYBOARD_NOT_VISIBLE` instead of quietly doing nothing — the failure points at the cause, not three assertions later.
 
 Reach for `fill()` whenever the field is addressable: it resolves the element, clears it, and confirms the value landed. None of that is possible when you're aiming at focus. See [Keyboard and fill](../ios/#keyboard-and-fill).

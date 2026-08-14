@@ -532,9 +532,8 @@ describe('iOS native-agent mode', () => {
   });
 
   it('pressKey types a single printable character rather than refusing it', async () => {
-    // Android accepts pressKey('1') via KEYCODE_1. Honouring the same call on
-    // iOS keeps one shared spec working on both platforms instead of forcing a
-    // platform branch in a digit-by-digit OTP flow.
+    // Both platforms treat a single printable character as typing it, so a
+    // digit-by-digit OTP flow is one shared spec rather than a platform branch.
     const server = await createAgentServer((request) => ({
       body: ok(request.id, request.method === 'agent.ping' ? IOS_AGENT_INFO : undefined)
     }));

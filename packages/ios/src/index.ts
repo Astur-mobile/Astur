@@ -42,6 +42,7 @@ import {
   AsturError,
   connectNativeAgentClient,
   delay,
+  isPrintableCharacter,
   type NativeAgentClient,
   type PlatformDriver,
   type PlatformSession,
@@ -1224,11 +1225,9 @@ class IosSession implements PlatformSession {
       return;
     }
 
-    // A single printable character is just typing it. Android accepts
-    // `pressKey('1')` via KEYCODE_1, so honouring the same call here keeps a
-    // digit-by-digit flow (the usual shape for OTP entry) working unchanged
-    // across platforms instead of forcing a platform branch in the test.
-    if ([...key].length === 1 && key !== ' ' && key.charCodeAt(0) > 0x1f) {
+    // A single printable character is just typing it, on both platforms — see
+    // `isPrintableCharacter`. Android routes the same call to `input text`.
+    if (isPrintableCharacter(key)) {
       await this.typeText(key);
       return;
     }

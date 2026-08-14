@@ -49,6 +49,7 @@ import {
   formatSelector,
   AsturError,
   delay,
+  isPrintableCharacter,
   preparePointerTargetForKeyboard,
   waitFor,
   CdpWebEvaluator,
@@ -1316,6 +1317,18 @@ class AndroidSession implements PlatformSession {
   }
 
   async pressKey(key: string): Promise<void> {
+    // A single printable character is a request to type it, not a raw keycode.
+    // `input keyevent` would read it as a number: keycode 4 is BACK, so
+    // `pressKey('4')` used to leave the screen instead of typing a 4 (digits
+    // are KEYCODE_0 = 7 through KEYCODE_9 = 16). Routing to `input text` types
+    // the character and matches iOS, so a digit-by-digit OTP flow needs no
+    // platform branch. Multi-character input still falls through, which keeps
+    // both the named aliases and any raw numeric keycode working.
+    if (isPrintableCharacter(key)) {
+      await this.typeText(key);
+      return;
+    }
+
     await this.adb(['shell', 'input', 'keyevent', normalizeAndroidKey(key)]);
   }
 

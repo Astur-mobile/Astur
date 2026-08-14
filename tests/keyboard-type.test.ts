@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AsturDevice, normalizeCapabilities, type DeviceInfo, type PlatformSession } from '@astur-mobile/core';
-import { quoteAndroidInputText } from '../packages/android/src/index.js';
+import {
+  AsturDevice,
+  isPrintableCharacter,
+  normalizeCapabilities,
+  type DeviceInfo,
+  type PlatformSession
+} from '@astur-mobile/core';
+import { normalizeAndroidKey, quoteAndroidInputText } from '../packages/android/src/index.js';
 
 const DEVICE: DeviceInfo = {
   id: 'device-1',
@@ -63,5 +69,35 @@ describe('android input text quoting', () => {
 
   it('leaves a plain OTP digit string untouched apart from quoting', () => {
     expect(quoteAndroidInputText('123456')).toBe("'123456'");
+  });
+});
+
+describe('pressKey character vs keycode', () => {
+  it.each([...'0123456789'])('treats the digit %s as a character to type', (digit) => {
+    // The regression this guards: these used to reach `input keyevent <digit>`,
+    // where the digit is read as a keycode number rather than a character.
+    // Keycode 4 is BACK, so pressKey('4') left the screen instead of typing a
+    // 4 — digits are KEYCODE_0 = 7 through KEYCODE_9 = 16, so every one of them
+    // fired something unrelated.
+    expect(isPrintableCharacter(digit)).toBe(true);
+  });
+
+  it.each([' ', 'a', 'Z', '@', 'é'])('treats %s as a character to type', (char) => {
+    expect(isPrintableCharacter(char)).toBe(true);
+  });
+
+  it.each(['BACK', 'HOME', 'KEYCODE_ENTER', '66', '\n', ''])(
+    'leaves %j to the keycode path',
+    (key) => {
+      // Named keys and raw Android keycode numbers must keep working — the
+      // character rule is only ever about a *single* printable character.
+      expect(isPrintableCharacter(key)).toBe(false);
+    }
+  );
+
+  it('still maps named keys to their keycodes', () => {
+    expect(normalizeAndroidKey('back')).toBe('KEYCODE_BACK');
+    expect(normalizeAndroidKey('volume up')).toBe('KEYCODE_VOLUME_UP');
+    expect(normalizeAndroidKey('KEYCODE_ENTER')).toBe('KEYCODE_ENTER');
   });
 });
