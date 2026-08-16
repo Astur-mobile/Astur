@@ -20,6 +20,51 @@ export type ScreenshotCompareResult =
 
 export const DEFAULT_THRESHOLD = 0.2;
 
+/** Playwright's `--update-snapshots` modes, as they reach `config.updateSnapshots`. */
+export type SnapshotUpdateMode = 'all' | 'changed' | 'missing' | 'none';
+
+export type SnapshotAction =
+  /** No baseline, and this mode may write one — write it, but do not pass. */
+  | 'write-missing'
+  /** Rewrite the baseline and pass; the run was told the change is intended. */
+  | 'rewrite'
+  /** No baseline and this mode forbids writing one. */
+  | 'fail-missing'
+  /** Compare against the baseline as normal. */
+  | 'compare';
+
+/**
+ * Decides what a run should do with a baseline, given the update mode.
+ *
+ * Worth spelling out because the flag's spellings do not mean what they look
+ * like: a bare `--update-snapshots` presets to **`changed`**, not `all`, so
+ * treating only `all` as "update" makes the documented way to accept a change
+ * silently do nothing. The four modes, per Playwright:
+ *
+ * - `all` — rewrite every baseline, matching or not.
+ * - `changed` — rewrite only the ones that differ. The bare-flag default.
+ * - `missing` — write only absent baselines. The default with no flag.
+ * - `none` — never write; an absent baseline is a failure.
+ */
+export function resolveSnapshotAction(
+  hasBaseline: boolean,
+  updateMode: SnapshotUpdateMode | undefined,
+  matches: boolean
+): SnapshotAction {
+  const mode = updateMode ?? 'missing';
+
+  if (!hasBaseline) {
+    return mode === 'none' ? 'fail-missing' : 'write-missing';
+  }
+  if (mode === 'all') {
+    return 'rewrite';
+  }
+  if (mode === 'changed' && !matches) {
+    return 'rewrite';
+  }
+  return 'compare';
+}
+
 /**
  * Compares two PNGs and reports how far apart they are.
  *

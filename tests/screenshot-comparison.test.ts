@@ -8,7 +8,7 @@ import {
   toPixelRect,
   MASK_COLOR
 } from '@astur-mobile/core';
-import { comparePng, describeDifference } from '../packages/test/src/screenshot.js';
+import { comparePng, describeDifference, resolveSnapshotAction } from '../packages/test/src/screenshot.js';
 
 function solidPng(width: number, height: number, rgb: [number, number, number]): Buffer {
   const png = new PNG({ width, height });
@@ -134,5 +134,44 @@ describe('screenshot comparison', () => {
     });
 
     expect(result.pass).toBe(false);
+  });
+});
+
+describe('--update-snapshots modes', () => {
+  // The flag's spellings do not mean what they look like: a bare
+  // `--update-snapshots` presets to "changed", not "all". Treating only "all"
+  // as an update made the documented way to accept a change silently do
+  // nothing -- the baseline stayed put and the test kept failing.
+  it('rewrites a differing baseline on a bare --update-snapshots', () => {
+    expect(resolveSnapshotAction(true, 'changed', false)).toBe('rewrite');
+  });
+
+  it('leaves a matching baseline alone in changed mode', () => {
+    expect(resolveSnapshotAction(true, 'changed', true)).toBe('compare');
+  });
+
+  it('rewrites even a matching baseline in all mode', () => {
+    expect(resolveSnapshotAction(true, 'all', true)).toBe('rewrite');
+  });
+
+  it('compares by default, without any flag', () => {
+    expect(resolveSnapshotAction(true, undefined, true)).toBe('compare');
+    expect(resolveSnapshotAction(true, 'missing', false)).toBe('compare');
+  });
+
+  it('never rewrites an existing baseline in none mode', () => {
+    expect(resolveSnapshotAction(true, 'none', false)).toBe('compare');
+  });
+
+  it('writes an absent baseline in every mode that permits writing', () => {
+    for (const mode of ['all', 'changed', 'missing', undefined] as const) {
+      expect(resolveSnapshotAction(false, mode, false)).toBe('write-missing');
+    }
+  });
+
+  it('refuses to write an absent baseline in none mode', () => {
+    // Meant for CI: a missing baseline should fail the run, not be created by
+    // it, or the job that was supposed to catch the drift records it instead.
+    expect(resolveSnapshotAction(false, 'none', false)).toBe('fail-missing');
   });
 });
