@@ -13,10 +13,11 @@ import {
 } from '@playwright/test';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createAndroidDriver } from '@astur-mobile/android';
 import {
   by,
+  delay,
   MobileLocator,
   waitFor,
   AsturRuntime,
@@ -32,6 +33,11 @@ import {
   type WebViewSelector
 } from '@astur-mobile/core';
 import { createIosDriver } from '@astur-mobile/ios';
+import {
+  comparePng,
+  describeDifference,
+  type ScreenshotCompareOptions
+} from './screenshot.js';
 
 export {
   by,
@@ -662,8 +668,150 @@ export const expect = baseExpect.extend({
           `Expected ${actual.toString()} to have count ${expected}, but last saw ${lastCount ?? 0}.`
       };
     }
+  },
+
+  /**
+   * Compares the screen, or one element, against a stored baseline image.
+   *
+   * Playwright's own `toHaveScreenshot` needs a `Page`, which a native session
+   * does not have. This is the native equivalent: it captures through Astur,
+   * masks what is allowed to change, and keeps one baseline per device.
+   */
+  async toHaveScreenshot(
+    actual: unknown,
+    name: string,
+    options: ScreenshotAssertionOptions = {}
+  ): AsturMatcherResult {
+    if (!isScreenshotTarget(actual)) {
+      return unsupportedActual('toHaveScreenshot');
+    }
+
+    if (!name?.endsWith('.png')) {
+      return {
+        pass: false,
+        message: () => 'toHaveScreenshot() needs a baseline file name ending in .png, e.g. "home.png".'
+      };
+    }
+
+    const info = testInfo();
+    const image = await captureStableScreenshot(actual, options);
+    const baseline = join(
+      info.snapshotDir,
+      await actual.screenshotKey(),
+      name
+    );
+
+    const existing = await readFile(baseline).catch(() => undefined);
+    const updateMode = info.config.updateSnapshots;
+
+    if (!existing || updateMode === 'all') {
+      await mkdir(dirname(baseline), { recursive: true });
+      await writeFile(baseline, image);
+
+      // Writing a baseline is not a passing assertion. A run that silently
+      // creates one asserts nothing, and on CI that turns a missing baseline
+      // into a green test that never compared anything.
+      if (existing) {
+        return { pass: true, message: () => `Baseline updated: ${baseline}` };
+      }
+
+      return {
+        pass: false,
+        message: () =>
+          `No baseline yet, so this run wrote one: ${baseline}\n`
+          + 'Check the image looks right, commit it, and re-run.'
+      };
+    }
+
+    const result = comparePng(existing, image, options);
+
+    if (!result.pass) {
+      // These exact suffixes are what the HTML report keys off to render its
+      // image-diff viewer — the expected/actual/diff toggle with a slider.
+      // Name them anything else and the same three images show up as unrelated
+      // attachments you have to open one at a time.
+      const base = name.replace(/\.png$/, '');
+      await info.attach(`${base}-expected.png`, { body: existing, contentType: 'image/png' });
+      await info.attach(`${base}-actual.png`, { body: image, contentType: 'image/png' });
+      if (result.diff) {
+        await info.attach(`${base}-diff.png`, { body: result.diff, contentType: 'image/png' });
+      }
+    }
+
+    return {
+      pass: result.pass,
+      message: () =>
+        result.pass
+          ? `Expected ${name} not to match its baseline, but ${describeDifference(result)}.`
+          : `Screenshot ${name} does not match its baseline: ${describeDifference(result)}.\n`
+            + `Baseline: ${baseline}\n`
+            + 'Re-run with --update-snapshots once you have confirmed the change is intended.'
+    };
   }
 });
+
+export interface ScreenshotAssertionOptions extends ScreenshotCompareOptions {
+  /** Regions allowed to differ — a clock, a live counter, an avatar. */
+  mask?: MobileLocator[];
+  /**
+   * How long to wait for the screen to stop changing before comparing.
+   * Defaults to 1500ms; set 0 to capture immediately.
+   */
+  stabilizeTimeout?: number;
+}
+
+interface ScreenshotTarget {
+  screenshot(options?: { mask?: MobileLocator[] }): Promise<Buffer>;
+  screenshotKey(): Promise<string>;
+}
+
+function isScreenshotTarget(actual: unknown): actual is ScreenshotTarget {
+  return typeof actual === 'object'
+    && actual !== null
+    && typeof (actual as ScreenshotTarget).screenshot === 'function'
+    && typeof (actual as ScreenshotTarget).screenshotKey === 'function';
+}
+
+/**
+ * Captures until two consecutive captures are identical, so an animation still
+ * settling cannot be recorded as the baseline or compared against one.
+ *
+ * Without this, visual tests on mobile fail intermittently for reasons that have
+ * nothing to do with the change under test — a ripple, a fade, a spinner.
+ */
+async function captureStableScreenshot(
+  target: ScreenshotTarget,
+  options: ScreenshotAssertionOptions
+): Promise<Buffer> {
+  const budget = options.stabilizeTimeout ?? 1_500;
+  let previous = await target.screenshot({ mask: options.mask });
+
+  if (budget <= 0) {
+    return previous;
+  }
+
+  const deadline = Date.now() + budget;
+  while (Date.now() < deadline) {
+    await delay(250);
+    const current = await target.screenshot({ mask: options.mask });
+    if (current.equals(previous)) {
+      return current;
+    }
+
+    previous = current;
+  }
+
+  return previous;
+}
+
+function testInfo(): TestInfo {
+  const info = base.info();
+  if (!info) {
+    throw new Error('toHaveScreenshot() can only be used inside a test.');
+  }
+
+  return info;
+}
 
 function isPlaywrightLocator(actual: unknown): actual is Locator {
   return typeof actual === 'object'

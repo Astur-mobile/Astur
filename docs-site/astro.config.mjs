@@ -79,6 +79,7 @@ export default defineConfig({
             { label: 'iOS', slug: 'ios' },
             { label: 'Flutter & React Native', slug: 'frameworks' },
             { label: 'Network Observation', slug: 'network' },
+            { label: 'Visual Comparison', slug: 'visual-comparison' },
             { label: 'Configuration', slug: 'configuration' },
             { label: 'Troubleshooting', slug: 'troubleshooting' }
           ]
