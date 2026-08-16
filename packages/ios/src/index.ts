@@ -46,6 +46,9 @@ import {
   isPrintableCharacter,
   resolveRedactionOptions,
   toNetworkRecords,
+  DEFAULT_METRO_URL,
+  REACT_NATIVE_NETWORK_CAPABILITIES,
+  ReactNativeNetworkObserver,
   type NativeAgentClient,
   type NetworkCapabilities,
   type NetworkRedactionOptions,
@@ -792,6 +795,12 @@ class IosSession implements PlatformSession {
   private flutterNetworkEverFound = false;
   /** When the app was last launched, used to bound the VM service log search. */
   private flutterLaunchedAt?: number;
+  /**
+   * React Native's CDP Network subscription. `undefined` means "not probed
+   * yet"; `null` means "probed, no debuggable target" — the normal answer for a
+   * release build, cached so it is not re-probed on every call.
+   */
+  private reactNativeNetwork?: ReactNativeNetworkObserver | null;
 
   constructor(
     xcrunPath: string,
@@ -814,6 +823,9 @@ class IosSession implements PlatformSession {
       await this.flutterNetwork.vm.dispose().catch(() => undefined);
       this.flutterNetwork = undefined;
     }
+
+    this.reactNativeNetwork?.dispose();
+    this.reactNativeNetwork = undefined;
 
     if (this.recording) {
       await this.stopRecording().catch(() => undefined);
@@ -1337,10 +1349,46 @@ class IosSession implements PlatformSession {
     void previous?.vm.dispose().catch(() => undefined);
   }
 
+  /**
+   * The Metro dev server React Native dials out to. Astur connects to the same
+   * address as a plain CDP client; it never stands in for Metro.
+   */
+  private get metroUrl(): string {
+    return process.env.ASTUR_RN_DEV_SERVER ?? DEFAULT_METRO_URL;
+  }
+
+  /**
+   * Attaches the React Native CDP Network observer once per session.
+   *
+   * The reporter lives in `ReactCommon`, so this is the same transport and the
+   * same client as Android — only the discovery path above it differs.
+   */
+  private async resolveReactNativeNetwork(): Promise<ReactNativeNetworkObserver | undefined> {
+    if (this.reactNativeNetwork !== undefined) {
+      return this.reactNativeNetwork ?? undefined;
+    }
+
+    const observer = new ReactNativeNetworkObserver(
+      this.metroUrl,
+      this.capabilities.app?.bundleId ?? this.capabilities.app?.packageName
+    );
+    if (!(await observer.attach().catch(() => false))) {
+      observer.dispose();
+      this.reactNativeNetwork = null;
+      return undefined;
+    }
+    this.reactNativeNetwork = observer;
+    return observer;
+  }
+
   async getNetworkCapabilities(): Promise<NetworkCapabilities> {
     const attachment = await this.resolveFlutterNetwork();
     if (!attachment) {
-      return IOS_NO_NETWORK_CAPABILITIES;
+      // Flutter first because its probe is already cached by this point; React
+      // Native is the fallback, detected by connecting rather than assumed.
+      return (await this.resolveReactNativeNetwork())
+        ? REACT_NATIVE_NETWORK_CAPABILITIES
+        : IOS_NO_NETWORK_CAPABILITIES;
     }
 
     return FLUTTER_NETWORK_CAPABILITIES;
@@ -1349,6 +1397,11 @@ class IosSession implements PlatformSession {
   async getNetworkRequests(options?: NetworkRedactionOptions): Promise<NetworkRequestRecord[]> {
     const attachment = await this.resolveFlutterNetwork();
     if (!attachment) {
+      const reactNative = await this.resolveReactNativeNetwork();
+      if (reactNative) {
+        return reactNative.records(options);
+      }
+
       throw new AsturError(
         'NETWORK_OBSERVATION_UNSUPPORTED',
         IOS_NO_NETWORK_CAPABILITIES.coverage
@@ -1367,6 +1420,10 @@ class IosSession implements PlatformSession {
     // clear; the first read attaches and enables recording.
     const attachment = this.flutterNetwork;
     if (!attachment) {
+      // Same rule for React Native: clear an observer that already exists, but
+      // never start discovery from here. Awaited so the subscription is live
+      // again before the test causes traffic.
+      await this.reactNativeNetwork?.clear();
       return;
     }
 

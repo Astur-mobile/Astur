@@ -239,7 +239,7 @@ expect(request).toMatchObject({ method: 'GET', status: 200 });
 | Flutter Android | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
 | Flutter iOS (simulator) | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
 | Flutter iOS (real device) | No — VM service not reachable from the host | needs the in-app adapter |
-| React Native (both) | No — reporter is compiled out of release builds | needs the in-app adapter |
+| React Native (Android + iOS) | **Yes** — CDP `Network` domain, debug build attached to Metro | needs the in-app adapter |
 | Native Android / iOS | No — no equivalent hook | needs the in-app adapter |
 
 Flutter observation reads the Dart VM service, so it needs a **debug or profile
@@ -247,11 +247,13 @@ build** — a release (AOT) build does not publish one, on either platform. On t
 only requirement: Astur finds the service the app already advertises and
 attaches, without changing how the app is installed, launched, or driven.
 
-React Native does ship a cross-platform CDP network reporter, but it is behind a
-compile-time flag that is off in release builds, and the app dials out to a
-broker rather than listening — see
-[Network Observation](../network/#why-react-native-is-not-supported-yet) for
-where that stands.
+React Native observation reads the same CDP `Network` domain React Native
+DevTools uses. The reporter lives in `ReactCommon`, the shared C++ layer, so one
+client covers Android and iOS identically — but it is compiled out of release
+builds, so this needs a **debug build running against Metro**. Coverage is
+`XMLHttpRequest` traffic; notably **Expo's native `fetch` is invisible**. See
+[Network Observation](../network/#react-native-needs-a-debug-build-on-metro) for
+the setup and the full boundary.
 
 On Flutter the source is the Dart VM's `dart:io` HTTP profiler — the
 same one Flutter DevTools' Network view uses. That covers `dart:io`'s

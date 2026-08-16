@@ -7,6 +7,35 @@ All notable changes to Astur are documented here. Versions follow the
 
 ### Added
 
+- **Network observation on React Native (Android and iOS).** `device.network`
+  now works against a React Native **debug build attached to Metro**, reading the
+  CDP `Network` domain that React Native DevTools uses. The reporter lives in
+  `ReactCommon`, the shared C++ layer, so one client covers both platforms and
+  the same records, redaction, body caps and `clear()` semantics apply as on
+  Flutter.
+
+  Astur connects as an ordinary CDP client. It does **not** stand in for Metro,
+  and needs no proxy, no certificate, and no change to how the app is launched or
+  driven. The dev server defaults to `http://127.0.0.1:8081`; override with
+  `ASTUR_RN_DEV_SERVER`.
+
+  Two boundaries, both measured against a live build rather than inferred:
+
+  - **Debug builds only.** The reporter sits behind a compile-time
+    `REACT_NATIVE_DEBUGGER_ENABLED` flag and is absent from release builds — the
+    same situation as Flutter's release AOT builds, and not fixable from outside
+    the app. `capabilities().observe` reports `false` with the reason, so a spec
+    that asks first skips instead of failing.
+  - **`XMLHttpRequest` traffic only** — which is React Native's own `fetch`
+    polyfill and `axios`, since both bottom out there. **Expo's native `fetch`**
+    (the global from SDK 52 on) is implemented natively, never touches React
+    Native's networking module, and emits no CDP events at all.
+
+  Targets are matched by application id, so a dev server left running for a
+  different project can never be mistaken for the app under test. Discovery is
+  cached per session, and a session that never had a target never re-probes, so
+  native and Flutter runs pay nothing.
+
 - **Network observation on Flutter iOS (simulator).** `device.network` now works
   for a debug Flutter build on the iOS simulator, with the same coverage,
   redaction and body limits as Flutter Android.
