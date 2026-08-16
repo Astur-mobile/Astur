@@ -1603,6 +1603,11 @@ class AndroidSession implements PlatformSession {
       return undefined;
     }
     if (this.reactNativeNetwork !== undefined) {
+      // Wait for the subscription to come back after a relaunch. The app is
+      // already up by the time anything asks, but its inspector page registers
+      // only once the bundle has loaded, and traffic caused before then would
+      // be missed rather than merely delayed.
+      await this.reactNativeNetwork?.ensureLive();
       return this.reactNativeNetwork ?? undefined;
     }
 

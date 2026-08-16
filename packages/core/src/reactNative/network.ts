@@ -211,12 +211,21 @@ export class ReactNativeNetworkObserver {
    * Waits until the subscription is live again, up to `timeoutMs`.
    *
    * Relaunching the app tears the inspector page down and stands a new one up,
-   * and for a moment in between the dev server lists no target at all. A
-   * fire-and-forget reconnect loses that race and observes nothing for the rest
-   * of the test — so the one caller that can afford to wait, `clear()`, waits,
-   * and thereby guarantees that traffic caused after it returns is seen.
+   * and in between the dev server lists no target at all. A fire-and-forget
+   * reconnect loses that race and then observes nothing for the rest of the
+   * test, so callers that can afford to wait — `clear()` and the capabilities
+   * probe — wait, and thereby guarantee that traffic caused after they return
+   * is seen.
+   *
+   * The default budget is generous because a debug build fetches its bundle
+   * from Metro on every cold start and can take tens of seconds to register its
+   * inspector page. A short window silently expires before the app is back.
    */
-  private async ensureAttached(timeoutMs = 5_000): Promise<boolean> {
+  async ensureLive(timeoutMs = 45_000): Promise<boolean> {
+    return this.ensureAttached(timeoutMs);
+  }
+
+  private async ensureAttached(timeoutMs = 45_000): Promise<boolean> {
     if (this.socket?.readyState === 1) {
       return true;
     }
@@ -242,19 +251,32 @@ export class ReactNativeNetworkObserver {
    * describe traffic the test already caused, and dropping them would make
    * observation depend on whether the app happened to reload mid-test.
    */
+  /**
+   * Keeps trying to re-attach until it succeeds or the session ends.
+   *
+   * Deliberately unbounded rather than a single retry with a deadline. A debug
+   * build reloads its bundle from Metro on every relaunch and can be gone for
+   * tens of seconds; a bounded window expires first, and the observer then sits
+   * detached for the rest of the run while every later read returns nothing.
+   * One localhost request per second while detached is the cheaper mistake.
+   */
   private scheduleReconnect(): void {
     if (this.closed || this.reconnectTimer || !this.everAttached) {
       return;
     }
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
-      if (!this.closed && !this.socket) {
-        // Retry rather than attach once: right after a relaunch the dev server
-        // lists no target for a beat, and giving up there would silently end
-        // observation for the rest of the session.
-        void this.ensureAttached().catch(() => undefined);
+      if (this.closed || this.socket) {
+        return;
       }
-    }, 500);
+      void this.attach()
+        .catch(() => false)
+        .then((attached) => {
+          if (!attached) {
+            this.scheduleReconnect();
+          }
+        });
+    }, 1_000);
     this.reconnectTimer.unref?.();
   }
 

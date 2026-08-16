@@ -255,6 +255,14 @@ builds, so this needs a **debug build running against Metro**. Coverage is
 [Network Observation](../network/#react-native-needs-a-debug-build-on-metro) for
 the setup and the full boundary.
 
+The example suite runs the same shared spec on both, so the only difference is
+which build it points at:
+
+```bash
+npm run test:android:flutter    # release-independent: Flutter needs debug/profile
+npm run test:android:rn-debug   # React Native debug build attached to Metro
+```
+
 On Flutter the source is the Dart VM's `dart:io` HTTP profiler — the
 same one Flutter DevTools' Network view uses. That covers `dart:io`'s
 `HttpClient`, and therefore `package:http` and Dio, because both are built on

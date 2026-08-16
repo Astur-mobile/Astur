@@ -1365,6 +1365,10 @@ class IosSession implements PlatformSession {
    */
   private async resolveReactNativeNetwork(): Promise<ReactNativeNetworkObserver | undefined> {
     if (this.reactNativeNetwork !== undefined) {
+      // Wait for the subscription to come back after a relaunch, for the same
+      // reason as Android: the inspector page registers only once the bundle
+      // has loaded, and earlier traffic would be missed rather than delayed.
+      await this.reactNativeNetwork?.ensureLive();
       return this.reactNativeNetwork ?? undefined;
     }
 

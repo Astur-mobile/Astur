@@ -36,6 +36,11 @@ All notable changes to Astur are documented here. Versions follow the
   cached per session, and a session that never had a target never re-probes, so
   native and Flutter runs pay nothing.
 
+  The shared `network-observation.test.ts` now runs **unchanged** on React
+  Native, because the demo app's Network lab answers on the same three routes
+  with the same statuses as the Flutter build. Run it with the new
+  `npm run test:android:rn-debug` (examples and boilerplate both).
+
 - **Network observation on Flutter iOS (simulator).** `device.network` now works
   for a debug Flutter build on the iOS simulator, with the same coverage,
   redaction and body limits as Flutter Android.
