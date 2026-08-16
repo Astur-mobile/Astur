@@ -49,11 +49,13 @@ What that requires in practice:
 1. **Run a debug build.** `npx expo run:android`, `npx react-native run-android`, or the equivalent iOS command.
 2. **Keep Metro running.** The app dials out to the dev server; Astur connects to that same server as an ordinary CDP client. It does **not** stand in for Metro, and needs no proxy, no certificate, and no change to how the app is launched or driven.
 3. **Point Astur at the dev server** if it is not on the default `http://127.0.0.1:8081` — set `ASTUR_RN_DEV_SERVER`.
-4. **Do not let the run reinstall a release APK** over the debug build — that would take the inspector target away. A config for a debug build gives `app` a `packageName` and no `path`, as `examples/config/android/playwright.rn-debug.config.ts` does.
+4. **Do not let the run reinstall a release build** over the debug one — that would take the inspector target away. A config for a debug build gives `app` a `packageName`/`bundleId` and no `path`, as `examples/config/{android,ios}/playwright.rn-debug.config.ts` do.
+
+On **iOS** nothing else is needed: the stock `AppDelegate` already loads from Metro under `#if DEBUG`. The two Android settings below exist only because a project can turn them off to make debug builds run standalone.
 
 Astur matches the inspector target by application id — the package name on Android, the bundle id on iOS — so a dev server left running for a different project can never be mistaken for the app under test.
 
-If your app was configured to run standalone in debug, two settings have to go back to their React Native defaults, and **both are debug-only, so release builds are byte-for-byte unaffected**:
+If an **Android** app was configured to run standalone in debug, two settings have to go back to their React Native defaults, and **both are debug-only, so release builds are byte-for-byte unaffected**:
 
 ```kotlin
 // android/app/src/main/java/…/MainApplication.kt
@@ -167,15 +169,17 @@ The React Native demo app runs **the same spec, unchanged**, against a debug bui
 
 ```bash
 # in the demo-app repo
-npx expo start          # serves the Network lab's /api routes too
-npx expo run:android    # debug build, attached to Metro
+npx expo start                       # serves the Network lab's /api routes too
+npx expo run:android                 # or: npx expo run:ios
 
 # in examples
-npm run test:android:rn-debug
+npm run test:android:rn-debug        # or: npm run test:ios:rn-debug
 ```
 
 Its Network lab answers on the same three routes with the same statuses as the Flutter build — `/api/profile` 200, `/api/session` 201, `/api/missing` 404 — which is what lets one platform-agnostic spec cover both.
 
-The shipped React Native **release** APK has the reporter compiled out, so `capabilities().observe` is `false` there and the four observation specs skip with their reason. That is the contract working, not a failure.
+The shipped React Native **release** build has the reporter compiled out, so `capabilities().observe` is `false` there and the four observation specs skip with their reason. That is the contract working, not a failure.
+
+One footgun worth knowing: the iOS release config does not force-reinstall, so a debug build left on the simulator keeps being used — and keeps observing. `xcrun simctl uninstall <udid> com.astur.demo` before switching back.
 
 See [Flutter & React Native](../frameworks/) for the framework-specific detail, and [Platform Limits](../platform-limits/) for the full boundary reference.

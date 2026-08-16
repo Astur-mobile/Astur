@@ -259,8 +259,10 @@ The example suite runs the same shared spec on both, so the only difference is
 which build it points at:
 
 ```bash
-npm run test:android:flutter    # release-independent: Flutter needs debug/profile
+npm run test:android:flutter    # Flutter debug/profile build
+npm run test:ios:flutter
 npm run test:android:rn-debug   # React Native debug build attached to Metro
+npm run test:ios:rn-debug
 ```
 
 On Flutter the source is the Dart VM's `dart:io` HTTP profiler — the

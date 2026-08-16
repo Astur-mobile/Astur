@@ -39,7 +39,12 @@ All notable changes to Astur are documented here. Versions follow the
   The shared `network-observation.test.ts` now runs **unchanged** on React
   Native, because the demo app's Network lab answers on the same three routes
   with the same statuses as the Flutter build. Run it with the new
-  `npm run test:android:rn-debug` (examples and boilerplate both).
+  `npm run test:android:rn-debug` / `npm run test:ios:rn-debug` (examples and
+  boilerplate both) — 5/5 on each.
+
+  iOS needs no app-side change at all: the stock `AppDelegate` already loads
+  from Metro under `#if DEBUG`. The two Android settings above are only needed
+  when a project has deliberately turned debug dev-support off.
 
 - **Network observation on Flutter iOS (simulator).** `device.network` now works
   for a debug Flutter build on the iOS simulator, with the same coverage,
