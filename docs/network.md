@@ -29,9 +29,9 @@ On Flutter the source is the Dart VM's `dart:io` HTTP profiler — the same one 
 
 Support is detected **at runtime**, by checking the isolate's registered extensions. It is never inferred from "this is a Flutter app" — which matters, because the same Flutter app can support it or not depending on how it was built.
 
-### Flutter needs a debug build
+### Flutter needs a debug or profile build
 
-Observation reads the Dart VM service, and a **release (AOT) build does not have one**. This is not an Astur limitation and cannot be worked around from the outside:
+Observation reads the Dart VM service, and a **release (AOT) build does not have one** — there is nothing to attach to, on either platform. Debug and profile builds both publish it. This is not an Astur limitation and cannot be worked around from the outside:
 
 - **Android** launches through the Flutter tool, so the debug requirement is already part of running the suite.
 - **iOS simulator** needs nothing extra. A debug `.app` starts its VM service by itself and logs the URL, and on the simulator that URL is already on the host's loopback — so Astur attaches without changing how the app is installed, launched, or driven.

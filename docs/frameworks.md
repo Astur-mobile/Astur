@@ -242,8 +242,8 @@ expect(request).toMatchObject({ method: 'GET', status: 200 });
 | React Native (both) | No — reporter is compiled out of release builds | needs the in-app adapter |
 | Native Android / iOS | No — no equivalent hook | needs the in-app adapter |
 
-Flutter observation reads the Dart VM service, so it needs a **debug build** —
-a release (AOT) build does not publish one. On the iOS simulator that is the
+Flutter observation reads the Dart VM service, so it needs a **debug or profile
+build** — a release (AOT) build does not publish one, on either platform. On the iOS simulator that is the
 only requirement: Astur finds the service the app already advertises and
 attaches, without changing how the app is installed, launched, or driven.
 
