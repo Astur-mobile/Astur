@@ -47,9 +47,14 @@ import {
   findElement,
   findElements,
   formatSelector,
+  applyBodyLimit,
   AsturError,
   delay,
+  FLUTTER_NETWORK_CAPABILITIES,
+  FlutterVmService,
   isPrintableCharacter,
+  resolveRedactionOptions,
+  toNetworkRecords,
   preparePointerTargetForKeyboard,
   waitFor,
   CdpWebEvaluator,
@@ -61,13 +66,6 @@ import {
 import { run, runText, spawnCommand, spawnDetached } from './command.js';
 import { parseUiAutomatorXml } from './uiautomatorXml.js';
 import { FlutterProcess } from './flutter/process.js';
-import { FlutterVmService } from './flutter/vmService.js';
-import {
-  applyBodyLimit,
-  FLUTTER_NETWORK_CAPABILITIES,
-  resolveRedactionOptions,
-  toNetworkRecords
-} from './flutter/network.js';
 import { isFlutterApk } from './flutter/detect.js';
 
 export interface AndroidDriverOptions {

@@ -237,10 +237,23 @@ expect(request).toMatchObject({ method: 'GET', status: 200 });
 | | Observe | Intercept |
 | --- | --- | --- |
 | Flutter Android | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
-| Flutter iOS | not yet (no VM service) | needs the in-app adapter |
-| React Native (both) | not yet | needs the in-app adapter |
+| Flutter iOS (simulator) | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
+| Flutter iOS (real device) | No — VM service not reachable from the host | needs the in-app adapter |
+| React Native (both) | No — reporter is compiled out of release builds | needs the in-app adapter |
+| Native Android / iOS | No — no equivalent hook | needs the in-app adapter |
 
-On Flutter Android the source is the Dart VM's `dart:io` HTTP profiler — the
+Flutter observation reads the Dart VM service, so it needs a **debug build** —
+a release (AOT) build does not publish one. On the iOS simulator that is the
+only requirement: Astur finds the service the app already advertises and
+attaches, without changing how the app is installed, launched, or driven.
+
+React Native does ship a cross-platform CDP network reporter, but it is behind a
+compile-time flag that is off in release builds, and the app dials out to a
+broker rather than listening — see
+[Network Observation](../network/#why-react-native-is-not-supported-yet) for
+where that stands.
+
+On Flutter the source is the Dart VM's `dart:io` HTTP profiler — the
 same one Flutter DevTools' Network view uses. That covers `dart:io`'s
 `HttpClient`, and therefore `package:http` and Dio, because both are built on
 it. It does **not** cover a WebView's own requests, native SDK calls, or

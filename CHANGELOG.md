@@ -3,6 +3,50 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## Unreleased
+
+### Added
+
+- **Network observation on Flutter iOS (simulator).** `device.network` now works
+  for a debug Flutter build on the iOS simulator, with the same coverage,
+  redaction and body limits as Flutter Android.
+
+  Nothing changes about how the app is installed, launched, or driven — it is
+  still XCUITest end to end. A debug Flutter build starts its own Dart VM service
+  and logs the URL, and on the simulator that URL is already on the host's
+  loopback, so observation attaches to what the app already advertises.
+
+  Three things this needed:
+
+  - A **network-only attach** for the VM client. `connect()` binds an isolate by
+    evaluating a Dart expression, which needs the compiler `flutter run`
+    attaches; an app launched by `simctl` has a working profiler but no
+    compiler. `connectForNetwork()` binds on the capability actually required —
+    an isolate that registered the `dart:io` profiler extensions.
+  - **Discovery by polling, not by time window.** `log show` does not surface the
+    last few seconds dependably, so a window narrow enough to exclude a previous
+    run's URL also loses the one just logged. Astur now tries every logged URL
+    newest-first and lets connection decide which is live — a terminated app's
+    service is gone — retrying until a deadline.
+  - **Profiling is enabled at attach**, not only in `clear()`. The setting is
+    scoped to the isolate, and the fixture's `clear()` runs before the relaunch
+    that replaces it, so a test that read traffic without clearing first saw
+    nothing.
+
+  `clear()` deliberately does not start discovery, so the per-test fixture clear
+  does not charge every test a log query it has no use for.
+
+  The Dart VM client and network mapping moved from `@astur-mobile/android` into
+  `@astur-mobile/core` so both drivers share one implementation. Neither was
+  publicly exported, so this is not a breaking change.
+
+**Still unsupported, and why** — React Native ships a cross-platform CDP network
+reporter, but it is compiled out of release builds and the app dials out to a
+broker rather than listening. Flutter on a real iOS device keeps its VM service
+behind a usbmuxd tunnel Astur does not open yet. Both report `observe: false`
+with the reason in `coverage`. See the
+[Network Observation](https://astur-mobile.github.io/Astur/network/) guide.
+
 ## 0.5.0-beta.4
 
 ### Added

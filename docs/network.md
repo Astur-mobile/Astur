@@ -20,12 +20,39 @@ Astur reports **instrumented application traffic** — never "all device traffic
 | Target | Observe | Intercept |
 | --- | --- | --- |
 | Flutter Android | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
-| Flutter iOS | not yet (no Dart VM service on iOS) | needs the in-app adapter |
-| React Native (Android + iOS) | not yet | needs the in-app adapter |
+| Flutter iOS (simulator) | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
+| Flutter iOS (real device) | No — VM service not reachable from the host | needs the in-app adapter |
+| React Native (Android + iOS) | No — see below | needs the in-app adapter |
+| Native Android / iOS | No — no equivalent hook exists | needs the in-app adapter |
 
-On Flutter Android the source is the Dart VM's `dart:io` HTTP profiler — the same one Flutter DevTools' Network view reads. It covers `dart:io`'s `HttpClient`, and therefore `package:http` and Dio, since both are built on it.
+On Flutter the source is the Dart VM's `dart:io` HTTP profiler — the same one Flutter DevTools' Network view reads. It covers `dart:io`'s `HttpClient`, and therefore `package:http` and Dio, since both are built on it.
 
-Support is detected **at runtime**, by checking the isolate's registered extensions. It is never inferred from "this is a Flutter app".
+Support is detected **at runtime**, by checking the isolate's registered extensions. It is never inferred from "this is a Flutter app" — which matters, because the same Flutter app can support it or not depending on how it was built.
+
+### Flutter needs a debug build
+
+Observation reads the Dart VM service, and a **release (AOT) build does not have one**. This is not an Astur limitation and cannot be worked around from the outside:
+
+- **Android** launches through the Flutter tool, so the debug requirement is already part of running the suite.
+- **iOS simulator** needs nothing extra. A debug `.app` starts its VM service by itself and logs the URL, and on the simulator that URL is already on the host's loopback — so Astur attaches without changing how the app is installed, launched, or driven.
+- **iOS real devices** keep the VM service on the device, behind a usbmuxd tunnel Astur does not open yet. Reported as unsupported rather than attempted.
+
+### Why React Native is not supported yet
+
+React Native is the most requested gap, so it is worth being precise about where it stands rather than saying "not yet".
+
+The good news is that RN ships the right thing. Since 0.76 it has a CDP `Network` domain reporter in `ReactCommon` — the shared C++ layer, so one implementation would cover Android **and** iOS — and it captures response bodies, not just metadata. It is wired into RN's real networking stack, so it sees `fetch` and `XHR` traffic.
+
+Two things stand in the way, and neither is something a test framework can remove:
+
+1. **It is compiled out of release builds.** The reporter is behind a compile-time `REACT_NATIVE_DEBUGGER_ENABLED` flag; in a release build the function returns `false` and the code is not present at all. Observation would require running a **dev build** of the app under test.
+2. **The app dials out to a broker.** Unlike Flutter's VM service, the RN inspector does not listen for a connection — the app connects out to the dev server. Astur would have to stand in for that endpoint rather than attach to the app.
+
+Both are solvable, and the second is the same inversion Astur already uses for the iOS agent. Until then, `capabilities().observe` is `false` for React Native and the reason is in `coverage`, so a spec that asks first will skip with an explanation rather than fail.
+
+### Native apps
+
+A plain Android or iOS app exposes no equivalent hook, so there is nothing to attach to. That case needs the in-app adapter (or a MITM proxy, which Astur deliberately does not ship — see [Interception](#interception-is-not-available-yet)).
 
 ## How to use it
 

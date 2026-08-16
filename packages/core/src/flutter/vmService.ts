@@ -1,4 +1,4 @@
-import { AsturError } from '@astur-mobile/core';
+import { AsturError } from '../errors.js';
 import type { Bounds, MobileElementSnapshot } from '@astur-mobile/protocol';
 
 /**
@@ -173,7 +173,7 @@ export class FlutterVmService {
     this.evalRetryDelayMs = options.evalRetryDelayMs ?? 250;
   }
 
-  async connect(): Promise<void> {
+  private async openSocket(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(this.url);
       const onError = () => reject(new AsturError('FLUTTER_VM_CONNECT_FAILED', `Failed to connect to the Flutter Dart VM service at ${this.url}.`));
@@ -183,6 +183,28 @@ export class FlutterVmService {
       ws.addEventListener('close', () => this.failAllPending('Flutter VM service connection closed.'));
       this.ws = ws;
     });
+  }
+
+  /**
+   * Attaches for network observation only.
+   *
+   * Deliberately not {@link connect}: that one binds an isolate by evaluating a
+   * Dart expression, which needs the expression compiler that `flutter run`
+   * attaches. An app launched any other way — `simctl launch` on the iOS
+   * simulator, for instance — has a perfectly good VM service with a working
+   * HTTP profiler but no compiler, so requiring evaluation rejects a session
+   * that can observe traffic fine.
+   *
+   * Binds on the capability actually needed instead: an isolate that registered
+   * the `dart:io` profiler extensions.
+   */
+  async connectForNetwork(): Promise<boolean> {
+    await this.openSocket();
+    return this.resolveIsolate(undefined, 'network');
+  }
+
+  async connect(): Promise<void> {
+    await this.openSocket();
 
     await this.resolveIsolate();
 
@@ -225,7 +247,10 @@ export class FlutterVmService {
    * validated with a trivial eval, since a dying isolate can still be listed yet
    * reject evaluations.
    */
-  private async resolveIsolate(previousIsolateId?: string): Promise<void> {
+  private async resolveIsolate(
+    previousIsolateId?: string,
+    mode: 'evaluate' | 'network' = 'evaluate'
+  ): Promise<boolean> {
     const deadline = Date.now() + this.readyTimeoutMs;
     const reuseGraceUntil = Date.now() + 1_500;
     let lastReason = 'no Dart isolate was reported';
@@ -238,6 +263,22 @@ export class FlutterVmService {
           lastReason = 'the isolate had already exited';
           continue;
         }
+
+        if (mode === 'network') {
+          // Bind on the capability this mode actually needs. An isolate that
+          // registered the profiler extensions can serve traffic regardless of
+          // whether it can compile expressions.
+          const extensions = (isolate?.extensionRPCs as string[] | undefined) ?? [];
+          if (!extensions.includes('ext.dart.io.getHttpProfile')) {
+            lastReason = 'the isolate has not registered the dart:io HTTP profiler extensions';
+            continue;
+          }
+
+          this.isolateId = candidate.id;
+          this.rootLibId = (isolate?.rootLib as { id?: string } | undefined)?.id;
+          return true;
+        }
+
         const rootLibId = (isolate?.rootLib as { id?: string } | undefined)?.id;
         if (!rootLibId) {
           lastReason = 'the isolate exposed no root library for evaluation';
@@ -271,7 +312,7 @@ export class FlutterVmService {
         : newestFirst;
 
       if (await tryBind(fresh)) {
-        return;
+        return true;
       }
       // No replacement isolate yet: only reconsider the previous id after the
       // grace window, in case this restart reused it.
@@ -279,7 +320,7 @@ export class FlutterVmService {
         && fresh.length === 0
         && Date.now() >= reuseGraceUntil
         && (await tryBind(newestFirst))) {
-        return;
+        return true;
       }
 
       if (Date.now() > deadline) {
