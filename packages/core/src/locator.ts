@@ -14,6 +14,7 @@ import type {
   TapOptions
 } from '@astur-mobile/protocol';
 import { AsturError } from './errors.js';
+import { cropPng, maskPng, pngSize, screenshotScale, toPixelRect, type ImageSize } from './image.js';
 import { preparePointerTargetForKeyboard } from './keyboard.js';
 import type { PlatformSession } from './session.js';
 import { delay, waitFor, type WaitOptions } from './wait.js';
@@ -447,6 +448,30 @@ export class MobileLocator {
     return (await this.snapshot(options)).bounds;
   }
 
+  /**
+   * A PNG of just this element, cropped out of a full-screen capture.
+   *
+   * Cropping on the host rather than asking the platform for an element capture
+   * keeps one code path across every driver, and the platforms that can do it
+   * natively disagree about what "the element" includes (shadows, ripples).
+   *
+   * Masks are applied to the whole screen before the crop, because a mask is
+   * expressed in screen coordinates — masking after the crop would need every
+   * rect translated into the element's space for no benefit.
+   */
+  async screenshot(options: WaitOptions & { mask?: MobileLocator[] } = {}): Promise<Buffer> {
+    const bounds = await this.bounds(options);
+    const image = await captureMaskedScreenshot(this.session, options.mask);
+    const { size, scale } = await screenshotGeometry(this.session, image);
+
+    return cropPng(image, toPixelRect(bounds, scale, size));
+  }
+
+  /** Identifies the device a baseline belongs to. See {@link screenshotKey}. */
+  async screenshotKey(): Promise<string> {
+    return screenshotKey(this.session);
+  }
+
   async isEnabled(options: WaitOptions = {}): Promise<boolean> {
     return (await this.snapshot(options)).enabled;
   }
@@ -691,4 +716,73 @@ function formatExpected(expected: string | RegExp): string {
 
 function isCoordinates(target: MobileLocator | Coordinates): target is Coordinates {
   return typeof (target as Coordinates).x === 'number' && typeof (target as Coordinates).y === 'number';
+}
+
+/**
+ * A full-screen capture with any masked regions painted out, plus the factor
+ * needed to map element bounds onto its pixels.
+ *
+ * Shared by device and element screenshots so both resolve the scale the same
+ * way — the two spaces are identical on Android but differ by the device pixel
+ * ratio on iOS, and getting that wrong crops the wrong part of the screen.
+ */
+export async function captureMaskedScreenshot(
+  session: PlatformSession,
+  mask?: MobileLocator[]
+): Promise<Buffer> {
+  const image = await session.screenshot();
+
+  // Nothing to mask means nothing to measure. Decoding the header regardless
+  // would make a plain screenshot fail on any driver whose capture this code
+  // does not need to understand.
+  if (!mask?.length) {
+    return image;
+  }
+
+  const { size, scale } = await screenshotGeometry(session, image);
+  const rects: Bounds[] = [];
+  for (const locator of mask) {
+    // A mask that matches nothing is not a failure: masking an element that
+    // only appears sometimes is a normal reason to mask it in the first place.
+    const bounds = await locator.bounds({ timeout: 1_000 }).catch(() => undefined);
+    if (bounds) {
+      rects.push(toPixelRect(bounds, scale, size));
+    }
+  }
+
+  return maskPng(image, rects);
+}
+
+/** Image dimensions plus how element bounds map onto them. */
+export async function screenshotGeometry(
+  session: PlatformSession,
+  image: Buffer
+): Promise<{ size: ImageSize; scale: number }> {
+  const size = pngSize(image);
+  const viewport = await resolveViewport(session, size);
+
+  return { size, scale: screenshotScale(size, viewport) };
+}
+
+/**
+ * Identifies which device a baseline was recorded on.
+ *
+ * Resolution alone is not enough: a React Native and a Flutter build of the
+ * same screen render differently on the same emulator, and comparing across
+ * them produces a diff that looks like a regression instead of a mismatch.
+ */
+export async function screenshotKey(session: PlatformSession): Promise<string> {
+  const info = session.deviceInfo;
+  const viewport = await resolveViewport(session, { width: 0, height: 0 });
+  const engine = info.uiEngine ?? 'native';
+
+  return `${info.platform}-${engine}-${Math.round(viewport.width)}x${Math.round(viewport.height)}`;
+}
+
+async function resolveViewport(session: PlatformSession, fallback: ImageSize): Promise<Bounds> {
+  if (!session.getViewport) {
+    return { x: 0, y: 0, ...fallback };
+  }
+
+  return await session.getViewport().catch(() => ({ x: 0, y: 0, ...fallback }));
 }

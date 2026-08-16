@@ -3,6 +3,50 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## Unreleased
+
+### Added
+
+- **`toHaveScreenshot()` — compare the screen against a stored baseline**
+  ([#17](https://github.com/Astur-mobile/Astur/issues/17)). Playwright's own
+  `toHaveScreenshot` needs a `Page`, which a native session does not have, so
+  this is the native equivalent — same behaviour on React Native and Flutter,
+  Android and iOS.
+
+  ```ts
+  await expect(app.home.heroCard).toHaveScreenshot('home-hero-card.png');
+  ```
+
+  - **Element or full screen.** An element crops out of a full-screen capture,
+    scaling bounds into screenshot pixels — which is not a no-op everywhere:
+    Android reports physical pixels, iOS reports points against a 3x image, and
+    a crop flush against the right edge has to be clamped because 393 points at
+    3x asks for pixel 1179 of a 1178-wide screenshot.
+  - **`mask`** paints regions magenta before comparing, for content that is
+    legitimately different every run. A mask locator that matches nothing is
+    skipped rather than throwing.
+  - **Baselines are keyed by platform, UI engine, and screen size.** Resolution
+    alone is not enough: a React Native and a Flutter build of the same screen
+    do not render identically on the same emulator. A size mismatch reports
+    itself as a probable wrong-device baseline instead of a pixel count.
+  - **`threshold`, `maxDiffPixels`, `maxDiffPixelRatio`.** Setting both budgets
+    means both must hold, so raising one cannot silently widen the other.
+  - **First run writes the baseline and fails.** A run that quietly creates one
+    has asserted nothing, and on CI that turns a missing baseline into a green
+    test that never compared anything.
+  - Captures until two consecutive captures are identical, so an animation still
+    settling is not recorded as the baseline.
+  - **Failures render as an image diff in the Playwright HTML report**, with the
+    Diff / Actual / Expected / Side by side / Slider tabs. The report keys that
+    off the `-expected` / `-actual` / `-diff` attachment suffixes, so the three
+    images are named to match rather than showing up as unrelated attachments
+    you open one at a time.
+
+  Also adds `locator.screenshot()` and `device.screenshot({ mask })`. See
+  [Visual Comparison](https://astur-mobile.github.io/Astur/visual-comparison/),
+  and `examples/specs/visual-comparison.test.ts` for a worked example that runs
+  on all three builds.
+
 ## 0.5.0-beta.4
 
 ### Added
