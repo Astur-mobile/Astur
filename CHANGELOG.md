@@ -3,7 +3,7 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
-## Unreleased
+## 0.5.0-beta.5
 
 ### Added
 

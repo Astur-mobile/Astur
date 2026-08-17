@@ -2,6 +2,35 @@
 
 What's new in each Astur release.
 
+## 0.5.0-beta.5
+
+**Compare screenshots.** `toHaveScreenshot()` checks an element or the whole screen against a stored baseline, so a visual change fails a test instead of slipping through. Playwright's own matcher needs a `Page`; this is the native equivalent.
+
+```ts
+await expect(app.home.heroCard).toHaveScreenshot('hero-card.png');
+await expect(device).toHaveScreenshot('home.png', { mask: [device.getById('clock')] });
+```
+
+Baselines are kept per platform, renderer, and screen size. `mask` paints over anything allowed to change. `threshold`, `maxDiffPixels`, and `maxDiffPixelRatio` set the tolerance. A failure renders as a proper image diff in the HTML report, with the Diff / Actual / Expected / Slider tabs.
+
+**Network observation on React Native**, Android and iOS. `device.network` now reads the CDP `Network` domain that React Native DevTools uses. The reporter lives in `ReactCommon`, so one implementation covers both platforms.
+
+```ts
+const capabilities = await device.network.capabilities();
+test.skip(!capabilities.observe, capabilities.coverage);
+```
+
+Two boundaries, both measured rather than assumed: it needs a **debug build attached to Metro** (the reporter is compiled out of release builds), and it sees **`XMLHttpRequest` traffic** — React Native's own `fetch` polyfill and axios included, but *not* Expo's native `fetch`, which bypasses React Native's networking layer entirely.
+
+**Network observation on Flutter iOS simulators**, with the same coverage and redaction as Flutter Android. Nothing changes about how the app is installed or driven.
+
+### Fixed
+
+- **`--update-snapshots` only worked as `--update-snapshots=all`.** A bare `-u` means `changed`, so the documented way to accept an intended change did nothing — while the failure message told you to run exactly that flag.
+- **iOS Flutter and iOS React Native shared one screenshot baseline**, so a Flutter build compared against React Native pixels. iOS now identifies the renderer from the app bundle. The iOS baselines shipped in beta.4 were recorded from the wrong build and have been re-recorded.
+
+Full detail in the [changelog](https://github.com/Astur-mobile/Astur/blob/main/CHANGELOG.md).
+
 ## 0.5.0-beta.4
 
 **Type into a field you can't select.** Some inputs have nothing to target — a multi-box OTP field draws six plain views and keeps the real input off the accessibility tree entirely, so `getByType('textField')` finds nothing and `fill()` has no element to fill. `device.keyboard.type()` sends text to whatever holds keyboard focus instead.
