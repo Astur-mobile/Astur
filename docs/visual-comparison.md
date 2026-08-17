@@ -51,7 +51,18 @@ Check the image looks right, commit it, and re-run.
 
 That failure is deliberate. A run that quietly creates a baseline has asserted nothing, and on CI it turns a missing baseline into a green test that never compared anything. Look at the image, commit it, and the next run compares against it.
 
-To accept an intended change, re-run with Playwright's `--update-snapshots`.
+### Accepting an intended change
+
+Re-run with Playwright's `--update-snapshots`. All four modes behave as they do in Playwright:
+
+| Flag | What it does |
+| --- | --- |
+| *(none)* | Compare. Writes only an absent baseline, and still fails. |
+| `-u` / `--update-snapshots` | Rewrites baselines that **differ**, and passes. This is the one you usually want. |
+| `--update-snapshots=all` | Rewrites every baseline, matching or not. |
+| `--update-snapshots=none` | Never writes. An absent baseline fails instead of being recorded — the mode for CI, where the job meant to catch drift should not record it. |
+
+Bare `-u` maps to `changed`, not `all`; both update a baseline that has drifted.
 
 ## Compare an element, not the whole screen
 
@@ -88,9 +99,12 @@ visual-comparison.test.ts-snapshots/
   android-native-1080x2424/
   android-flutter-1080x2424/
   ios-native-393x852/
+  ios-flutter-393x852/
 ```
 
 Resolution alone is not enough. A React Native and a Flutter build of the same screen do not render identically on the same emulator, so they need separate baselines.
+
+On iOS the two are told apart by reading the installed `.app` bundle, because there is no runtime signal for it: XCUITest serves the same native accessibility tree for a Flutter app as for a React Native one. That is why an iOS Flutter session still reports `uiEngine: 'native'` to locators while its baselines live under `ios-flutter-…`.
 
 If a comparison runs against a baseline from a different device, Astur says so rather than printing a pixel count:
 
@@ -99,6 +113,22 @@ screenshot size does not match the baseline — baseline is 996x790, this run
 captured 1083x1191. This usually means the baseline was recorded on a different
 device rather than that the UI changed.
 ```
+
+### Recording iOS baselines: force the install
+
+On iOS, Astur skips installing when the bundle id is already present. The React
+Native and Flutter demo builds **share the bundle id `com.astur.demo`**, so
+whichever was installed first keeps running — and a baseline recorded then is
+labelled for the build the config *named*, not the one that was actually driven.
+
+Pass `ASTUR_IOS_APP_FORCE_INSTALL=1` whenever you record or verify iOS baselines:
+
+```bash
+ASTUR_IOS_APP_FORCE_INSTALL=1 npm run test:ios -- specs/visual-comparison.test.ts
+ASTUR_IOS_APP_FORCE_INSTALL=1 npm run test:ios:flutter -- specs/visual-comparison.test.ts
+```
+
+Android is not affected — its configs already force-install.
 
 ## Tolerances
 

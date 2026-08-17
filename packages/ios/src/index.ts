@@ -36,7 +36,8 @@ import type {
   NativeAgentMethod,
   NormalizedCapabilities,
   RecordingStopOptions,
-  SwipeGesture
+  SwipeGesture,
+  UiEngine
 } from '@astur-mobile/protocol';
 import {
   AsturError,
@@ -60,6 +61,7 @@ import {
 } from '@astur-mobile/core';
 import { run, runText, spawnCommand } from './command.js';
 import { attachFlutterNetwork, IOS_NO_NETWORK_CAPABILITIES, type FlutterNetworkAttachment } from './flutterNetwork.js';
+import { isFlutterAppBundle } from './flutterDetect.js';
 import { createIwdpEvaluator } from './iwdpWebEvaluator.js';
 
 export interface IosDriverOptions {
@@ -441,8 +443,13 @@ export class IosDriver implements PlatformDriver {
     await ensureIosAppInstalled(preAgentSession, resolvedCapabilities);
 
     const nativeAgent = await this.resolveNativeAgent(resolvedCapabilities, readyDevice);
+    // Read from the bundle on disk, because iOS exposes no runtime signal for
+    // it — a Flutter app and a React Native one look identical to XCUITest.
+    const renderer = await isFlutterAppBundle(resolvedCapabilities.app?.path)
+      ? 'flutter' as const
+      : undefined;
 
-    return new IosSession(this.xcrunPath, readyDevice, resolvedCapabilities, nativeAgent);
+    return new IosSession(this.xcrunPath, readyDevice, resolvedCapabilities, nativeAgent, renderer);
   }
 
   private async ensureDeviceReady(device: DeviceInfo, selector: DeviceSelector): Promise<DeviceInfo> {
@@ -806,12 +813,19 @@ class IosSession implements PlatformSession {
     xcrunPath: string,
     deviceInfo: DeviceInfo,
     capabilities: NormalizedCapabilities,
-    nativeAgent?: IosNativeAgentRuntime
+    nativeAgent?: IosNativeAgentRuntime,
+    renderer?: UiEngine
   ) {
     this.xcrunPath = xcrunPath;
     // XCUITest reads the merged accessibility tree for every app, Flutter
     // included, so iOS sessions are always 'native' from a test's perspective.
-    this.deviceInfo = { ...deviceInfo, uiEngine: 'native' };
+    // `renderer` carries what actually paints the pixels, which screenshot
+    // baselines need and locators do not.
+    this.deviceInfo = {
+      ...deviceInfo,
+      uiEngine: 'native',
+      ...(renderer ? { renderer } : {})
+    };
     this.capabilities = capabilities;
     this.nativeAgent = nativeAgent?.client;
     this.nativeAgentBridge = nativeAgent?.bridge;

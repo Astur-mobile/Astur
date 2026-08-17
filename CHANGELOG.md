@@ -25,10 +25,12 @@ All notable changes to Astur are documented here. Versions follow the
   - **`mask`** paints regions magenta before comparing, for content that is
     legitimately different every run. A mask locator that matches nothing is
     skipped rather than throwing.
-  - **Baselines are keyed by platform, UI engine, and screen size.** Resolution
+  - **Baselines are keyed by platform, renderer, and screen size.** Resolution
     alone is not enough: a React Native and a Flutter build of the same screen
     do not render identically on the same emulator. A size mismatch reports
-    itself as a probable wrong-device baseline instead of a pixel count.
+    itself as a probable wrong-device baseline instead of a pixel count. On iOS
+    the renderer is read from the installed `.app` bundle, because XCUITest
+    serves the same native tree for both and offers no runtime signal.
   - **`threshold`, `maxDiffPixels`, `maxDiffPixelRatio`.** Setting both budgets
     means both must hold, so raising one cannot silently widen the other.
   - **First run writes the baseline and fails.** A run that quietly creates one
@@ -45,7 +47,7 @@ All notable changes to Astur are documented here. Versions follow the
   Also adds `locator.screenshot()` and `device.screenshot({ mask })`. See
   [Visual Comparison](https://astur-mobile.github.io/Astur/visual-comparison/),
   and `examples/specs/visual-comparison.test.ts` for a worked example that runs
-  on all three builds.
+  on all four builds.
 
 - **Network observation on React Native (Android and iOS).** `device.network`
   now works against a React Native **debug build attached to Metro**, reading the
@@ -124,6 +126,27 @@ service behind a usbmuxd tunnel Astur does not open yet, and a plain native app
 exposes no equivalent hook at all. Both report `observe: false` with the reason
 in `coverage`. See the
 [Network Observation](https://astur-mobile.github.io/Astur/network/) guide.
+
+### Fixed
+
+- **`--update-snapshots` only worked as `--update-snapshots=all`.** A bare
+  `-u` presets to `changed`, so the documented way to accept an intended
+  screenshot change did nothing: the baseline stayed put and the test kept
+  failing, while the failure message told you to run that exact flag. All four
+  modes now behave as Playwright defines them, and `none` no longer records a
+  missing baseline — the mode meant to catch drift on CI was creating it.
+
+- **iOS Flutter and iOS React Native shared one screenshot baseline.** The key
+  used `uiEngine`, which is always `'native'` on iOS because XCUITest serves the
+  same tree for both, so a Flutter build compared against the React Native
+  baseline. The renderer is now read from the installed `.app` bundle, giving
+  `ios-flutter-…` its own directory. Android keys are unchanged.
+
+  The `ios-native-393x852` baselines shipped in 0.5.0-beta.4 were recorded from
+  the Flutter build by mistake — iOS skips installing when the bundle id is
+  already present, and both demo builds are `com.astur.demo`. They have been
+  re-recorded from the React Native build, and iOS Flutter baselines added.
+  Record iOS baselines with `ASTUR_IOS_APP_FORCE_INSTALL=1`.
 
 ## 0.5.0-beta.4
 
