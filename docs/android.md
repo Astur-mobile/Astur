@@ -14,6 +14,20 @@ No Appium server is required.
 
 Astur defaults to the Kotlin UIAutomator native-agent path for element lookup, waits, actions, and gestures. The published Android package includes the agent APKs, so normal npm installs do not require a separate agent build step. Use `automation.engine: 'auto'` only while migrating if you need fallback to the old ADB/XML path.
 
+## Astur In Action On Android
+
+<div class="astur-video-card">
+  <div class="astur-video-copy">
+    <span class="astur-video-kicker">ANDROID DEMO</span>
+    <strong>Watch Astur drive a complete Android workflow.</strong>
+    <p>See native Android discovery, interaction, and test execution working together against a real app.</p>
+    <a class="astur-video-link" href="https://youtu.be/ByVb8MeA6kM" target="_blank" rel="noreferrer">Watch on YouTube <span aria-hidden="true">↗</span></a>
+  </div>
+  <div class="astur-video-frame">
+    <iframe src="https://www.youtube-nocookie.com/embed/ByVb8MeA6kM" title="Astur Android automation demonstration" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+  </div>
+</div>
+
 ## Install Android SDK
 
 Install Android Studio or the command line Android SDK. Ensure platform tools are available:

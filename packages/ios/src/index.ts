@@ -36,20 +36,32 @@ import type {
   NativeAgentMethod,
   NormalizedCapabilities,
   RecordingStopOptions,
-  SwipeGesture
+  SwipeGesture,
+  UiEngine
 } from '@astur-mobile/protocol';
 import {
   AsturError,
   connectNativeAgentClient,
   delay,
+  FLUTTER_NETWORK_CAPABILITIES,
   isPrintableCharacter,
+  resolveRedactionOptions,
+  toNetworkRecords,
+  DEFAULT_METRO_URL,
+  REACT_NATIVE_NETWORK_CAPABILITIES,
+  ReactNativeNetworkObserver,
   type NativeAgentClient,
+  type NetworkCapabilities,
+  type NetworkRedactionOptions,
+  type NetworkRequestRecord,
   type PlatformDriver,
   type PlatformSession,
   type WebEvaluator,
   type WebViewSelector
 } from '@astur-mobile/core';
 import { run, runText, spawnCommand } from './command.js';
+import { attachFlutterNetwork, IOS_NO_NETWORK_CAPABILITIES, type FlutterNetworkAttachment } from './flutterNetwork.js';
+import { isFlutterAppBundle } from './flutterDetect.js';
 import { createIwdpEvaluator } from './iwdpWebEvaluator.js';
 
 export interface IosDriverOptions {
@@ -431,8 +443,13 @@ export class IosDriver implements PlatformDriver {
     await ensureIosAppInstalled(preAgentSession, resolvedCapabilities);
 
     const nativeAgent = await this.resolveNativeAgent(resolvedCapabilities, readyDevice);
+    // Read from the bundle on disk, because iOS exposes no runtime signal for
+    // it — a Flutter app and a React Native one look identical to XCUITest.
+    const renderer = await isFlutterAppBundle(resolvedCapabilities.app?.path)
+      ? 'flutter' as const
+      : undefined;
 
-    return new IosSession(this.xcrunPath, readyDevice, resolvedCapabilities, nativeAgent);
+    return new IosSession(this.xcrunPath, readyDevice, resolvedCapabilities, nativeAgent, renderer);
   }
 
   private async ensureDeviceReady(device: DeviceInfo, selector: DeviceSelector): Promise<DeviceInfo> {
@@ -774,17 +791,41 @@ class IosSession implements PlatformSession {
     child: ChildProcess;
     path: string;
   };
+  /** Set once a debug Flutter build's Dart VM service has been found. */
+  private flutterNetwork?: FlutterNetworkAttachment;
+  private flutterNetworkProbed = false;
+  /**
+   * Whether this session ever found a VM service. Relaunching publishes a new
+   * one, so a Flutter session must re-probe; a session that never had one is
+   * not Flutter (or is a release build) and must not pay the log query again.
+   */
+  private flutterNetworkEverFound = false;
+  /** When the app was last launched, used to bound the VM service log search. */
+  private flutterLaunchedAt?: number;
+  /**
+   * React Native's CDP Network subscription. `undefined` means "not probed
+   * yet"; `null` means "probed, no debuggable target" — the normal answer for a
+   * release build, cached so it is not re-probed on every call.
+   */
+  private reactNativeNetwork?: ReactNativeNetworkObserver | null;
 
   constructor(
     xcrunPath: string,
     deviceInfo: DeviceInfo,
     capabilities: NormalizedCapabilities,
-    nativeAgent?: IosNativeAgentRuntime
+    nativeAgent?: IosNativeAgentRuntime,
+    renderer?: UiEngine
   ) {
     this.xcrunPath = xcrunPath;
     // XCUITest reads the merged accessibility tree for every app, Flutter
     // included, so iOS sessions are always 'native' from a test's perspective.
-    this.deviceInfo = { ...deviceInfo, uiEngine: 'native' };
+    // `renderer` carries what actually paints the pixels, which screenshot
+    // baselines need and locators do not.
+    this.deviceInfo = {
+      ...deviceInfo,
+      uiEngine: 'native',
+      ...(renderer ? { renderer } : {})
+    };
     this.capabilities = capabilities;
     this.nativeAgent = nativeAgent?.client;
     this.nativeAgentBridge = nativeAgent?.bridge;
@@ -792,6 +833,14 @@ class IosSession implements PlatformSession {
   }
 
   async close(): Promise<void> {
+    if (this.flutterNetwork) {
+      await this.flutterNetwork.vm.dispose().catch(() => undefined);
+      this.flutterNetwork = undefined;
+    }
+
+    this.reactNativeNetwork?.dispose();
+    this.reactNativeNetwork = undefined;
+
     if (this.recording) {
       await this.stopRecording().catch(() => undefined);
     }
@@ -876,6 +925,10 @@ class IosSession implements PlatformSession {
     if (!bundleId) {
       throw new AsturError('IOS_BUNDLE_ID_REQUIRED', 'iOS launch requires app.bundleId.');
     }
+
+    // Before the launch, not after: the log window is measured from here, and a
+    // relaunch replaces any VM service the session was already attached to.
+    this.invalidateFlutterNetwork();
 
     if (this.canUseNativeAppLifecycle(bundleId, 'app.launch')) {
       const command = await this.tryNativeCommand('app.launch');
@@ -1242,6 +1295,160 @@ class IosSession implements PlatformSession {
     }
 
     throw xctestRequired('typing into the focused iOS input');
+  }
+
+  /**
+   * Attaches to a debug Flutter build's Dart VM service, once per session.
+   *
+   * Probed lazily rather than at launch: most iOS sessions are not Flutter, and
+   * the log query costs a few seconds that a session which never asks about
+   * network traffic should not pay.
+   */
+  private async resolveFlutterNetwork(): Promise<FlutterNetworkAttachment | undefined> {
+    if (this.flutterNetworkProbed) {
+      return this.flutterNetwork;
+    }
+
+    this.flutterNetworkProbed = true;
+
+    // Real devices keep the VM service on the device, reachable only through a
+    // usbmuxd tunnel that Astur does not open yet, so the simulator's loopback
+    // shortcut does not apply. Reported as unsupported rather than attempted.
+    if (this.isRealDevice()) {
+      return undefined;
+    }
+
+
+    this.flutterNetwork = await attachFlutterNetwork({
+      udid: this.deviceInfo.id,
+      requestTimeoutMs: this.capabilities.timeout,
+      runLogShow: async (udid, window) => {
+        return runText(this.xcrunPath, [
+          'simctl',
+          'spawn',
+          udid,
+          'log',
+          'show',
+          '--style',
+          'compact',
+          '--last',
+          window,
+          '--predicate',
+          'eventMessage CONTAINS "Dart VM service"'
+        ]);
+      }
+    }).catch(() => undefined);
+
+    if (this.flutterNetwork) {
+      this.flutterNetworkEverFound = true;
+    }
+
+    return this.flutterNetwork;
+  }
+
+  /**
+   * Drops the cached VM service after a relaunch, which publishes a new one on
+   * a new port. Without this the session keeps talking to a dead service and
+   * reports an empty profile rather than the traffic the test just made.
+   */
+  private invalidateFlutterNetwork(): void {
+    this.flutterLaunchedAt = Date.now();
+    if (!this.flutterNetworkEverFound) {
+      return;
+    }
+
+    const previous = this.flutterNetwork;
+    this.flutterNetwork = undefined;
+    this.flutterNetworkProbed = false;
+    void previous?.vm.dispose().catch(() => undefined);
+  }
+
+  /**
+   * The Metro dev server React Native dials out to. Astur connects to the same
+   * address as a plain CDP client; it never stands in for Metro.
+   */
+  private get metroUrl(): string {
+    return process.env.ASTUR_RN_DEV_SERVER ?? DEFAULT_METRO_URL;
+  }
+
+  /**
+   * Attaches the React Native CDP Network observer once per session.
+   *
+   * The reporter lives in `ReactCommon`, so this is the same transport and the
+   * same client as Android — only the discovery path above it differs.
+   */
+  private async resolveReactNativeNetwork(): Promise<ReactNativeNetworkObserver | undefined> {
+    if (this.reactNativeNetwork !== undefined) {
+      // Wait for the subscription to come back after a relaunch, for the same
+      // reason as Android: the inspector page registers only once the bundle
+      // has loaded, and earlier traffic would be missed rather than delayed.
+      await this.reactNativeNetwork?.ensureLive();
+      return this.reactNativeNetwork ?? undefined;
+    }
+
+    const observer = new ReactNativeNetworkObserver(
+      this.metroUrl,
+      this.capabilities.app?.bundleId ?? this.capabilities.app?.packageName
+    );
+    if (!(await observer.attach().catch(() => false))) {
+      observer.dispose();
+      this.reactNativeNetwork = null;
+      return undefined;
+    }
+    this.reactNativeNetwork = observer;
+    return observer;
+  }
+
+  async getNetworkCapabilities(): Promise<NetworkCapabilities> {
+    const attachment = await this.resolveFlutterNetwork();
+    if (!attachment) {
+      // Flutter first because its probe is already cached by this point; React
+      // Native is the fallback, detected by connecting rather than assumed.
+      return (await this.resolveReactNativeNetwork())
+        ? REACT_NATIVE_NETWORK_CAPABILITIES
+        : IOS_NO_NETWORK_CAPABILITIES;
+    }
+
+    return FLUTTER_NETWORK_CAPABILITIES;
+  }
+
+  async getNetworkRequests(options?: NetworkRedactionOptions): Promise<NetworkRequestRecord[]> {
+    const attachment = await this.resolveFlutterNetwork();
+    if (!attachment) {
+      const reactNative = await this.resolveReactNativeNetwork();
+      if (reactNative) {
+        return reactNative.records(options);
+      }
+
+      throw new AsturError(
+        'NETWORK_OBSERVATION_UNSUPPORTED',
+        IOS_NO_NETWORK_CAPABILITIES.coverage
+      );
+    }
+
+    const profile = await attachment.vm.getHttpProfile();
+    return toNetworkRecords(profile, resolveRedactionOptions(options));
+  }
+
+  async clearNetworkRequests(): Promise<void> {
+    // Deliberately does not start discovery. The test fixture clears before
+    // every test, and probing there would charge every single test the log
+    // query — including the great majority that never look at network traffic.
+    // Nothing has been recorded while unattached anyway, so there is nothing to
+    // clear; the first read attaches and enables recording.
+    const attachment = this.flutterNetwork;
+    if (!attachment) {
+      // Same rule for React Native: clear an observer that already exists, but
+      // never start discovery from here. Awaited so the subscription is live
+      // again before the test causes traffic.
+      await this.reactNativeNetwork?.clear();
+      return;
+    }
+
+    // Re-enable on every clear: the setting is scoped to the isolate, so a
+    // restart between tests silently stops recording otherwise.
+    await attachment.vm.enableHttpProfiling().catch(() => undefined);
+    await attachment.vm.clearHttpProfile();
   }
 
   async getKeyboardState(): Promise<KeyboardState> {

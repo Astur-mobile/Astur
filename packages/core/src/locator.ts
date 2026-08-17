@@ -774,7 +774,9 @@ export async function screenshotGeometry(
 export async function screenshotKey(session: PlatformSession): Promise<string> {
   const info = session.deviceInfo;
   const viewport = await resolveViewport(session, { width: 0, height: 0 });
-  const engine = info.uiEngine ?? 'native';
+  // `renderer` first: on iOS the tree engine is always 'native', so keying on
+  // `uiEngine` alone would hand a Flutter build the React Native baseline.
+  const engine = info.renderer ?? info.uiEngine ?? 'native';
 
   return `${info.platform}-${engine}-${Math.round(viewport.width)}x${Math.round(viewport.height)}`;
 }

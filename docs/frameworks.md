@@ -237,10 +237,35 @@ expect(request).toMatchObject({ method: 'GET', status: 200 });
 | | Observe | Intercept |
 | --- | --- | --- |
 | Flutter Android | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
-| Flutter iOS | not yet (no VM service) | needs the in-app adapter |
-| React Native (both) | not yet | needs the in-app adapter |
+| Flutter iOS (simulator) | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
+| Flutter iOS (real device) | No — VM service not reachable from the host | needs the in-app adapter |
+| React Native (Android + iOS) | **Yes** — CDP `Network` domain, debug build attached to Metro | needs the in-app adapter |
+| Native Android / iOS | No — no equivalent hook | needs the in-app adapter |
 
-On Flutter Android the source is the Dart VM's `dart:io` HTTP profiler — the
+Flutter observation reads the Dart VM service, so it needs a **debug or profile
+build** — a release (AOT) build does not publish one, on either platform. On the iOS simulator that is the
+only requirement: Astur finds the service the app already advertises and
+attaches, without changing how the app is installed, launched, or driven.
+
+React Native observation reads the same CDP `Network` domain React Native
+DevTools uses. The reporter lives in `ReactCommon`, the shared C++ layer, so one
+client covers Android and iOS identically — but it is compiled out of release
+builds, so this needs a **debug build running against Metro**. Coverage is
+`XMLHttpRequest` traffic; notably **Expo's native `fetch` is invisible**. See
+[Network Observation](../network/#react-native-needs-a-debug-build-on-metro) for
+the setup and the full boundary.
+
+The example suite runs the same shared spec on both, so the only difference is
+which build it points at:
+
+```bash
+npm run test:android:flutter    # Flutter debug/profile build
+npm run test:ios:flutter
+npm run test:android:rn-debug   # React Native debug build attached to Metro
+npm run test:ios:rn-debug
+```
+
+On Flutter the source is the Dart VM's `dart:io` HTTP profiler — the
 same one Flutter DevTools' Network view uses. That covers `dart:io`'s
 `HttpClient`, and therefore `package:http` and Dio, because both are built on
 it. It does **not** cover a WebView's own requests, native SDK calls, or

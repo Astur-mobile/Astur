@@ -25,10 +25,12 @@ All notable changes to Astur are documented here. Versions follow the
   - **`mask`** paints regions magenta before comparing, for content that is
     legitimately different every run. A mask locator that matches nothing is
     skipped rather than throwing.
-  - **Baselines are keyed by platform, UI engine, and screen size.** Resolution
+  - **Baselines are keyed by platform, renderer, and screen size.** Resolution
     alone is not enough: a React Native and a Flutter build of the same screen
     do not render identically on the same emulator. A size mismatch reports
-    itself as a probable wrong-device baseline instead of a pixel count.
+    itself as a probable wrong-device baseline instead of a pixel count. On iOS
+    the renderer is read from the installed `.app` bundle, because XCUITest
+    serves the same native tree for both and offers no runtime signal.
   - **`threshold`, `maxDiffPixels`, `maxDiffPixelRatio`.** Setting both budgets
     means both must hold, so raising one cannot silently widen the other.
   - **First run writes the baseline and fails.** A run that quietly creates one
@@ -45,7 +47,106 @@ All notable changes to Astur are documented here. Versions follow the
   Also adds `locator.screenshot()` and `device.screenshot({ mask })`. See
   [Visual Comparison](https://astur-mobile.github.io/Astur/visual-comparison/),
   and `examples/specs/visual-comparison.test.ts` for a worked example that runs
-  on all three builds.
+  on all four builds.
+
+- **Network observation on React Native (Android and iOS).** `device.network`
+  now works against a React Native **debug build attached to Metro**, reading the
+  CDP `Network` domain that React Native DevTools uses. The reporter lives in
+  `ReactCommon`, the shared C++ layer, so one client covers both platforms and
+  the same records, redaction, body caps and `clear()` semantics apply as on
+  Flutter.
+
+  Astur connects as an ordinary CDP client. It does **not** stand in for Metro,
+  and needs no proxy, no certificate, and no change to how the app is launched or
+  driven. The dev server defaults to `http://127.0.0.1:8081`; override with
+  `ASTUR_RN_DEV_SERVER`.
+
+  Two boundaries, both measured against a live build rather than inferred:
+
+  - **Debug builds only.** The reporter sits behind a compile-time
+    `REACT_NATIVE_DEBUGGER_ENABLED` flag and is absent from release builds — the
+    same situation as Flutter's release AOT builds, and not fixable from outside
+    the app. `capabilities().observe` reports `false` with the reason, so a spec
+    that asks first skips instead of failing.
+  - **`XMLHttpRequest` traffic only** — which is React Native's own `fetch`
+    polyfill and `axios`, since both bottom out there. **Expo's native `fetch`**
+    (the global from SDK 52 on) is implemented natively, never touches React
+    Native's networking module, and emits no CDP events at all.
+
+  Targets are matched by application id, so a dev server left running for a
+  different project can never be mistaken for the app under test. Discovery is
+  cached per session, and a session that never had a target never re-probes, so
+  native and Flutter runs pay nothing.
+
+  The shared `network-observation.test.ts` now runs **unchanged** on React
+  Native, because the demo app's Network lab answers on the same three routes
+  with the same statuses as the Flutter build. Run it with the new
+  `npm run test:android:rn-debug` / `npm run test:ios:rn-debug` (examples and
+  boilerplate both) — 5/5 on each.
+
+  iOS needs no app-side change at all: the stock `AppDelegate` already loads
+  from Metro under `#if DEBUG`. The two Android settings above are only needed
+  when a project has deliberately turned debug dev-support off.
+
+- **Network observation on Flutter iOS (simulator).** `device.network` now works
+  for a debug Flutter build on the iOS simulator, with the same coverage,
+  redaction and body limits as Flutter Android.
+
+  Nothing changes about how the app is installed, launched, or driven — it is
+  still XCUITest end to end. A debug Flutter build starts its own Dart VM service
+  and logs the URL, and on the simulator that URL is already on the host's
+  loopback, so observation attaches to what the app already advertises.
+
+  Three things this needed:
+
+  - A **network-only attach** for the VM client. `connect()` binds an isolate by
+    evaluating a Dart expression, which needs the compiler `flutter run`
+    attaches; an app launched by `simctl` has a working profiler but no
+    compiler. `connectForNetwork()` binds on the capability actually required —
+    an isolate that registered the `dart:io` profiler extensions.
+  - **Discovery by polling, not by time window.** `log show` does not surface the
+    last few seconds dependably, so a window narrow enough to exclude a previous
+    run's URL also loses the one just logged. Astur now tries every logged URL
+    newest-first and lets connection decide which is live — a terminated app's
+    service is gone — retrying until a deadline.
+  - **Profiling is enabled at attach**, not only in `clear()`. The setting is
+    scoped to the isolate, and the fixture's `clear()` runs before the relaunch
+    that replaces it, so a test that read traffic without clearing first saw
+    nothing.
+
+  `clear()` deliberately does not start discovery, so the per-test fixture clear
+  does not charge every test a log query it has no use for.
+
+  The Dart VM client and network mapping moved from `@astur-mobile/android` into
+  `@astur-mobile/core` so both drivers share one implementation. Neither was
+  publicly exported, so this is not a breaking change.
+
+**Still unsupported, and why** — Flutter on a real iOS device keeps its VM
+service behind a usbmuxd tunnel Astur does not open yet, and a plain native app
+exposes no equivalent hook at all. Both report `observe: false` with the reason
+in `coverage`. See the
+[Network Observation](https://astur-mobile.github.io/Astur/network/) guide.
+
+### Fixed
+
+- **`--update-snapshots` only worked as `--update-snapshots=all`.** A bare
+  `-u` presets to `changed`, so the documented way to accept an intended
+  screenshot change did nothing: the baseline stayed put and the test kept
+  failing, while the failure message told you to run that exact flag. All four
+  modes now behave as Playwright defines them, and `none` no longer records a
+  missing baseline — the mode meant to catch drift on CI was creating it.
+
+- **iOS Flutter and iOS React Native shared one screenshot baseline.** The key
+  used `uiEngine`, which is always `'native'` on iOS because XCUITest serves the
+  same tree for both, so a Flutter build compared against the React Native
+  baseline. The renderer is now read from the installed `.app` bundle, giving
+  `ios-flutter-…` its own directory. Android keys are unchanged.
+
+  The `ios-native-393x852` baselines shipped in 0.5.0-beta.4 were recorded from
+  the Flutter build by mistake — iOS skips installing when the bundle id is
+  already present, and both demo builds are `com.astur.demo`. They have been
+  re-recorded from the React Native build, and iOS Flutter baselines added.
+  Record iOS baselines with `ASTUR_IOS_APP_FORCE_INSTALL=1`.
 
 ## 0.5.0-beta.4
 

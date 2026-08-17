@@ -81,6 +81,16 @@ export interface DeviceInfo {
   model?: string;
   /** Defaults to `'native'` when a driver does not report one. */
   uiEngine?: UiEngine;
+  /**
+   * The framework that *paints* the app, when it differs from the engine Astur
+   * reads the tree from.
+   *
+   * These come apart on iOS: XCUITest serves the accessibility tree for every
+   * app, Flutter included, so `uiEngine` is always `'native'` there — but a
+   * Flutter build does not render like a React Native one, which matters to
+   * anything comparing pixels. Left unset when the two agree.
+   */
+  renderer?: UiEngine;
   raw?: unknown;
 }
 

@@ -36,6 +36,7 @@ import { createIosDriver } from '@astur-mobile/ios';
 import {
   comparePng,
   describeDifference,
+  resolveSnapshotAction,
   type ScreenshotCompareOptions
 } from './screenshot.js';
 
@@ -703,18 +704,26 @@ export const expect = baseExpect.extend({
 
     const existing = await readFile(baseline).catch(() => undefined);
     const updateMode = info.config.updateSnapshots;
-
-    if (!existing || updateMode === 'all') {
+    const writeBaseline = async () => {
       await mkdir(dirname(baseline), { recursive: true });
       await writeFile(baseline, image);
+    };
 
-      // Writing a baseline is not a passing assertion. A run that silently
-      // creates one asserts nothing, and on CI that turns a missing baseline
-      // into a green test that never compared anything.
-      if (existing) {
-        return { pass: true, message: () => `Baseline updated: ${baseline}` };
+    if (!existing) {
+      if (resolveSnapshotAction(false, updateMode, false) === 'fail-missing') {
+        return {
+          pass: false,
+          message: () =>
+            `No baseline at ${baseline}, and --update-snapshots=none forbids writing one.\n`
+            + 'Re-run without that flag to record it.'
+        };
       }
 
+      await writeBaseline();
+
+      // Writing a first baseline is not a passing assertion. A run that silently
+      // creates one has asserted nothing, and on CI that turns a missing
+      // baseline into a green test that never compared anything.
       return {
         pass: false,
         message: () =>
@@ -724,6 +733,12 @@ export const expect = baseExpect.extend({
     }
 
     const result = comparePng(existing, image, options);
+
+    // Rewriting is a pass: the run was explicitly told the change is intended.
+    if (resolveSnapshotAction(true, updateMode, result.pass) === 'rewrite') {
+      await writeBaseline();
+      return { pass: true, message: () => `Baseline updated: ${baseline}` };
+    }
 
     if (!result.pass) {
       // These exact suffixes are what the HTML report keys off to render its

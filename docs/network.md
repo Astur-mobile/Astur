@@ -20,12 +20,70 @@ Astur reports **instrumented application traffic** — never "all device traffic
 | Target | Observe | Intercept |
 | --- | --- | --- |
 | Flutter Android | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
-| Flutter iOS | not yet (no Dart VM service on iOS) | needs the in-app adapter |
-| React Native (Android + iOS) | not yet | needs the in-app adapter |
+| Flutter iOS (simulator) | **Yes** — Dart VM HTTP profiler | needs the in-app adapter |
+| Flutter iOS (real device) | No — VM service not reachable from the host | needs the in-app adapter |
+| React Native Android | **Yes** — CDP `Network` domain (debug build on Metro) | needs the in-app adapter |
+| React Native iOS | **Yes** — CDP `Network` domain (debug build on Metro) | needs the in-app adapter |
+| Native Android / iOS | No — no equivalent hook exists | needs the in-app adapter |
 
-On Flutter Android the source is the Dart VM's `dart:io` HTTP profiler — the same one Flutter DevTools' Network view reads. It covers `dart:io`'s `HttpClient`, and therefore `package:http` and Dio, since both are built on it.
+On Flutter the source is the Dart VM's `dart:io` HTTP profiler — the same one Flutter DevTools' Network view reads. It covers `dart:io`'s `HttpClient`, and therefore `package:http` and Dio, since both are built on it.
 
-Support is detected **at runtime**, by checking the isolate's registered extensions. It is never inferred from "this is a Flutter app".
+On React Native the source is the CDP `Network` domain that React Native DevTools reads. Because the reporter lives in `ReactCommon` — the shared C++ layer — one implementation covers Android and iOS identically.
+
+Support is detected **at runtime**, by checking the isolate's registered extensions. It is never inferred from "this is a Flutter app" — which matters, because the same Flutter app can support it or not depending on how it was built.
+
+### Flutter needs a debug or profile build
+
+Observation reads the Dart VM service, and a **release (AOT) build does not have one** — there is nothing to attach to, on either platform. Debug and profile builds both publish it. This is not an Astur limitation and cannot be worked around from the outside:
+
+- **Android** launches through the Flutter tool, so the debug requirement is already part of running the suite.
+- **iOS simulator** needs nothing extra. A debug `.app` starts its VM service by itself and logs the URL, and on the simulator that URL is already on the host's loopback — so Astur attaches without changing how the app is installed, launched, or driven.
+- **iOS real devices** keep the VM service on the device, behind a usbmuxd tunnel Astur does not open yet. Reported as unsupported rather than attempted.
+
+### React Native needs a debug build on Metro
+
+React Native's reporter is behind a compile-time `REACT_NATIVE_DEBUGGER_ENABLED` flag. In a release build the code is not present at all and `isDebuggingEnabled()` returns `false` — so, exactly as with Flutter's release AOT builds, there is nothing to attach to and no way to change that from outside the app.
+
+What that requires in practice:
+
+1. **Run a debug build.** `npx expo run:android`, `npx react-native run-android`, or the equivalent iOS command.
+2. **Keep Metro running.** The app dials out to the dev server; Astur connects to that same server as an ordinary CDP client. It does **not** stand in for Metro, and needs no proxy, no certificate, and no change to how the app is launched or driven.
+3. **Point Astur at the dev server** if it is not on the default `http://127.0.0.1:8081` — set `ASTUR_RN_DEV_SERVER`.
+4. **Do not let the run reinstall a release build** over the debug one — that would take the inspector target away. A config for a debug build gives `app` a `packageName`/`bundleId` and no `path`, as `examples/config/{android,ios}/playwright.rn-debug.config.ts` do.
+
+On **iOS** nothing else is needed: the stock `AppDelegate` already loads from Metro under `#if DEBUG`. The two Android settings below exist only because a project can turn them off to make debug builds run standalone.
+
+Astur matches the inspector target by application id — the package name on Android, the bundle id on iOS — so a dev server left running for a different project can never be mistaken for the app under test.
+
+If an **Android** app was configured to run standalone in debug, two settings have to go back to their React Native defaults, and **both are debug-only, so release builds are byte-for-byte unaffected**:
+
+```kotlin
+// android/app/src/main/java/…/MainApplication.kt
+ExpoReactHostFactory.getDefaultReactHost(
+  context = applicationContext,
+  useDevSupport = BuildConfig.DEBUG,  // not a hardcoded false
+  …
+)
+```
+
+```groovy
+// android/app/build.gradle
+react {
+    debuggableVariants = ["debug"]   // not []
+}
+```
+
+#### What React Native observation covers
+
+Everything that goes through React Native's **`XMLHttpRequest`** — which is RN's own `fetch` polyfill, `axios`, and most HTTP libraries in the ecosystem, because they all bottom out there. Requests, responses, status, timing, headers, and response bodies all arrive.
+
+One exclusion matters enough to call out: **Expo's native `fetch`**. From SDK 52 Expo installs its own `fetch` implementation as the global, written in native code, and it never touches React Native's networking module — so it emits no CDP events at all. If you are on Expo and want a call observed, reach for `XMLHttpRequest` or `axios` rather than the global `fetch`. This was measured against a live build, not inferred: the same request is invisible via `fetch` and fully reported via `XMLHttpRequest`.
+
+As always, WebView requests, native SDK calls, and anything opening its own sockets stay invisible.
+
+### Native apps
+
+A plain Android or iOS app exposes no equivalent hook, so there is nothing to attach to. That case needs the in-app adapter (or a MITM proxy, which Astur deliberately does not ship — see [Interception](#interception-is-not-available-yet)).
 
 ## How to use it
 
@@ -100,11 +158,28 @@ So a proxy needs app changes *anyway*, while adding certificate expiry and TLS f
 
 ## Try it
 
-The demo app's **Network lab** card on Home drives a loopback API it serves itself — real HTTP, no internet, deterministic:
+The Flutter demo app's **Network lab** card on Home drives a loopback API it serves itself — real HTTP, no internet, deterministic:
 
 ```bash
 cd examples
 npm run test:android:flutter -- specs/network-observation.test.ts
 ```
+
+The React Native demo app runs **the same spec, unchanged**, against a debug build:
+
+```bash
+# in the demo-app repo
+npx expo start                       # serves the Network lab's /api routes too
+npx expo run:android                 # or: npx expo run:ios
+
+# in examples
+npm run test:android:rn-debug        # or: npm run test:ios:rn-debug
+```
+
+Its Network lab answers on the same three routes with the same statuses as the Flutter build — `/api/profile` 200, `/api/session` 201, `/api/missing` 404 — which is what lets one platform-agnostic spec cover both.
+
+The shipped React Native **release** build has the reporter compiled out, so `capabilities().observe` is `false` there and the four observation specs skip with their reason. That is the contract working, not a failure.
+
+One footgun worth knowing: the iOS release config does not force-reinstall, so a debug build left on the simulator keeps being used — and keeps observing. `xcrun simctl uninstall <udid> com.astur.demo` before switching back.
 
 See [Flutter & React Native](../frameworks/) for the framework-specific detail, and [Platform Limits](../platform-limits/) for the full boundary reference.

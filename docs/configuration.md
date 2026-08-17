@@ -594,6 +594,20 @@ This is useful for preparing upload-picker scenarios, collecting generated files
 
 Use Playwright projects:
 
+### Watch Android And iOS Run In Parallel
+
+<div class="astur-video-card">
+  <div class="astur-video-copy">
+    <span class="astur-video-kicker">PARALLEL EXECUTION</span>
+    <strong>Android and iOS, one Playwright run.</strong>
+    <p>Watch Astur coordinate both platforms at the same time with isolated devices and a shared test workflow.</p>
+    <a class="astur-video-link" href="https://youtu.be/H1-cRGLqu2U" target="_blank" rel="noreferrer">Watch on YouTube <span aria-hidden="true">↗</span></a>
+  </div>
+  <div class="astur-video-frame">
+    <iframe src="https://www.youtube-nocookie.com/embed/H1-cRGLqu2U" title="Astur parallel Android and iOS test execution" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+  </div>
+</div>
+
 ```ts
 import { defineConfig } from '@astur-mobile/test';
 

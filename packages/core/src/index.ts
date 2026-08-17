@@ -10,3 +10,6 @@ export * from './locator.js';
 export * from './session.js';
 export * from './wait.js';
 export * from './webBridge.js';
+export * from './flutter/vmService.js';
+export * from './flutter/network.js';
+export * from './reactNative/network.js';

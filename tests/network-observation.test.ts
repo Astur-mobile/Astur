@@ -8,7 +8,7 @@ import {
   redactHeaders,
   resolveRedactionOptions,
   toNetworkRecords
-} from '../packages/android/src/flutter/network.js';
+} from '../packages/core/src/flutter/network.js';
 
 const DEVICE: DeviceInfo = {
   id: 'emulator-5554',

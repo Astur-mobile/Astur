@@ -47,9 +47,17 @@ import {
   findElement,
   findElements,
   formatSelector,
+  applyBodyLimit,
   AsturError,
   delay,
+  FLUTTER_NETWORK_CAPABILITIES,
+  FlutterVmService,
   isPrintableCharacter,
+  resolveRedactionOptions,
+  toNetworkRecords,
+  DEFAULT_METRO_URL,
+  REACT_NATIVE_NETWORK_CAPABILITIES,
+  ReactNativeNetworkObserver,
   preparePointerTargetForKeyboard,
   waitFor,
   CdpWebEvaluator,
@@ -61,13 +69,6 @@ import {
 import { run, runText, spawnCommand, spawnDetached } from './command.js';
 import { parseUiAutomatorXml } from './uiautomatorXml.js';
 import { FlutterProcess } from './flutter/process.js';
-import { FlutterVmService } from './flutter/vmService.js';
-import {
-  applyBodyLimit,
-  FLUTTER_NETWORK_CAPABILITIES,
-  resolveRedactionOptions,
-  toNetworkRecords
-} from './flutter/network.js';
 import { isFlutterApk } from './flutter/detect.js';
 
 export interface AndroidDriverOptions {
@@ -572,6 +573,16 @@ class AndroidSession implements PlatformSession {
    */
   private networkObservationRequested = false;
 
+  /**
+   * React Native's CDP Network subscription, created lazily on the first
+   * capabilities/requests call.
+   *
+   * `undefined` means "not looked for yet"; `null` means "looked and there is
+   * no debuggable target", which is the normal answer for a release build and
+   * must not be retried on every call — probing costs an HTTP round trip.
+   */
+  private reactNativeNetwork?: ReactNativeNetworkObserver | null;
+
   private readonly flutter?: FlutterRuntime;
 
   constructor(
@@ -713,6 +724,9 @@ class AndroidSession implements PlatformSession {
       await this.flutter.vm?.dispose().catch(() => undefined);
       await this.flutter.process.stop().catch(() => undefined);
     }
+
+    this.reactNativeNetwork?.dispose();
+    this.reactNativeNetwork = undefined;
 
     if (this.recording) {
       await this.stopRecording().catch(() => undefined);
@@ -1570,15 +1584,64 @@ class AndroidSession implements PlatformSession {
     return evaluator;
   }
 
+  /**
+   * The Metro dev server React Native dials out to. Astur connects to the same
+   * address as a plain CDP client; it never stands in for Metro.
+   */
+  private get metroUrl(): string {
+    return process.env.ASTUR_RN_DEV_SERVER ?? DEFAULT_METRO_URL;
+  }
+
+  /**
+   * Attaches the React Native CDP Network observer once per session.
+   *
+   * Only reached on non-Flutter sessions — a Flutter app has no RN inspector,
+   * and probing for one would charge every Flutter test an HTTP round trip.
+   */
+  private async resolveReactNativeNetwork(): Promise<ReactNativeNetworkObserver | undefined> {
+    if (this.flutter) {
+      return undefined;
+    }
+    if (this.reactNativeNetwork !== undefined) {
+      // Wait for the subscription to come back after a relaunch. The app is
+      // already up by the time anything asks, but its inspector page registers
+      // only once the bundle has loaded, and traffic caused before then would
+      // be missed rather than merely delayed.
+      await this.reactNativeNetwork?.ensureLive();
+      return this.reactNativeNetwork ?? undefined;
+    }
+
+    const observer = new ReactNativeNetworkObserver(
+      this.metroUrl,
+      this.capabilities.app?.packageName ?? this.capabilities.app?.bundleId
+    );
+    if (!(await observer.attach().catch(() => false))) {
+      observer.dispose();
+      this.reactNativeNetwork = null;
+      return undefined;
+    }
+    this.reactNativeNetwork = observer;
+    return observer;
+  }
+
   async getNetworkCapabilities(): Promise<NetworkCapabilities> {
     const vm = this.flutter?.vm;
     if (!vm) {
+      // Support is detected by connecting, never inferred from "this is React
+      // Native": the reporter is compiled out of release builds, so the same
+      // app supports observation or not depending on how it was built.
+      if (await this.resolveReactNativeNetwork()) {
+        return REACT_NATIVE_NETWORK_CAPABILITIES;
+      }
+
       return {
         observe: false,
         intercept: false,
         transports: [],
         responseBodies: false,
-        coverage: 'Native Android sessions have no instrumented network layer; observation needs the Astur in-app adapter',
+        coverage:
+          'No instrumented network layer on this Android session. React Native needs a debug build attached to '
+          + `Metro (looked for a debuggable target on ${this.metroUrl}); native apps need the Astur in-app adapter`,
         adapterRequired: true
       };
     }
@@ -1601,10 +1664,15 @@ class AndroidSession implements PlatformSession {
   async getNetworkRequests(options?: NetworkRedactionOptions): Promise<NetworkRequestRecord[]> {
     const vm = this.flutter?.vm;
     if (!vm) {
+      const reactNative = await this.resolveReactNativeNetwork();
+      if (reactNative) {
+        return reactNative.records(options);
+      }
+
       throw new AsturError(
         'NETWORK_OBSERVATION_UNSUPPORTED',
-        'Network observation on Android currently requires a Flutter session (Dart VM service). '
-        + 'Native and React Native apps need the Astur in-app adapter.'
+        'Network observation on Android needs either a Flutter session (Dart VM service) or a React Native '
+        + `debug build attached to Metro (none found on ${this.metroUrl}). Native apps need the Astur in-app adapter.`
       );
     }
 
@@ -1629,6 +1697,14 @@ class AndroidSession implements PlatformSession {
   async clearNetworkRequests(): Promise<void> {
     const vm = this.flutter?.vm;
     if (!vm) {
+      // Only clear an observer that already exists. Starting discovery here
+      // would charge every native Android test an HTTP probe between specs, for
+      // a session that will never observe anything.
+      //
+      // Awaited so that once this resolves the CDP subscription is live again
+      // after the relaunch — otherwise the first traffic of each test races the
+      // reconnect and is missed.
+      await this.reactNativeNetwork?.clear();
       return;
     }
     // Enable on every clear, and never cache "already enabled".

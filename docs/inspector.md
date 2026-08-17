@@ -10,6 +10,20 @@ Unlike generic WebDriver/Appium inspectors, Astur Inspector is built around Astu
 
 The result is a more dynamic authoring loop: inspect, interact, record, edit the generated step, switch device, launch another installed app, and continue without changing tools.
 
+## See The Inspector In Action
+
+<div class="astur-video-card">
+  <div class="astur-video-copy">
+    <span class="astur-video-kicker">INSPECTOR WALKTHROUGH</span>
+    <strong>Inspect, interact, record, and export.</strong>
+    <p>Watch the Astur Inspector turn a live device session into maintainable Playwright-style test steps.</p>
+    <a class="astur-video-link" href="https://www.youtube.com/watch?v=QgHdjJqinXs" target="_blank" rel="noreferrer">Watch on YouTube <span aria-hidden="true">↗</span></a>
+  </div>
+  <div class="astur-video-frame">
+    <iframe src="https://www.youtube-nocookie.com/embed/QgHdjJqinXs" title="Astur Inspector walkthrough" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+  </div>
+</div>
+
 ![The Astur Inspector: device mirror in the centre, the live UI tree on the right, and ranked locators with element details on the left.](./images/inspector-ios-simulator.png)
 
 Start it with:
