@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const outputDir = resolve(root, 'docs-site/src/content/docs');
+const arabicOutputDir = resolve(root, 'docs-site/src/content/docs/ar');
 const imagesSourceDir = resolve(root, 'docs/images');
 const imagesTargetDir = resolve(root, 'docs-site/src/content/docs/images');
 
@@ -108,25 +109,65 @@ const pages = [
   }
 ];
 
+// Arabic titles and descriptions, keyed by the English page target.
+//
+// Only the pages listed here are localized; Starlight falls back to the root
+// (English) locale for anything missing, so translating a page at a time never
+// leaves a dead link behind.
+const arabic = {
+  'getting-started.md': {
+    title: 'البدء السريع',
+    description: 'ثبّت Astur، افحص تطبيقًا يعمل، ثم شغّل أول اختبار على جهاز حقيقي.'
+  },
+  'prerequisites.md': {
+    title: 'المتطلبات',
+    description: 'متطلبات الجهاز المضيف و Android و iOS لتشغيل Astur محليًا.'
+  },
+  'network.md': {
+    title: 'مراقبة الشبكة',
+    description: 'راقب طلبات HTTP التي يرسلها تطبيقك أثناء تشغيل الاختبار — ما الذي طلبه، وما الذي عاد، وكم استغرق.'
+  },
+  'visual-comparison.md': {
+    title: 'المقارنة البصرية',
+    description: 'قارن الشاشة بصورة مرجعية محفوظة، ليفشل الاختبار عند تغيّر المظهر بدلًا من أن يمر دون ملاحظة.'
+  },
+  'platform-limits.md': {
+    title: 'حدود المنصات',
+    description: 'حدود عملية في Android و iOS يوضّحها Astur صراحةً بدل إخفائها.'
+  }
+};
+
 await mkdir(outputDir, { recursive: true });
+await mkdir(arabicOutputDir, { recursive: true });
 await rm(resolve(outputDir, 'architecture.md'), { force: true });
 
 for (const page of pages) {
   const sourcePath = resolve(root, page.source);
-  const targetPath = resolve(outputDir, page.target);
   const raw = await readFile(sourcePath, 'utf8');
   const body = stripLeadingFrontmatter(stripFirstHeading(raw)).trimStart();
-  const frontmatter = [
-    '---',
-    `title: ${quoteYaml(page.title)}`,
-    `description: ${quoteYaml(page.description)}`,
-    `sidebar:`,
-    `  order: ${page.order}`,
-    '---',
-    ''
-  ].join('\n');
 
-  await writeFile(targetPath, `${frontmatter}${body}`, 'utf8');
+  await writeFile(
+    resolve(outputDir, page.target),
+    `${buildFrontmatter(page.title, page.description, page.order)}${body}`,
+    'utf8'
+  );
+
+  // Arabic, when a translated source exists under docs/ar/.
+  const arabicSource = resolve(root, 'docs/ar', page.target);
+  const meta = arabic[page.target];
+  if (meta && await pathExists(arabicSource)) {
+    const arabicRaw = await readFile(arabicSource, 'utf8');
+    // Arabic pages live one directory deeper, so `./images/x.png` in the
+    // source has to climb out to reach the mirrored images directory.
+    const arabicBody = stripLeadingFrontmatter(stripFirstHeading(arabicRaw))
+      .trimStart()
+      .replaceAll('](./images/', '](../images/');
+    await writeFile(
+      resolve(arabicOutputDir, page.target),
+      `${buildFrontmatter(meta.title, meta.description, page.order)}${arabicBody}`,
+      'utf8'
+    );
+  }
 }
 
 // Mirror docs/images alongside the synced markdown (in the content dir) so the
@@ -153,6 +194,18 @@ function stripFirstHeading(markdown) {
 
 function stripLeadingFrontmatter(markdown) {
   return markdown.replace(/^---\n[\s\S]*?\n---\n+/, '');
+}
+
+function buildFrontmatter(title, description, order) {
+  return [
+    '---',
+    `title: ${quoteYaml(title)}`,
+    `description: ${quoteYaml(description)}`,
+    'sidebar:',
+    `  order: ${order}`,
+    '---',
+    ''
+  ].join('\n');
 }
 
 function quoteYaml(value) {

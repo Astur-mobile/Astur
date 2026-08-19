@@ -15,8 +15,20 @@ export default defineConfig({
   base,
   integrations: [
     starlight({
-      title: 'Astur',
+      title: {
+        en: 'Astur',
+        ar: 'Astur'
+      },
       description: 'Device-native mobile automation with Playwright ergonomics.',
+      // English stays at the site root so every existing URL keeps working;
+      // Arabic is added underneath at /ar/. Starlight falls back to the root
+      // locale for any page not translated yet, so a partial translation ships
+      // as a working site rather than a set of dead links.
+      defaultLocale: 'root',
+      locales: {
+        root: { label: 'English', lang: 'en' },
+        ar: { label: 'العربية', lang: 'ar', dir: 'rtl' }
+      },
       logo: {
         dark: '../packages/cli/assets/brand/astur-logo-dark.png',
         light: '../packages/cli/assets/brand/astur-logo-light.png',
@@ -63,35 +75,38 @@ export default defineConfig({
       sidebar: [
         {
           label: 'Start',
+          translations: { ar: 'البداية' },
           items: [
-            { label: 'Overview', slug: 'index' },
-            { label: 'Why Astur', slug: 'why-astur' },
-            { label: 'Getting Started', slug: 'getting-started' },
-            { label: 'Inspector And Codegen', slug: 'inspector' },
-            { label: 'Demo App', slug: 'demo-app' }
+            { label: 'Overview', translations: { ar: 'نظرة عامة' }, slug: 'index' },
+            { label: 'Why Astur', translations: { ar: 'لماذا Astur' }, slug: 'why-astur' },
+            { label: 'Getting Started', translations: { ar: 'البدء السريع' }, slug: 'getting-started' },
+            { label: 'Inspector And Codegen', translations: { ar: 'الـ Inspector وتوليد الكود' }, slug: 'inspector' },
+            { label: 'Demo App', translations: { ar: 'التطبيق التجريبي' }, slug: 'demo-app' }
           ]
         },
         {
           label: 'Guides',
+          translations: { ar: 'الأدلة' },
           items: [
-            { label: 'Prerequisites', slug: 'prerequisites' },
-            { label: 'Android', slug: 'android' },
-            { label: 'iOS', slug: 'ios' },
-            { label: 'Flutter & React Native', slug: 'frameworks' },
-            { label: 'Network Observation', slug: 'network' },
-            { label: 'Visual Comparison', slug: 'visual-comparison' },
-            { label: 'Configuration', slug: 'configuration' },
-            { label: 'Troubleshooting', slug: 'troubleshooting' }
+            { label: 'Prerequisites', translations: { ar: 'المتطلبات' }, slug: 'prerequisites' },
+            { label: 'Android', translations: { ar: 'Android' }, slug: 'android' },
+            { label: 'iOS', translations: { ar: 'iOS' }, slug: 'ios' },
+            { label: 'Flutter & React Native', translations: { ar: 'Flutter و React Native' }, slug: 'frameworks' },
+            { label: 'Network Observation', translations: { ar: 'مراقبة الشبكة' }, slug: 'network' },
+            { label: 'Visual Comparison', translations: { ar: 'المقارنة البصرية' }, slug: 'visual-comparison' },
+            { label: 'Configuration', translations: { ar: 'الإعدادات' }, slug: 'configuration' },
+            { label: 'Troubleshooting', translations: { ar: 'حل المشكلات' }, slug: 'troubleshooting' }
           ]
         },
         {
           label: 'Reference',
+          translations: { ar: 'المرجع' },
           items: [
-            { label: 'CLI', slug: 'cli' },
-            { label: 'Architecture', slug: 'architecture' },
-            { label: 'Platform Limits', slug: 'platform-limits' },
-            { label: 'Release Notes', slug: 'release-notes' },
-            { label: 'Roadmap', slug: 'roadmap' }
+            { label: 'CLI', translations: { ar: 'واجهة الأوامر CLI' }, slug: 'cli' },
+            { label: 'Architecture', translations: { ar: 'البنية' }, slug: 'architecture' },
+            { label: 'Platform Limits', translations: { ar: 'حدود المنصات' }, slug: 'platform-limits' },
+            { label: 'Release Notes', translations: { ar: 'ملاحظات الإصدار' }, slug: 'release-notes' },
+            { label: 'Roadmap', translations: { ar: 'خارطة الطريق' }, slug: 'roadmap' }
           ]
         }
       ]
