@@ -124,7 +124,7 @@ export ASTUR_ANDROID_AGENT_ENDPOINT=tcp:127.0.0.1:8787
 
 كإجراء قياسي، يخصص Astur جلسة وكيل واحدة لكل عامل (Worker) من عمال Playwright ولا يعيد تثبيت الوكيل قبل كل ملف اختبار. يتم تثبيت الوكيل المرفق فقط في حالة غيابه، أو عند غياب تطبيق الاختبار. وإذا كنت تعمل على تطوير الوكيل نفسه وتحتاج لدفع التحديثات للجهاز دورياً، قم بتعيين `ASTUR_ANDROID_AGENT_FORCE_INSTALL=1`.
 
-بفضل توفر `device.avd`، يتولى Astur إقلاع المحاكي تلقائياً إن لم يجد واحداً متصلاً يحمل نفس المواصفات. ومع توفير `app.path`، يقوم بتنصيب حزمة ה־APK قبل إطلاق الاختبار. وحال توفر أداة `aapt`، يستخرج Astur أيضاً اسم الحزمة (`packageName`) ونشاط الإقلاع (`activity`).
+بفضل توفر `device.avd`، يتولى Astur إقلاع المحاكي تلقائياً إن لم يجد واحداً متصلاً يحمل نفس المواصفات. ومع توفير `app.path`، يقوم بتنصيب حزمة الـAPK قبل إطلاق الاختبار. وحال توفر أداة `aapt`، يستخرج Astur أيضاً اسم الحزمة (`packageName`) ونشاط الإقلاع (`activity`).
 
 بالطبع، يمكنك تحديد كافة هذه التفاصيل بشكل صريح:
 
@@ -212,7 +212,7 @@ app: { packageName: 'com.example', activity: '.MainActivity' }
 | توجيه الشاشة | `device.setOrientation('landscape')`, `device.orientation.portrait()` | تُنفذ باستخدام أدوات Android للتحكم بالعرض والتوجيه. |
 | قفل الشاشة | `device.lock()`, `device.unlock()`, `device.isLocked()` | توظّف واجهات الشِل (Shell) المتاحة لقراءة والتحكم بحالة القفل. |
 | التفاعل مع المحددات | `getByText()`, `getByLabel()`, `getByTestId()`, `getByRole()` | تُوجه افتراضياً لمسار وكيل UIAutomator. عمليات البحث المتعددة (كـ `locator.count()` وغيرها) تُعالج داخل الجهاز عبر `element.findAll` / `element.findMany`؛ وإن لم يدعمها بناء الوكيل، ترتد لآلية قراءة اللقطات. |
-| التفاعل الإحداثي | `device.tap()`, `device.longPress()`, `device.swipe()`, `device.drag()` | مفيدة للتعامل مع الإيماءات الخاصة أو الإجراءات الاحتياطية المستخرجة من ה־Inspector. |
+| التفاعل الإحداثي | `device.tap()`, `device.longPress()`, `device.swipe()`, `device.drag()` | مفيدة للتعامل مع الإيماءات الخاصة أو الإجراءات الاحتياطية المستخرجة من الـInspector. |
 | التمرير للوصول للعنصر | `locator.scrollIntoView({ direction, maxScrolls })` | تعمل بشكل موحد عبر المنصات؛ تمرر الشاشة أو العنصر الحاوي حتى يظهر الهدف المراد، مما يُغنيك عن برمجة حلقات بحث (loops) يدوية. |
 
 بعض الأمثلة على إجراءات التفاعل والإيماءات:
@@ -340,12 +340,12 @@ await device.getById('product-42').scrollIntoView({
 | `getByLabel()` / `by.label()` | `content-desc` أو معرف المورد |
 | `getByTestId()` / `getById()` / `by.id()` | `resource-id` |
 | `getByText()` / `by.text()` | `text` أو `content-desc` |
-| `getByRole()` / `by.role()` | صنف ה־Widget مقترناً بتسمية خصائص الوصول |
-| `getByType()` / `by.type()` | صنف (Class) ה־Widget في Android |
+| `getByRole()` / `by.role()` | صنف الـWidget مقترناً بتسمية خصائص الوصول |
+| `getByType()` / `by.type()` | صنف (Class) الـWidget في Android |
 
 *نصيحة: احرص دائماً على الاعتماد على تسميات إمكانية الوصول ومعرفات الموارد الثابتة لضمان أفضل استقرارية لاختباراتك.*
 
-## الاستعلام המتقدم كخيار أخير: `by.native`
+## الاستعلام المتقدم كخيار أخير: `by.native`
 
 في السيناريوهات المعقدة والنادرة — عندما تعجز الطرق القياسية عن تثبيت هدفك بشكل صحيح، وخصوصاً في واجهات تفتقر لخصائص إمكانية الوصول حيث يُحتم الأمر استخدام محددات بنيوية أو شرطية مركبة — توفر أداة `by.native()` حلاً جذرياً بتمكينها لك من صياغة استعلام مباشر باستخدام معاملات `By`/`BySelector` المدعومة من `androidx.test.uiautomator`. وهي ذات الآلية التي يعتمد عليها وكيل UIAutomator الداخلي:
 
@@ -354,7 +354,7 @@ await device.find(by.native({
   android: {
     className: 'android.widget.Button',
     textContains: 'Save',
-    // لتحديد "زر Save ضمن هذه البطاقة المعينة" بدل الاعتماد على ترتیب הזר (كالزر الثالث في الصفحة):
+    // لتحديد "زر Save ضمن هذه البطاقة المعينة" بدل الاعتماد على ترتيب الزر (كالزر الثالث في الصفحة):
     hasChild: { resourceId: 'com.example:id/card_title' }
   }
 })).tap();
