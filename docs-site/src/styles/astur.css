@@ -1871,3 +1871,61 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
     margin-bottom: 3rem;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Arabic (RTL) localization.
+
+   Starlight flips the whole page to `dir="rtl"` for the Arabic locale, which is
+   right for prose and wrong for everything that is still code. Shell commands,
+   file paths, config snippets and API tables read left-to-right whatever the
+   surrounding language is, and mirroring them makes them unreadable — a path
+   like `android/app/build.gradle` renders with the segments reversed.
+
+   So: keep the prose mirrored, and pin the machine-readable parts back to LTR.
+   --------------------------------------------------------------------------- */
+
+[dir='rtl'] :is(pre, code, kbd, samp) {
+  direction: ltr;
+  text-align: left;
+  /* `unicode-bidi: isolate` alone still lets neighbouring Arabic reorder short
+     inline spans, so isolate and override together. */
+  unicode-bidi: isolate-override;
+}
+
+/* Inline code inside a sentence should isolate without forcing its own
+   alignment, or it breaks out of the line it belongs to. */
+[dir='rtl'] :not(pre) > code {
+  unicode-bidi: isolate;
+  text-align: inherit;
+}
+
+/* Tables carry API names, flags and CLI output. Mirror the column order for
+   reading direction, but leave each cell's own content alone. */
+[dir='rtl'] .sl-markdown-content table {
+  direction: rtl;
+}
+
+[dir='rtl'] .sl-markdown-content :is(th, td) {
+  text-align: right;
+}
+
+/* Bullets and numbers belong on the right in Arabic. */
+[dir='rtl'] .sl-markdown-content :is(ul, ol) {
+  padding-inline-start: 1.25rem;
+  padding-inline-end: 0;
+}
+
+/* Blockquote accent bar follows the text direction. */
+[dir='rtl'] .sl-markdown-content blockquote {
+  border-inline-start: 2px solid var(--sl-color-gray-5);
+  border-inline-end: none;
+  padding-inline-start: 1rem;
+  padding-inline-end: 0;
+}
+
+/* Arabic renders short at the same px size as Latin; nudge body copy up so the
+   two locales feel like the same document. */
+[dir='rtl'] .sl-markdown-content {
+  font-size: 1.05em;
+  line-height: 1.9;
+}

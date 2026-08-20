@@ -31,6 +31,58 @@ You'll also need the platform SDKs for the area you touch — see
 6. Use clear, conventional commit messages (`feat:`, `fix:`, `docs:`, `chore:`).
 7. Open a PR describing what changed and why.
 
+## Translating the docs
+
+The docs site is bilingual: English at the root, Arabic under `/ar/`. **Every
+page is translated**, and Starlight falls back to English for anything that is
+not — so a new page ships in one language without leaving a dead link, and can
+be translated afterwards.
+
+When you change an English page, update `docs/ar/<same-name>.md` in the same PR.
+The two are paired by file name, and their heading counts should match; that is
+the cheapest way to spot a section that was added on one side only:
+
+```bash
+for f in docs/ar/*.md; do
+  b=$(basename "$f")
+  en=$(grep -c '^#\{1,4\} ' "docs/$b"); ar=$(grep -c '^#\{1,4\} ' "$f")
+  [ "$en" != "$ar" ] && echo "$b: en=$en ar=$ar"
+done
+```
+
+To add a page:
+
+1. Copy the English source, e.g. `docs/cli.md` → `docs/ar/cli.md`, and translate
+   the body. Keep the same file name; that is how the two are paired.
+2. Add its Arabic `title` and `description` to the `arabic` map in
+   `docs-site/scripts/sync-docs.mjs`. A page without an entry there is not
+   published in Arabic, even if the file exists.
+3. Run `npm run docs:build` and confirm it still reports no broken links.
+
+Conventions that keep the two versions readable:
+
+- **Leave technical terms in English.** Product, API and tool names —
+  `toHaveScreenshot`, `XCUITest`, `Metro`, `WebView`, `Flutter`, `React Native`,
+  `Android`, `iOS` — are what these things are called in Arabic technical
+  writing too. Translating them makes a page harder to scan, not easier.
+- **Never translate code, flags, paths or output.** Code blocks are shown
+  left-to-right even on RTL pages, and comments inside a snippet may be
+  translated where they are prose.
+- **Keep headings parallel with the English page** so the two structures match
+  and cross-links between them keep working.
+- Anchor links must point at the *Arabic* heading text on Arabic pages, e.g.
+  `[الاعتراض](#الاعتراض-غير-متاح-بعد)`. The link checker in `docs:build`
+  catches this.
+
+The four hand-written MDX pages (`index`, `why-astur`, `demo-app`,
+`architecture`) are not synced from `docs/`. Their Arabic versions live directly
+in `docs-site/src/content/docs/ar/`, mirroring how the English ones are authored.
+Keep the CSS class names and markup identical and translate only visible text —
+and remember that relative imports climb one level (`../images/…`).
+
+RTL styling lives at the bottom of `docs-site/src/styles/astur.css`. Prose
+mirrors; code, paths and CLI output stay left-to-right.
+
 ## License
 
 By contributing, you agree your contributions are licensed under the project's

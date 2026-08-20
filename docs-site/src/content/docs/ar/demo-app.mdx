@@ -1,0 +1,92 @@
+---
+title: "التطبيق التجريبي"
+description: "جولة في تطبيق Astur التجريبي — كل شاشة تُجرّب قدرة أتمتة واحدة، ويأتي جاهزًا للتشغيل على Android و iOS."
+---
+
+import homeImg from '../images/demo-home.png';
+import loginImg from '../images/demo-login.png';
+import formsImg from '../images/demo-forms.png';
+import swipeImg from '../images/demo-swipe.png';
+import dragImg from '../images/demo-drag.png';
+import webImg from '../images/demo-web.png';
+
+**تطبيق Astur التجريبي** (`com.astur.demo`) تطبيق أصلي صغير مهمته الوحيدة أن يمنح الأتمتة هدفًا ثابتًا ومتوقّعًا. وكل شاشة فيه تعرض قدرة واحدة — النقر، والتمرير، والتمرير الأفقي، والسحب، وإدخال النماذج، ورفع الملفات، و WebView الهجين — بمعرّفات اختبار ثابتة كي تبقى المحدِّدات موثوقة عبر التشغيلات والمنصات.
+
+وهو التطبيق نفسه الذي تقوده المجموعات القابلة للتشغيل، فاللقطات أدناه تقابل واحدةً بواحدة ملفات الاختبار في قالب [astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate) (وفي مجلد [`examples/`](https://github.com/Astur-mobile/astur-boilerplate) داخل المستودع).
+
+## ما الذي تعرضه كل شاشة
+
+<div class="astur-demo-grid not-content">
+  <figure>
+    <img src={homeImg.src} alt="الشاشة الرئيسية للتطبيق التجريبي مع البطاقة الرئيسية وقائمة التغطية وشريط التنقّل السفلي." />
+    <figcaption><strong>الرئيسية</strong> — هيكل التطبيق والقائمة والأذونات. مرّر للأسفل إلى مختبر النقر لتجريب <strong>النقرة المفردة والمزدوجة والضغط المطوّل</strong> مقابل عدّادات حيّة.</figcaption>
+  </figure>
+  <figure>
+    <img src={loginImg.src} alt="شاشة بيانات الاعتماد مع حقلي البريد وكلمة المرور وزر تسجيل الدخول والبصمة." />
+    <figcaption><strong>تسجيل الدخول</strong> — <strong>إدخال النص والتحقق من الحقول والتنبيهات والمصادقة الحيوية</strong>. عبّئ الحقول، وأخفِ لوحة المفاتيح، ثم أرسل.</figcaption>
+  </figure>
+  <figure>
+    <img src={formsImg.src} alt="شاشة عناصر الإدخال مع حقل نصي ومنزلقة ومفتاح تبديل ومربع اختيار." />
+    <figcaption><strong>النماذج</strong> — <strong>إدخال النص، ومفتاح التبديل، ومربع الاختيار، وسحب المنزلقة، والقائمة المنسدلة، ورفع الوسائط والملفات</strong> في شاشة واحدة.</figcaption>
+  </figure>
+  <figure>
+    <img src={swipeImg.src} alt="شاشة عرض القدرات تعرض شريط بطاقات أفقيًا." />
+    <figcaption><strong>التمرير</strong> — <strong>تمرير أفقي</strong> عبر شريط البطاقات، ثم <strong>تمرير رأسي</strong> للوصول إلى لوحة مخفية.</figcaption>
+  </figure>
+  <figure>
+    <img src={dragImg.src} alt="شاشة السحب والإفلات مع أحجية من أربع قطع لأيقونة Astur." />
+    <figcaption><strong>السحب والإفلات</strong> — <strong>إيماءات السحب</strong>. أعد بناء أيقونة Astur بسحب كل قطعة إلى موضعها.</figcaption>
+  </figure>
+  <figure>
+    <img src={webImg.src} alt="شاشة مختبر الويب تعرض WebView أصليًا بأهداف DOM." />
+    <figcaption><strong>مختبر الويب</strong> — <strong>‏WebView هجين</strong>: انتقل إلى سياق الويب بـ <code>device.webContext()</code>، وقُد محدِّدات DOM، وأرسل نموذج ويب، وارفع ملفًا داخل WebView.</figcaption>
+  </figure>
+</div>
+
+## من أين تحصل عليه
+
+تُشحن البنى مع القالب المبدئي وفي مجلد `assets/` بهذا المستودع:
+
+- **‏Android:** `assets/astur.demo.android.apk`
+- **‏Android (‏Flutter):** `assets/astur.demo.android_flutter.apk`
+- **محاكي iOS:** `assets/astur.demo.ios.simulator.zip` (فُكّه إلى `assets/Astur.app`)
+- **محاكي iOS (‏Flutter):** `assets/astur.demo.ios.simulator_flutter.zip` (فُكّه إلى `assets/Runner.app`)
+- **جهاز iOS حقيقي:** `assets/astur.demo.ios.ipa`
+
+## أهداف التشغيل
+
+تعمل ملفات الاختبار نفسها على أربعة أهداف. ويثبّت Astur التطبيق التجريبي في التشغيل الأول ويثبّت وكيله تلقائيًا، فالشرط الوحيد هو جهاز مرئي.
+
+| الهدف | يظهر عبر | ما تحتاجه |
+| --- | --- | --- |
+| **محاكي Android** | `adb devices` (مثل `emulator-5554`) | جهاز افتراضي مُقلع. ولا شيء غير ذلك — فـ Astur يثبّت حزمة APK ووكيله. |
+| **جهاز Android حقيقي** | `adb devices` | تفعيل تنقيح USB والموافقة على الجهاز. ومسار التثبيت التلقائي نفسه. |
+| **محاكي iOS** | `xcrun simctl list devices booted` | محاكي مُقلع وملف `Astur.app` بعد فكّه. |
+| **جهاز iOS حقيقي** | `xcrun devicectl list devices` | جهاز موثوق بوضع المطوّر، وملف `.ipa`، وضبط `ASTUR_IOS_DEVELOPMENT_TEAM` كي يمكن توقيع وكيل XCUITest. |
+
+جرّبه عبر الـ Inspector دون كتابة أي اختبار:
+
+```bash
+# محاكي Android
+npx astur-mobile codegen --android --device emulator-5554 \
+  --app ./assets/astur.demo.android.apk --app-id com.astur.demo
+
+# محاكي iOS
+npx astur-mobile codegen --ios --simulator \
+  --app ./assets/Astur.app --app-id com.astur.demo
+```
+
+أو شغّل مجموعة الميزات كاملةً من قالب [astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate):
+
+```bash
+npx astur-mobile test --config config/android/playwright.config.ts
+```
+
+:::note[التحكم في DOM داخل WebView]
+تقود `device.webContext()` شجرة DOM في WebView على **‏Android و iOS (المحاكي والأجهزة الحقيقية)**.
+
+- **‏Android** — يفعّل التطبيق تنقيح WebView (`WebView.setWebContentsDebuggingEnabled(true)`)، فيكشف مقبس Chrome DevTools Protocol. وتُشحن حزمة العرض وهي مفعّلة.
+- **‏iOS** — يضبط التطبيق `WKWebView.isInspectable = true` (‏iOS 16.4 فأعلى) ويكون `ios-webkit-debug-proxy` (‏1.9 فأعلى) مثبّتًا (`brew install ios-webkit-debug-proxy`). ويجسر Astur الـ Web Inspector في المحاكي تلقائيًا.
+
+وتبقى تجهيزة `webview()` (‏`web.page`) بصفحة Playwright خاصة بـ Android؛ وعلى iOS استخدم `device.webContext()` أو المحدِّدات الأصلية.
+:::
