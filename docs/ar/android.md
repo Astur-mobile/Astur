@@ -1,84 +1,84 @@
-# إعداد Android
+# إعداد نظام Android
 
-يستخدم مشغّل Android في Astur أدوات Android العامة لدورة الحياة والمخرجات:
+يعتمد مشغّل Android في Astur على أدوات Android الرسمية والشائعة لإدارة دورة حياة التطبيقات واستخراج البيانات:
 
-- ‏`adb devices -l` للاكتشاف
-- ‏`adb install -r` للتثبيت
-- ‏`monkey` أو `am start` للتشغيل
-- ‏`uiautomator dump` للقطات الواجهة القديمة وللتشخيص
-- ‏`input tap` و `input text` و `input swipe` و `input keyevent` للمسار الاحتياطي القديم فقط
-- ‏`screencap` للقطات الشاشة
-- ‏`aapt dump badging` لاستنتاج حزمة APK ونشاطها حين يتوفّر
+- استخدام `adb devices -l` لاكتشاف الأجهزة المتاحة.
+- استخدام `adb install -r` لتثبيت التطبيقات.
+- استخدام `monkey` أو `am start` لتشغيل التطبيقات.
+- استخدام `uiautomator dump` لاستخراج بنية الواجهة القديمة ولأغراض التشخيص.
+- استخدام أوامر مثل `input tap`، `input text`، `input swipe`، و `input keyevent` حصرياً ضمن المسار الاحتياطي القديم.
+- استخدام `screencap` لالتقاط صور الشاشة.
+- استخدام `aapt dump badging` لاستنباط بيانات حزمة الـ APK واسم نشاطها الرئيسي (Activity) عند توفره.
 
-ولا حاجة إلى خادم Appium.
+كل هذا يتم بسلاسة **دون الحاجة لأي خادم Appium**.
 
-ويعتمد Astur افتراضيًا مسار وكيل UIAutomator الأصلي المكتوب بـ Kotlin للبحث عن العناصر والانتظار والإجراءات والإيماءات. وتتضمن حزمة Android المنشورة ملفات APK الخاصة بالوكيل، فلا تحتاج تثبيتات npm العادية خطوة بناء منفصلة للوكيل. ولا تستخدم `automation.engine: 'auto'` إلا أثناء الانتقال إذا احتجت العودة إلى مسار ADB/XML القديم.
+يعتمد Astur بصفة أساسية على وكيل UIAutomator المبرمج بـ Kotlin للبحث عن العناصر، الانتظار، تنفيذ الإجراءات، ومحاكاة الإيماءات. ولتسهيل الاستخدام، تتضمن حزمة Android المنشورة ملفات الـ APK الخاصة بهذا الوكيل، مما يُعفي مستخدمي npm من خطوة بناء الوكيل كعملية منفصلة. ولا ننصح باستخدام `automation.engine: 'auto'` إلا أثناء فترات الانتقال إذا دعت الحاجة للعودة المؤقتة لمسار ADB/XML الأقدم.
 
-## Astur أثناء العمل على Android
+## Astur قيد العمل على نظام Android
 
 <div class="astur-video-card">
   <div class="astur-video-copy">
     <span class="astur-video-kicker">عرض ANDROID</span>
-    <strong>شاهد Astur وهو يقود تدفّق عمل كاملًا على Android.</strong>
-    <p>شاهد الاكتشاف والتفاعل وتنفيذ الاختبارات أصليًا على Android وهي تعمل معًا مقابل تطبيق حقيقي.</p>
-    <a class="astur-video-link" href="https://youtu.be/ByVb8MeA6kM" target="_blank" rel="noreferrer">شاهد على YouTube <span aria-hidden="true">↗</span></a>
+    <strong>تابع كيف يقود Astur دورة اختبار متكاملة على Android.</strong>
+    <p>استكشف كيف تتناغم عمليات الاكتشاف، التفاعل السريع، وتنفيذ الاختبارات بشكل أصيل ضد تطبيق فعلي.</p>
+    <a class="astur-video-link" href="https://youtu.be/ByVb8MeA6kM" target="_blank" rel="noreferrer">شاهد العرض على YouTube <span aria-hidden="true">↗</span></a>
   </div>
   <div class="astur-video-frame">
     <iframe src="https://www.youtube-nocookie.com/embed/ByVb8MeA6kM" title="Astur Android automation demonstration" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
   </div>
 </div>
 
-## تثبيت Android SDK
+## إعداد حزمة Android SDK
 
-ثبّت Android Studio أو حزمة Android SDK عبر سطر الأوامر. وتأكد من توفّر أدوات المنصة:
+للبدء، قم بتثبيت Android Studio أو حزمة Android SDK عبر سطر الأوامر، وتأكد من عمل أدوات المنصة الأساسية:
 
 ```bash
 adb version
 ```
 
-فإذا لم يُعثر على `adb`، أضف أدوات المنصة إلى `PATH`.
+إذا لم يتم التعرف على أمر `adb`، ستحتاج لإضافته إلى متغير النظام `PATH`.
 
-مثال على macOS:
+مثال للإعداد على نظام macOS:
 
 ```bash
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 ```
 
-## تشغيل محاكي
+## تشغيل محاكي (Emulator)
 
-استخدم مدير الأجهزة في Android Studio أو سطر الأوامر:
+يمكنك تشغيل المحاكي إما من مدير الأجهزة في Android Studio أو مباشرة عبر سطر الأوامر:
 
 ```bash
 emulator -list-avds
 emulator -avd Pixel_8_API_35
 ```
 
-ثم تحقّق:
+ثم تأكد من ظهوره كجهاز متصل:
 
 ```bash
 adb devices -l
 npx astur-mobile devices --android
 ```
 
-## جهاز Android حقيقي
+## إعداد جهاز Android حقيقي
 
-على الجهاز:
+إذا كنت تختبر على هاتف حقيقي، قم بالخطوات التالية على الهاتف نفسه:
 
-- فعّل خيارات المطوّر
-- فعّل تنقيح USB
-- وصّل الجهاز عبر USB
-- وافق على نافذة التنقيح
+- فعّل "خيارات المطور" (Developer Options).
+- فعّل "تصحيح أخطاء USB" (USB Debugging).
+- صِل الجهاز بحاسوبك عبر كابل USB.
+- وافق على رسالة التفويض التي تظهر على شاشة الهاتف.
 
-للتحقق:
+وللتحقق من الاتصال:
 
 ```bash
 adb devices -l
 ```
 
-ويجب أن تكون الحالة `device`. فإذا كانت `unauthorized`، فافتح قفل الجهاز ووافق على النافذة.
+يجب أن تظهر حالة الجهاز كـ `device`. في حال ظهرت كـ `unauthorized`، افتح قفل الهاتف واقبل رسالة التصريح.
 
-## إعدادات Android
+## إعدادات Android الأساسية
 
 ```ts
 import { defineConfig } from '@astur-mobile/test';
@@ -103,7 +103,7 @@ export default defineConfig({
 });
 ```
 
-### نقطة نهاية الوكيل الأصلي (اختياري)
+### تحديد نقطة اتصال للوكيل الأصلي (اختياري)
 
 ```ts
 agent: {
@@ -114,19 +114,19 @@ agent: {
 }
 ```
 
-التجاوز عبر البيئة:
+طريقة التجاوز عبر متغيرات البيئة:
 
 ```bash
 export ASTUR_ANDROID_AGENT_ENDPOINT=tcp:127.0.0.1:8787
 ```
 
-استخدم `agent.mode: 'required'` في CI بعد أن تستقر مجموعة أوامر الوكيل الأصلي على Android لمجموعة اختباراتك.
+بمجرد أن تثبت استقرار مجموعة أوامر الوكيل الأصلي مع اختباراتك، يُفضل استخدام الإعداد `agent.mode: 'required'` في بيئات التكامل المستمر (CI).
 
-وافتراضيًا يبدأ Astur جلسة وكيل أصلي واحدة لكل عامل Playwright. وهو لا يعيد تثبيت الوكيل قبل كل ملف اختبار؛ إذ تُثبَّت ملفات APK المرفقة للوكيل فقط عند غياب تطبيق الوكيل أو حزمة الاختبار. واضبط `ASTUR_ANDROID_AGENT_FORCE_INSTALL=1` حين تطوّر الوكيل وتحتاج عمدًا إلى تحديث ملفات APK على الجهاز.
+كإجراء قياسي، يخصص Astur جلسة وكيل واحدة لكل عامل (Worker) من عمال Playwright ولا يعيد تثبيت الوكيل قبل كل ملف اختبار. يتم تثبيت الوكيل المرفق فقط في حالة غيابه، أو عند غياب تطبيق الاختبار. وإذا كنت تعمل على تطوير الوكيل نفسه وتحتاج لدفع التحديثات للجهاز دورياً، قم بتعيين `ASTUR_ANDROID_AGENT_FORCE_INSTALL=1`.
 
-ومع `device.avd` يشغّل Astur المحاكي إن لم يجد محاكيًا متصلًا مطابقًا. ومع `app.path` يثبّت Astur حزمة APK قبل بدء الاختبار. وحين يتوفّر `aapt` من Android SDK يستنتج Astur أيضًا `packageName` ونشاط التشغيل `activity`.
+بفضل توفر `device.avd`، يتولى Astur إقلاع المحاكي تلقائياً إن لم يجد واحداً متصلاً يحمل نفس المواصفات. ومع توفير `app.path`، يقوم بتنصيب حزمة الـAPK قبل إطلاق الاختبار. وحال توفر أداة `aapt`، يستخرج Astur أيضاً اسم الحزمة (`packageName`) ونشاط الإقلاع (`activity`).
 
-ويمكنك مع ذلك جعل كل شيء صريحًا:
+بالطبع، يمكنك تحديد كافة هذه التفاصيل بشكل صريح:
 
 ```ts
 device: {
@@ -139,9 +139,9 @@ app: {
 }
 ```
 
-استخدم `device.id` محدّدًا للتشغيلات المتوازية. أما المحدِّدات الفضفاضة مثل `{ kind: 'emulator' }` فمريحة محليًا لكنها ليست آمنة بعد لتخصيص الأجهزة بالتوازي.
+يُنصح باستخدام المعرف `device.id` لضمان الدقة أثناء التشغيل المتوازي؛ فرغم أن المحددات الفضفاضة مثل `{ kind: 'emulator' }` تعتبر عملية للاستخدام المحلي السريع، إلا أنها لا تضمن تخصيصاً محكماً للأجهزة في بيئات التشغيل المتوازية.
 
-## خيارات جهاز Android
+## تفضيلات جهاز Android
 
 ```ts
 device: {
@@ -155,18 +155,18 @@ device: {
 }
 ```
 
-الحقول:
+شرح الحقول:
 
-- ‏`avd`: اسم الجهاز الافتراضي من `emulator -list-avds`
-- ‏`autoBoot`: يشغّل الـ AVD إن لم يوجد محاكي متصل مطابق؛ وقيمته الافتراضية true عند ضبط `avd`
-- ‏`headless`: يضيف `-no-window`؛ وقيمته الافتراضية true
-- ‏`wipeData`: يضيف `-wipe-data`؛ مفيد لتشغيلات CI النظيفة، ومدمّر لحالة المحاكي
-- ‏`bootTimeout`: أقصى مدة انتظار لـ `sys.boot_completed`
-- ‏`emulatorArgs`: معاملات إضافية للمحاكي
+- `avd`: اسم جهازك الافتراضي كما يظهر في قائمة `emulator -list-avds`.
+- `autoBoot`: لإقلاع الجهاز الافتراضي في حال غياب محاكي متصل مطابق؛ افتراضياً يُفعّل عند تعيين قيمة لـ `avd`.
+- `headless`: يُلحق المعامل `-no-window` للتشغيل في الخلفية؛ القيمة الافتراضية `true`.
+- `wipeData`: يُلحق المعامل `-wipe-data` لمسح بيانات المحاكي القديمة؛ ميزة هامة لاختبارات الـ CI النظيفة، ولكنها تزيل أي بيانات سابقة من المحاكي.
+- `bootTimeout`: المهلة القصوى لانتظار إشارة `sys.boot_completed`.
+- `emulatorArgs`: لتمرير معاملات إضافية مخصصة لسطر أوامر المحاكي.
 
-## استنتاج بيانات APK
+## استنتاج بيانات حزمة الـ APK تلقائياً
 
-إذا وفّرت الإعدادات هذا فقط:
+إذا اقتصرت إعداداتك على تحديد مسار الـ APK كما يلي:
 
 ```ts
 app: {
@@ -174,58 +174,59 @@ app: {
 }
 ```
 
-فيحاول Astur:
+سيلجأ Astur إلى الأداة التالية كخلفية لاستخراج البيانات:
 
 ```bash
 aapt dump badging ./apps/demo.apk
 ```
 
-ويملأ:
+مما يُمكّنه من ملء الحقلين تلقائياً:
 
 - `app.packageName`
 - `app.activity`
 
-وإذا لم يتوفّر `aapt`، فاضبط `ASTUR_AAPT` أو مرّر بيانات الحزمة يدويًا.
+وإذا كانت أداة `aapt` غائبة عن مسارك، يمكنك توجيهه عبر المتغير `ASTUR_AAPT` أو إدراج بيانات الحزمة بنفسك.
 
-ويدعم Astur ثلاثة أوضاع لتطبيق Android:
+يدعم Astur ثلاثة أوضاع لإدارة تطبيق Android:
 
 ```ts
-// تثبيت حزمة APK محلية.
+// الوضع الأول: تثبيت ملف APK متاح محلياً
 app: { path: './apps/demo.apk' }
 
-// تنزيل الحزمة أثناء التشغيل ثم تثبيتها.
+// الوضع الثاني: تنزيل ملف APK أثناء التشغيل ومن ثم تثبيته
 app: { url: 'https://example.com/apps/demo.apk' }
 
-// تشغيل تطبيق مثبّت أصلًا على الجهاز.
+// الوضع الثالث: إطلاق تطبيق موجود بالفعل على الجهاز
 app: { packageName: 'com.example', activity: '.MainActivity' }
 ```
 
-وتحدّد `use.astur.timeout` المهلة الافتراضية لإجراءات العناصر وتأكيدات الجوال. وتبقى التجاوزات لكل إجراء متاحة عند الحاجة.
+يتحكم الإعداد `use.astur.timeout` بالمهلة الافتراضية للتفاعل مع العناصر وتأكيد حالة الواجهة. وبالتأكيد، يمكنك تعيين مهلة خاصة لأي إجراء بعينه متى لزم الأمر.
 
 ## إجراءات Android المدعومة
 
-| المجال | الواجهة | ملاحظات |
+| نطاق الإجراء | الأداة / الواجهة | ملاحظات إضافية |
 | --- | --- | --- |
-| دورة حياة التطبيق | `device.app.install()`, `launch()`, `terminate()`, `reset()`, `uninstall()` | تستخدم حزمة APK أو اسم الحزمة المضبوط افتراضيًا. |
-| تخزين التطبيق | `device.app.clearData()`, `device.app.clearCache()` | تستخدم أوامر مدير الحِزم في Android. |
-| الأذونات | `device.permissions.grant('camera')`, `revoke('camera')` | تقبل أسماء أذونات Android أو الاختصارات في Astur حيثما توفّرت. |
-| الاتجاه | `device.setOrientation('landscape')`, `device.orientation.portrait()` | تستخدم التحكم في العرض والاتجاه في Android. |
-| حالة القفل | `device.lock()`, `device.unlock()`, `device.isLocked()` | تستخدم واجهات الصدفة وحالة الجهاز في Android. |
-| المحدِّدات الأصلية | `getByText()`, `getByLabel()`, `getByTestId()`, `getByRole()` | تمرّ عبر مسار وكيل UIAutomator الأصلي افتراضيًا. كما تُحلّ استعلامات المطابقات المتعددة (`locator.count()`, `queryAll()`, `device.findAll()`, `device.findMany()`) على الجهاز عبر `element.findAll` / `element.findMany`؛ وبنى الوكيل التي تفتقر هذه الأوامر تعود تلقائيًا إلى مسار لقطة الشجرة. |
-| الإحداثيات | `device.tap()`, `device.longPress()`, `device.swipe()`, `device.drag()` | مفيدة لأسطح الإيماءات ولخطوات الاحتياط المولَّدة من الـ inspector. |
-| التمرير إلى العنصر | `locator.scrollIntoView({ direction, maxScrolls })` | تعمل عبر المنصات. تمرّر عرض التمرير المحيط حتى يظهر العنصر، ثم تُحلّ بلقطته. وتغني عن مساعِدات «مرّر في حلقة حتى يظهر» المكتوبة يدويًا في كائنات الصفحات. |
+| إدارة التطبيق | `device.app.install()`, `launch()`, `terminate()`, `reset()`, `uninstall()` | تعتمد افتراضياً على ملف الـ APK أو اسم الحزمة المحددة. |
+| بيانات التطبيق | `device.app.clearData()`, `device.app.clearCache()` | تُنفذ عبر أوامر مدير الحزم في نظام Android. |
+| الصلاحيات والأذونات | `device.permissions.grant('camera')`, `revoke('camera')` | تقبل الأسماء الرسمية لأذونات النظام أو اختصارات Astur المبسطة. |
+| توجيه الشاشة | `device.setOrientation('landscape')`, `device.orientation.portrait()` | تُنفذ باستخدام أدوات Android للتحكم بالعرض والتوجيه. |
+| قفل الشاشة | `device.lock()`, `device.unlock()`, `device.isLocked()` | توظّف واجهات الشِل (Shell) المتاحة لقراءة والتحكم بحالة القفل. |
+| التفاعل مع المحددات | `getByText()`, `getByLabel()`, `getByTestId()`, `getByRole()` | تُوجه افتراضياً لمسار وكيل UIAutomator. عمليات البحث المتعددة (كـ `locator.count()` وغيرها) تُعالج داخل الجهاز عبر `element.findAll` / `element.findMany`؛ وإن لم يدعمها بناء الوكيل، ترتد لآلية قراءة اللقطات. |
+| التفاعل الإحداثي | `device.tap()`, `device.longPress()`, `device.swipe()`, `device.drag()` | مفيدة للتعامل مع الإيماءات الخاصة أو الإجراءات الاحتياطية المستخرجة من الـInspector. |
+| التمرير للوصول للعنصر | `locator.scrollIntoView({ direction, maxScrolls })` | تعمل بشكل موحد عبر المنصات؛ تمرر الشاشة أو العنصر الحاوي حتى يظهر الهدف المراد، مما يُغنيك عن برمجة حلقات بحث (loops) يدوية. |
 
-أمثلة على العناصر والإيماءات:
+بعض الأمثلة على إجراءات التفاعل والإيماءات:
 
 ```ts
 await device.getByText('Continue').tap();
 await device.getByLabel('Email').fill('qa@example.com');
 await device.getByRole('button', { name: 'Submit' }).longPress({ durationMs: 800 });
 
-// مرّر نموذجًا طويلًا حتى يظهر الهدف على الشاشة، ثم نفّذ عليه.
+// تمرير شاشة طويلة للوصول للهدف ومن ثم التفاعل معه
 await device.getByText('Submit').scrollIntoView();
 await device.getByLabel('Biometric login').scrollIntoView({ direction: 'up', maxScrolls: 6 });
 
+// التفاعل المباشر مع الشاشة بالإحداثيات
 await device.tap({ x: 120, y: 780 });
 await device.longPress({ x: 360, y: 900 }, { durationMs: 900 });
 await device.swipe({
@@ -239,6 +240,8 @@ await device.drag({
   durationMs: 800
 });
 ```
+
+وإجراءات التحكم بالنظام:
 
 ```ts
 await device.setOrientation('landscape');
@@ -255,18 +258,18 @@ await device.system.isLocked();
 await device.screenshot();
 ```
 
-### الكتابة في عنصر لا تستطيع الشجرة وصفه
+### الكتابة في عناصر يصعب استهدافها (عناصر بدون حاوية وصفية)
 
-ترسل `device.keyboard.type()` الأحرف إلى العرض الذي يملك التركيز، دون عنصر تستهدفه. استخدمها للعناصر التي لا تكشف حقلًا قابلًا للتعبئة — مثل حقل OTP متعدد الصناديق، حيث الصناديق عروض عادية والحقل الحقيقي مخفي:
+تُرسل الدالة `device.keyboard.type()` الإدخالات النصية للعنصر الذي يحظى بالتركيز (Focus) حالياً دون الحاجة لتحديد عنصر بعينه. وتبرز أهمية هذه الخاصية عند التعامل مع حقول غير تقليدية كالتي تُستخدم في إدخال أرقام الـ OTP المجزأة؛ حيث تتكون الواجهة المرئية من صناديق منفصلة بينما يختبئ حقل الإدخال الحقيقي وراءها:
 
 ```ts
 await device.getByTestId('otp-input').tap();
 await device.keyboard.type('123456');
 ```
 
-ويعمل النداء نفسه على iOS، فملف اختبار واحد يغطّي الاثنين. وفضّل `fill()` كلما كان الحقل قابلًا للاستهداف: فهي تحلّ العنصر وتمسحه وتتحقق من وصول القيمة، ولا شيء من ذلك ممكن عند استهداف التركيز.
+الجدير بالذكر أن هذا الإجراء يعمل بفعالية ذاتها على نظام iOS، ما يسمح بتوحيد كود الاختبار. ومع ذلك، **استخدم `fill()` كلما توفرت لك القدرة على استهداف الحقل بصورة صريحة**، لأنها تتولى تحديد العنصر، وتفريغه، ثم التحقق من ثبات القيمة المُدخلة - وكلها إجراءات يستحيل القيام بها عند الاعتماد على حالة التركيز فقط.
 
-وتتبع `pressKey()` القاعدة نفسها مع الحرف المطبوع الواحد — فهي تكتب ذلك الحرف بدل إرسال keycode، فتصبح حلقة OTP رقمًا رقمًا قابلة للنقل:
+وينطبق المبدأ نفسه على دالة `pressKey()` عند استخدام حرف واحد، حيث تُرسل الحرف نفسه بدلاً من إرسال رمز المفتاح (keycode)، مما يُسهل محاكاة كتابة الأرقام بشكل متتالٍ:
 
 ```ts
 for (const digit of '123456') {
@@ -274,118 +277,104 @@ for (const digit of '123456') {
 }
 ```
 
-أما ما زاد على حرف واحد فيبقى مفتاحًا: المفاتيح المسمّاة (`'BACK'`, `'ENTER'`, `'VOLUME_UP'`) وأرقام keycode الخام في Android (`'66'`) تتصرف كما كانت تمامًا.
+أما عند تمرير سلاسل أطول من حرف واحد، فإنها تُفسر كأوامر مفاتيح نظام (مثل `'BACK'`, `'ENTER'`, `'VOLUME_UP'`) أو رموز خام كـ (`'66'`) وتتصرف تماماً كما هو متوقع.
 
-وحين يكون وضع نقطة نهاية الوكيل الأصلي مفعّلًا وسليمًا، يمكن لأوامر العناصر والإيماءات أن تمرّ عبر ناقل وكيل Kotlin على الجهاز. وإذا تعذّر وضع نقطة النهاية في `auto`، يعود Astur إلى سلوك ADB/UIAutomator الحالي.
+عندما يكون الوكيل الأصلي متصلاً وفعالاً، تمر كافة أوامر العناصر والإيماءات عبر ناقل وكيل Kotlin. وفي حال واجه وضع النقطة التلقائي (`auto`) أي مشكلة، يتراجع Astur بهدوء لاستخدام أدوات ADB/UIAutomator الأقدم لضمان استمرارية الاختبار.
 
-كما تكشف `device.gestures` الأوامر `tap` و `longPress` و `pressAndHold` و `swipe` و `drag` كواجهة مجمّعة. وتكشف `device.navigation` الأوامر `back` و `home` و `recentApps`.
+يقدم الكائن `device.gestures` مجموعة شاملة من أدوات الإيماءات مثل `tap`، `longPress`، `pressAndHold`، `swipe` و `drag`. كما يتكفل `device.navigation` بمهام التنقل الأساسية كـ `back`، `home`، و `recentApps`.
 
-### التمرير إلى العناصر خارج الشاشة
+### الوصول للعناصر الخفية خارج نطاق الشاشة (التمرير)
 
-الدالة `locator.scrollIntoView()` هي الطريقة المدمجة لإحضار عنصر أسفل الشاشة أو أعلاها إلى داخلها قبل التنفيذ عليه. وهي تعمل عبر المنصات (‏Android و iOS) وموجودة على كل محدِّد، فلم تعد تحتاج كتابة مساعِدات «مرّر في حلقة حتى يظهر» يدويًا في كائنات الصفحات. وإذا كان العنصر ظاهرًا أصلًا عادت فورًا دون تمرير.
+تُعد الدالة المدمجة `locator.scrollIntoView()` الحل الأمثل لسحب العناصر الموجودة خارج الإطار المرئي للشاشة (في الأسفل أو الأعلى) لتصبح ظاهرة للتفاعل. تتوافق هذه الدالة تماماً مع بيئتي (Android و iOS) ومتاحة لكل محدد، مما يُغنيك نهائياً عن برمجة حلقات معقدة لاجتياز الشاشات الطويلة. إذا كان العنصر مرئياً بالفعل، فلن تقوم الدالة بأي تمرير وستعود فوراً.
 
 ```ts
-// الافتراضي: التمرير للأسفل داخل الشاشة، بحدّ أقصى 10 تمريرات.
+// السلوك القياسي: التمرير للأسفل داخل الشاشة بمعدل 10 محاولات كحد أقصى.
 await device.getByText('Save changes').scrollIntoView();
 
-// إظهار شيء أعلى الموضع الحالي.
+// تمرير الشاشة للأعلى للكشف عن عنصر محدد.
 await device.getByLabel('Biometric login').scrollIntoView({ direction: 'up' });
 
-// التمرير داخل حاوية قابلة للتمرير بعينها بدل الشاشة كاملةً.
+// تحديد حاوية تمرير بعينها عوضاً عن تمرير كامل الشاشة.
 await device.getById('product-42').scrollIntoView({
   container: device.getById('catalog-list'),
   maxScrolls: 15
 });
 ```
 
-| الخيار | الافتراضي | الغرض |
+| المعامل | القيمة الافتراضية | التوضيح |
 | --- | --- | --- |
-| `direction` | `'down'` | اتجاه تمرير المحتوى نحو الهدف: `'down'` أو `'up'` أو `'left'` أو `'right'`. |
-| `maxScrolls` | `10` | أقصى عدد لإيماءات التمرير قبل الاستسلام. |
-| `durationMs` | `400` | مدة كل إيماءة تمرير. |
-| `container` | الشاشة | العنصر القابل للتمرير الذي يجري التمرير داخله. والافتراضي شاشة الجهاز، ويحلّها Astur حسب المنصة (شاشة iOS مقابل أبعاد الشجرة في Android). |
-| `timeout` / `interval` | افتراضيات الجلسة | تُمرَّر إلى انتظار الظهور النهائي. |
+| `direction` | `'down'` | مسار التمرير للكشف عن العنصر: يدعم `'down'`، `'up'`، `'left'` أو `'right'`. |
+| `maxScrolls` | `10` | السقف المسموح به لعدد الإيماءات قبل الإعلان عن تعذر العثور على العنصر. |
+| `durationMs` | `400` | المدة الزمنية المستغرقة لكل إيماءة (بالملي ثانية). |
+| `container` | نافذة الشاشة | العنصر الحاوي المُعد للتمرير داخله. يعتمد افتراضياً على شاشة الجهاز الكاملة (يعالجها Astur كشاشة في iOS وأبعاد الشجرة في Android). |
+| `timeout` / `interval` | مهلة الجلسة | تُنقل مباشرة لمعاملات انتظار الظهور النهائي بعد التمرير. |
 
-وإذا لم يظهر العنصر أبدًا، تُطلق `scrollIntoView()` خطأ مهلة يذكر المحدِّد واتجاه التمرير الذي جرّبه.
+إذا انقضت المحاولات دون العثور على العنصر، تطلق الدالة `scrollIntoView()` خطأ يوضح المحدد المنشود واتجاه التمرير الذي تم تجربته.
 
-وتقابل إدارة التطبيق أوامر مدير الحِزم في ADB:
+تتوافق أوامر إدارة التطبيقات بشكل مباشر مع أوامر مدير الحزم في ADB:
 
-- ‏`device.app.install(path?)` ← `adb install -r`
-- ‏`device.app.uninstall(packageName?)` ← `adb uninstall`
-- ‏`device.app.clearData(packageName?)` ← `pm clear`
-- ‏`device.app.clearCache(packageName?)` ← `pm clear --cache-only`
-- ‏`device.app.reset({ reinstall, launch })` ← إيقاف قسري مع إما `pm clear` أو إلغاء التثبيت وإعادته
-- ‏`device.permissions.grant(permission, packageName?)` ← `pm grant`
-- ‏`device.permissions.revoke(permission, packageName?)` ← `pm revoke`
+- `device.app.install(path?)` ← تعادل `adb install -r`
+- `device.app.uninstall(packageName?)` ← تعادل `adb uninstall`
+- `device.app.clearData(packageName?)` ← تعادل `pm clear`
+- `device.app.clearCache(packageName?)` ← تعادل `pm clear --cache-only`
+- `device.app.reset({ reinstall, launch })` ← تعادل فرض الإيقاف المتبوع بـ `pm clear` أو إجراء إزالة كاملة ومن ثم إعادة تنصيب
+- `device.permissions.grant(permission, packageName?)` ← تعادل `pm grant`
+- `device.permissions.revoke(permission, packageName?)` ← تعادل `pm revoke`
 
-وتُطبَّع أسماء الأذونات المختصرة مثل `camera` إلى ثوابت أذونات Android مثل `android.permission.CAMERA`؛ فمرّر نص الإذن الكامل حين تحتاج تحكمًا دقيقًا.
+تم تصميم النظام ليعالج اختصارات الأذونات الشائعة (مثل كلمة `camera`) ويقوم بترجمتها تلقائياً إلى قيم النظام المطولة كـ `android.permission.CAMERA`. إذا استدعت الحاجة تحكماً أعمق، لا تتردد بتمرير اسم الإذن بصيغته الكاملة.
 
-وتقابل مساعِدات حالة الجهاز أوامر شاشة القفل والطاقة في Android:
+آلية مساعِدات حالة الجهاز تتواصل مباشرة مع أوامر إدارة الطاقة والشاشة في Android:
 
-- ‏`device.lock()` / `device.system.lock()` ← `KEYCODE_SLEEP`
-- ‏`device.unlock()` / `device.system.unlock()` ← `KEYCODE_WAKEUP` مع `wm dismiss-keyguard`
-- ‏`device.isLocked()` / `device.system.isLocked()` ← حالة `dumpsys window` بعد تحليلها
+- `device.lock()` / `device.system.lock()` ← تُترجم لـ `KEYCODE_SLEEP`
+- `device.unlock()` / `device.system.unlock()` ← تُترجم لـ `KEYCODE_WAKEUP` مرفقاً بـ `wm dismiss-keyguard`
+- `device.isLocked()` / `device.system.isLocked()` ← تُقرأ عبر استخلاص حالة النظام من `dumpsys window`
 
-وتقبل مفاتيح نظام Android أسماء ودّية مثل `BACK` و `HOME` و `ENTER` و `MENU` و `APP_SWITCH` و `RECENTS` و `VOLUME_UP` و `VOLUME_DOWN`. كما تبقى رموز مفاتيح Android الخام مثل `KEYCODE_BACK` أو القيم الرقمية عاملةً.
+وتتيح مفاتيح النظام في Android استخدام مسميات مألوفة وواضحة مثل `BACK`، `HOME`، `ENTER`، `MENU`، `APP_SWITCH`، `RECENTS`، `VOLUME_UP`، و `VOLUME_DOWN`. وتظل الرموز التقليدية والأساسية (كـ `KEYCODE_BACK` أو القيم الرقمية) مدعومة وفعالة دون مشكلة.
 
-ومجموعة أمثلة Android مقسّمة حسب الوظيفة تحت `examples/specs`: ‏`login.test.ts` و `forms.test.ts` و `forms-slider.test.ts` و `media-upload.test.ts` و `tap-laboratory.test.ts` و `swipe.test.ts` و `drag-and-drop.test.ts` و `webview.test.ts`. وهي تتشارك تجهيزة التطبيق في `fixtures.ts` وملف كائن الصفحة الوحيد في `pages/astur-demo-app.page.ts`.
+يقدم مجلد `examples/specs` مجموعة وافية من اختبارات Android مصنفة حسب المهام: كاختبارات تسجيل الدخول `login.test.ts`، النماذج `forms.test.ts` و `forms-slider.test.ts`، إدارة الملفات `media-upload.test.ts`، والتفاعل المتخصص في `tap-laboratory.test.ts`، `swipe.test.ts`، `drag-and-drop.test.ts`، وصولاً إلى `webview.test.ts`. تتشارك كل هذه الاختبارات إعدادات الـ Fixtures من `fixtures.ts` وملف كائن صفحة مركزي `pages/astur-demo-app.page.ts`.
 
-## تحويل المحدِّدات
+## تحويلات ومكافئات المحددات (Selectors)
 
-| محدِّد Astur | مصدره في Android |
+| محددات Astur | الأصل المعادل في Android |
 | --- | --- |
-| `getByLabel()` / `by.label()` | `content-desc` أو معرّف المورد |
+| `getByLabel()` / `by.label()` | `content-desc` أو معرف المورد |
 | `getByTestId()` / `getById()` / `by.id()` | `resource-id` |
 | `getByText()` / `by.text()` | `text` أو `content-desc` |
-| `getByRole()` / `by.role()` | صنف الودجة في Android بعد التطبيع مع الاسم المتاح لإمكانية الوصول |
-| `getByType()` / `by.type()` | صنف Android |
+| `getByRole()` / `by.role()` | صنف الـWidget مقترناً بتسمية خصائص الوصول |
+| `getByType()` / `by.type()` | صنف (Class) الـWidget في Android |
 
-فضّل تسميات إمكانية الوصول ومعرّفات الموارد الثابتة.
+*نصيحة: احرص دائماً على الاعتماد على تسميات إمكانية الوصول ومعرفات الموارد الثابتة لضمان أفضل استقرارية لاختباراتك.*
 
-## مخرج الطوارئ للمحدِّد الأصلي (`by.native`)
+## الاستعلام المتقدم كخيار أخير: `by.native`
 
-للعنصر النادر الذي تعجز كل الاستراتيجيات أعلاه عن تثبيته — وغالبًا ما تكون
-شاشة بلا بيانات إمكانية وصول، حيث المطابقة الموثوقة الوحيدة تكون بالبنية أو
-بجمع عدة شروط معًا — تبني `by.native()` استعلام Android مباشرةً من حقول
-`By`/`BySelector` الخاصة بـ androidx.test.uiautomator، وهي الواجهة نفسها التي
-يستخدمها وكيل UiAutomator المرفق لكل استراتيجية أخرى:
+في السيناريوهات المعقدة والنادرة — عندما تعجز الطرق القياسية عن تثبيت هدفك بشكل صحيح، وخصوصاً في واجهات تفتقر لخصائص إمكانية الوصول حيث يُحتم الأمر استخدام محددات بنيوية أو شرطية مركبة — توفر أداة `by.native()` حلاً جذرياً بتمكينها لك من صياغة استعلام مباشر باستخدام معاملات `By`/`BySelector` المدعومة من `androidx.test.uiautomator`. وهي ذات الآلية التي يعتمد عليها وكيل UIAutomator الداخلي:
 
 ```ts
 await device.find(by.native({
   android: {
     className: 'android.widget.Button',
     textContains: 'Save',
-    // «زر Save داخل هذه البطاقة تحديدًا» بدل «زر Save الثالث
-    // على الشاشة كلها»:
+    // لتحديد "زر Save ضمن هذه البطاقة المعينة" بدل الاعتماد على ترتيب الزر (كالزر الثالث في الصفحة):
     hasChild: { resourceId: 'com.example:id/card_title' }
   }
 })).tap();
 
-// التمييز بين الأشقّاء المتطابقين بالموضع (يبدأ من 0، بعد تطبيق
-// كل قيود hasChild/hasDescendant):
+// للتمييز بين عناصر متماثلة استناداً لترتيبها (يبدأ العد من الصفر بعد استيفاء جميع الشروط):
 await device.find(by.native({
   android: { className: 'android.widget.TextView', text: 'Delete' },
   instance: 2
 })).tap();
 ```
 
-| حقل `AndroidNativeSelector` | يقابل |
+| حقل `AndroidNativeSelector` | الواجهة الأصلية المقابلة |
 | --- | --- |
 | `className` / `classNameMatches` | `BySelector.clazz(String \| Pattern)` |
 | `text` / `textContains` / `textMatches` | `BySelector.text()` / `.textContains()` / `.textMatches()` |
 | `description` / `descriptionContains` / `descriptionMatches` | `BySelector.desc()` / `.descContains()` / `.descMatches()` |
 | `resourceId` / `resourceIdMatches` | `BySelector.res(String \| Pattern)` |
 | `packageName` | `BySelector.pkg()` |
-| `hasChild` / `hasDescendant` | `BySelector.hasChild()` / `.hasDescendant()`، مع تضمين `AndroidNativeSelector` آخر |
+| `hasChild` / `hasDescendant` | `BySelector.hasChild()` / `.hasDescendant()` (مع إمكانية تضمين `AndroidNativeSelector` إضافي) |
 
-وكل حقل موجود يزيد تقييد الاستعلام نفسه (‏AND منطقي). وهذه عمدًا **ليست**
-لغة تعبير حرة — فلا `eval`، ولا محلّل خاص، ولا ترجمة bytecode أثناء التشغيل
-(بخلاف استراتيجية `-android uiautomator` في Appium التي تحتاج واحدة لتشغيل
-شيفرة Java/Kotlin حرفية). فكل شيء يقابل واحدًا بواحد دالةً حقيقية ومفحوصة
-الأنواع في `BySelector`.
+كل حقل تضيفه للاستعلام يتصرف كشرط تقييدي يضيق نطاق البحث (يُعادل المعامل المنطقي `AND`). وهذه التركيبة صُممت قصداً لتكون بيئة مقيدة **وليست** لغة برمجة حرة التنفيذ؛ فلا وجود لاستدعاءات `eval`، ولا محولات، ولا آليات لترجمة كود برمجي (Bytecode) أثناء التنفيذ — وهو ما يميزها عن استراتيجية `-android uiautomator` المستخدمة في Appium والتي تستلزم تشغيل كود حرفي لـ Java أو Kotlin. كل حقل هنا يقابل دالة مباشرة وحقيقية في مكتبة `BySelector`.
 
-وتتطلب `by.native()` وكيلًا أصليًا متصلًا — إذ لا يمكن حلّها مقابل لقطة
-مخزّنة لشجرة الواجهة، ولذلك تُطلق الجلسة القديمة أو التي بلا وكيل الخطأ
-`NATIVE_SELECTOR_REQUIRES_AGENT` بدل أن تطابق لا شيء بصمت. ولاستهداف iOS
-بالمحدِّد نفسه، أضف نص predicate في `ios` بجوار `android` — راجع
-[‏iOS: مخرج الطوارئ للمحدِّد الأصلي](../ios/).
+نُذكّر بأن استخدام `by.native()` يقتضي أن يكون الوكيل الأصلي متصلاً وفعالاً؛ إذ لا يمكن تمرير هذا الاستعلام لمعالجة لقطة شاشة مجردة. ولهذا السبب، فإن الجلسات المعتمدة على الأساليب القديمة ستعترض الخطأ `NATIVE_SELECTOR_REQUIRES_AGENT` عوضاً عن الفشل الصامت. إذا أردت توجيه الاستعلام ذاته نحو نظام iOS، كل ما عليك هو إضافة مُعرّف الـ Predicate أسفل وسم `ios` — لمعلومات أشمل، يُرجى الرجوع لـ [iOS: مخرج الطوارئ للمحدد الأصلي](../ios/).
