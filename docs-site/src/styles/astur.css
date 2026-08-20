@@ -438,10 +438,15 @@
   margin-bottom: 4rem;
   padding: clamp(3.5rem, 8vw, 6.5rem) clamp(1.5rem, 4vw, 3.5rem);
   
-  /* Break out of standard content container to full viewport width */
+  /* Break out of standard content container to full viewport width.
+     Symmetric margins rather than left/translateX: a 100vw block is wider than
+     its container, so the browser aligns it to the container's *start* edge —
+     which is the right edge under RTL. left:50% then pushed it further off,
+     leaving the Arabic hero shifted with its text clipped. Equal margins centre
+     it from either direction. */
   width: 100vw;
-  left: 50%;
-  transform: translateX(-50%);
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
   
   border: none;
   border-bottom: 1px solid var(--cyber-border-glass);
@@ -1928,4 +1933,64 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
 [dir='rtl'] .sl-markdown-content {
   font-size: 1.05em;
   line-height: 1.9;
+}
+
+/* ---------------------------------------------------------------------------
+   Arabic landing-page typography.
+
+   Two Latin-only habits actively damage Arabic text:
+
+   1. Positive `letter-spacing` pulls the letters of a cursive script apart, so
+      a joined word like "بيئة" renders as disconnected glyphs. It is not a
+      style choice in Arabic — it breaks the writing system. Reset to normal on
+      every element that carries Arabic; the badges that hold Latin strings
+      ("READY", "01 INSTALL", filenames) keep their tracking.
+   2. Negative `letter-spacing` plus a 1.1 line-height is tuned for Latin caps.
+      Arabic sits taller and needs the leading back, or diacritics collide with
+      the line above.
+   --------------------------------------------------------------------------- */
+
+[dir='rtl'] :is(
+  .cyber-badge,
+  .section-badge,
+  .astur-video-kicker,
+  .generated-code-badge,
+  .gradient-headline,
+  .section-headline,
+  .astur-video-copy strong,
+  .hero h1
+) {
+  letter-spacing: normal !important;
+}
+
+/* Monospace forces every glyph to one advance width, which breaks the cursive
+   join in Arabic the same way letter-spacing does — the eyebrow badges rendered
+   as detached letters. The Latin badges elsewhere (READY, 01 INSTALL, file
+   paths) keep their monospace; only these carry translated copy. */
+[dir='rtl'] :is(.cyber-badge, .section-badge, .astur-video-kicker) {
+  font-family: var(--sl-font, inherit) !important;
+  font-weight: 600 !important;
+}
+
+[dir='rtl'] .gradient-headline {
+  line-height: 1.35 !important;
+  /* Arabic descenders need a little room below the gradient-clipped text box. */
+  padding-bottom: 0.12em;
+}
+
+[dir='rtl'] .section-headline {
+  line-height: 1.45 !important;
+}
+
+[dir='rtl'] .futuristic-tagline,
+[dir='rtl'] .futuristic-tagline p,
+[dir='rtl'] .section-description {
+  line-height: 1.85 !important;
+}
+
+/* The terminal and generated-code blocks are Latin source; keep them LTR so
+   command lines and file paths do not reorder inside an RTL page. */
+[dir='rtl'] :is(.terminal-body, .generated-code-body, .cyber-terminal-mock pre) {
+  direction: ltr;
+  text-align: left;
 }
