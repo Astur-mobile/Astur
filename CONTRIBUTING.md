@@ -33,12 +33,24 @@ You'll also need the platform SDKs for the area you touch — see
 
 ## Translating the docs
 
-The docs site is bilingual: English at the root, Arabic under `/ar/`. Starlight
-falls back to English for any page without a translation, so a page can be added
-at a time and the site stays whole in between — a missing translation is never a
-dead link.
+The docs site is bilingual: English at the root, Arabic under `/ar/`. **Every
+page is translated**, and Starlight falls back to English for anything that is
+not — so a new page ships in one language without leaving a dead link, and can
+be translated afterwards.
 
-To translate a page:
+When you change an English page, update `docs/ar/<same-name>.md` in the same PR.
+The two are paired by file name, and their heading counts should match; that is
+the cheapest way to spot a section that was added on one side only:
+
+```bash
+for f in docs/ar/*.md; do
+  b=$(basename "$f")
+  en=$(grep -c '^#\{1,4\} ' "docs/$b"); ar=$(grep -c '^#\{1,4\} ' "$f")
+  [ "$en" != "$ar" ] && echo "$b: en=$en ar=$ar"
+done
+```
+
+To add a page:
 
 1. Copy the English source, e.g. `docs/cli.md` → `docs/ar/cli.md`, and translate
    the body. Keep the same file name; that is how the two are paired.
@@ -61,6 +73,12 @@ Conventions that keep the two versions readable:
 - Anchor links must point at the *Arabic* heading text on Arabic pages, e.g.
   `[الاعتراض](#الاعتراض-غير-متاح-بعد)`. The link checker in `docs:build`
   catches this.
+
+The four hand-written MDX pages (`index`, `why-astur`, `demo-app`,
+`architecture`) are not synced from `docs/`. Their Arabic versions live directly
+in `docs-site/src/content/docs/ar/`, mirroring how the English ones are authored.
+Keep the CSS class names and markup identical and translate only visible text —
+and remember that relative imports climb one level (`../images/…`).
 
 RTL styling lives at the bottom of `docs-site/src/styles/astur.css`. Prose
 mirrors; code, paths and CLI output stay left-to-right.

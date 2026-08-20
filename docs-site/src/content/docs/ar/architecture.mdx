@@ -1,0 +1,115 @@
+---
+title: البنية
+description: بنية Astur عالية المستوى ونموذج التنفيذ عبر الوكلاء الأصليين.
+sidebar:
+  order: 9
+---
+
+يُبقي Astur تجربة تأليف الاختبارات صغيرة، وينقل عمل الجوال المكلف إلى وكلاء منصة أصليين.
+
+<div class="architecture-map" aria-label="بنية Astur عالية المستوى">
+  <div class="architecture-stage">
+    <div class="flow-node primary">اختبار المستخدم<span>@astur-mobile/test</span></div>
+    <div class="flow-node">بيئة التشغيل الأساسية<span>المحدِّدات والانتظار والتأكيدات</span></div>
+    <div class="flow-node">البروتوكول<span>المحدِّدات والأوامر</span></div>
+  </div>
+
+  <div class="architecture-split">
+    <div class="architecture-lane">
+      <div class="lane-label">Android</div>
+      <div class="flow-node">مشغّل Android<span>دورة الحياة عبر ADB</span></div>
+      <div class="flow-node accent">وكيل UIAutomator<span>البحث والإجراءات أصليًا</span></div>
+      <div class="flow-node">تطبيق Android<span>التطبيق قيد الاختبار</span></div>
+    </div>
+
+    <div class="architecture-lane">
+      <div class="lane-label">iOS</div>
+      <div class="flow-node">مشغّل iOS<span>دورة الحياة عبر simctl و xcodebuild</span></div>
+      <div class="flow-node accent">وكيل XCUITest<span>البحث والإجراءات أصليًا</span></div>
+      <div class="flow-node">تطبيق iOS<span>التطبيق قيد الاختبار</span></div>
+    </div>
+  </div>
+</div>
+
+وتبقى الواجهة العامة بأسلوب Playwright:
+
+```ts
+await device.getByRole('button', { name: 'Sign in' }).tap();
+await expect(device.getByText('Welcome')).toBeVisible();
+```
+
+وتتولّى بيئة التشغيل تحت تلك الواجهة اختيار الجهاز، ودورة حياة التطبيق، والبحث عن المحدِّدات الأصلية، وفحوص قابلية التنفيذ، والإيماءات، ولقطات الشاشة، والفيديو، والتتبّعات، ودعم الـ inspector وتوليد الكود.
+
+ويحتفظ المصدر `docs/architecture.md` بمخططات Mermaid لقرّاء المستودع. أما وثائق Astro العامة فتستخدم نسخة MDX/CSS من الرسم نفسه، لأن Starlight لا يرسم كتل Mermaid تلقائيًا دون إضافة تكامل خاص بها.
+
+## لماذا هذا سريع
+
+تضيف الحزم التقليدية بأسلوب Appium خادم WebDriver بين الاختبار وإطار الأتمتة الأصلي. ويتفادى Astur طبقة ترجمة البروتوكول الإضافية هذه.
+
+<div class="astur-sequence" aria-label="تدفّق أوامر الإجراءات في Astur">
+  <div class="sequence-step"><strong>1</strong><span>الاختبار ينادي `getByLabel("Login").tap()`</span></div>
+  <div class="sequence-step"><strong>2</strong><span>‏Astur يرسل أمرًا أصليًا واحدًا: ابحث، وانتظر، وانقر</span></div>
+  <div class="sequence-step"><strong>3</strong><span>وكيل المنصة يحلّ وينفّذ محليًا</span></div>
+  <div class="sequence-step"><strong>4</strong><span>‏Astur يتلقّى نتيجة مضغوطة مع التوقيتات والتشخيصات</span></div>
+</div>
+
+فللإجراءات الشائعة يرسل Astur النيّة مرة واحدة. ويحلّها وكيل المنصة وينفّذها محليًا، فلا يضطر المضيف إلى سحب أشجار واجهة كبيرة مرارًا لمجرد إعادة محاولة محدِّد.
+
+## دورة الحياة مقابل التفاعل
+
+ما زال Astur يستخدم أدوات المنصة حيث تكون هي الأداة الصحيحة:
+
+- دورة حياة Android: يثبّت `adb` التطبيقات، ويشغّل الحِزم، ويلتقط لقطات الشاشة، ويسجّل الفيديو، ويجمع السجلات.
+- دورة حياة iOS: يدير `simctl` و `devicectl` و `xcodebuild` المحاكيات وتثبيت التطبيق وتشغيله ولقطات الشاشة ومشغّل XCUITest.
+- تفاعل العناصر: ينفّذ وكيلا Android و iOS الأصليان البحث والانتظار والنقر والتعبئة والسحب والتمرير وأوامر لوحة المفاتيح.
+- ‏Flutter (‏Android): عند اكتشاف حزمة APK من نوع Flutter، يقرأ Astur شجرة الودجات الحيّة عبر **خدمة Dart VM** بدل UIAutomator، بينما يتولّى ADB دورة الحياة والإيماءات. راجع [Flutter و React Native](../frameworks/).
+
+<div class="astur-split">
+  <section>
+    <h3>أدوات دورة الحياة</h3>
+    <p>تدير الأجهزة والتطبيقات ولقطات الشاشة والفيديو والسجلات عبر ADB و simctl و devicectl و xcodebuild.</p>
+  </section>
+  <section>
+    <h3>وكلاء أصليون دائمون</h3>
+    <p>ينفّذون استطلاع المحدِّدات وفحوص قابلية التنفيذ والإيماءات قريبًا من إطار واجهة المنصة.</p>
+  </section>
+</div>
+
+وهذا الفصل يُبقي دورة الحياة موثوقة دون وضع أوامر صدفة بطيئة في مسار تفاعل العناصر المعتاد.
+
+## الـ Inspector وتوليد الكود
+
+يستخدم الـ Inspector في Astur بيئة التشغيل ونموذج المحدِّدات نفسيهما اللذين تستخدمهما الاختبارات.
+
+<div class="astur-flow compact" aria-label="تدفّق الفاحص وتوليد الكود في Astur">
+  <div class="flow-node">الشاشة الحيّة</div>
+  <div class="flow-arrow">+</div>
+  <div class="flow-node">الشجرة الدلالية</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node accent">ترتيب المحدِّدات</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node primary">كود @astur-mobile/test</div>
+</div>
+
+ولا يخترع الـ inspector نظام محدِّدات ثانيًا. فحين يقترح محدِّدًا، أو يسجّل نقرة، أو يصدّر كودًا، يستخدم عقود المحدِّدات المحايدة تجاه المنصة نفسها التي تُنفَّذ أثناء تشغيل الاختبارات.
+
+## قواعد الموثوقية
+
+- فضّل المحدِّدات الدلالية على الإحداثيات.
+- أبقِ الاستطلاع الأصلي داخل وكيل المنصة.
+- استخدم لقطات الشاشة ولقطات الواجهة للتشخيص، لا كمسار تحكم افتراضي.
+- أبقِ وكيل منصة واحدًا حيًّا لكل عامل Playwright متى أمكن.
+- احجز جهازًا فعليًا واحدًا لكل عامل Playwright؛ فالتوازي الحقيقي يتطلب أجهزة متعددة.
+- وحين تستخدم الإعدادات محدِّد جهاز فضفاضًا، دع Astur يختار جهازًا مطابقًا متاحًا من المجمّع المحلي بدل توجيه كل العمّال إلى الجهاز الأول نفسه.
+- ولا تعد تشغيل التطبيق أو تصفيره بين ملفات الاختبار إلا حين يتطلب العزل ذلك.
+- وأبقِ متطلبات XCTest في iOS صريحة بدل إخفائها خلف WebDriver.
+
+## شكل الحِزم
+
+يثبّت معظم المستخدمين:
+
+```bash
+npm install -D @astur-mobile/test astur-mobile
+```
+
+تمنحك `@astur-mobile/test` تجهيزة Playwright والتأكيدات. وتمنحك `astur-mobile` واجهة الأوامر، بما فيها `doctor` و `devices` و `init` و `test` و `codegen`. أما الحِزم الداخلية مثل `@astur-mobile/core` و `@astur-mobile/android` و `@astur-mobile/ios` فتبقى منشورة كحِزم npm عادية كي يظل المشروع معياريًا، لكن المستخدمين النهائيين لا يحتاجون ربطها يدويًا.

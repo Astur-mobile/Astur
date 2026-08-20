@@ -131,6 +131,42 @@ const arabic = {
     title: 'المقارنة البصرية',
     description: 'قارن الشاشة بصورة مرجعية محفوظة، ليفشل الاختبار عند تغيّر المظهر بدلًا من أن يمر دون ملاحظة.'
   },
+  'inspector.md': {
+    title: 'الـ Inspector وتوليد الكود',
+    description: 'استخدم Astur Inspector لبثّ الأجهزة وفحص المحدِّدات وتسجيل التدفّقات وتصدير الاختبارات.'
+  },
+  'android.md': {
+    title: 'Android',
+    description: 'إعداد أجهزة Android والمحاكيات والتطبيقات والأذونات والأتمتة عبر الوكيل الأصلي.'
+  },
+  'ios.md': {
+    title: 'iOS',
+    description: 'إعداد محاكيات iOS والأتمتة عبر وكيل XCUITest ودورة حياة التطبيق وحدود المنصة.'
+  },
+  'configuration.md': {
+    title: 'الإعدادات',
+    description: 'إعدادات Astur في Playwright، والقدرات، وإدارة التطبيق، والمخرجات.'
+  },
+  'troubleshooting.md': {
+    title: 'حل المشكلات',
+    description: 'تشخيص مشكلات الأجهزة والتطبيقات والوكيل والـ Inspector وتنفيذ الاختبارات.'
+  },
+  'cli.md': {
+    title: 'مرجع واجهة الأوامر',
+    description: 'أوامر doctor و devices و init و codegen و inspect و test.'
+  },
+  'frameworks.md': {
+    title: 'Flutter و React Native',
+    description: 'أتمتة تطبيقات Flutter و React Native مع Astur — الإعداد، وما يعمل، والحدود التي يجب التخطيط لها.'
+  },
+  'roadmap.md': {
+    title: 'خارطة الطريق',
+    description: 'العمل المخطّط للوكلاء الأصليين والتشخيصات و CI وجاهزية الإصدار.'
+  },
+  'release-notes.md': {
+    title: 'ملاحظات الإصدار',
+    description: 'ما الجديد في كل إصدار من Astur.'
+  },
   'platform-limits.md': {
     title: 'حدود المنصات',
     description: 'حدود عملية في Android و iOS يوضّحها Astur صراحةً بدل إخفائها.'
