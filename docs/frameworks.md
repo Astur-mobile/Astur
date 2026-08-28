@@ -324,6 +324,11 @@ and TLS failures as new ways for unrelated tests to break.
 
 ## WebViews (DOM)
 
+> Testing a **website** in the device's own browser rather than a WebView inside
+> your app? That is `device.browser` — see [Mobile Web](../mobile-web/). Below
+> the page the two are the same machinery; the browser adds the target and
+> navigation.
+
 Hybrid apps embed a WebView whose DOM is invisible to the native accessibility tree. `device.webContext()` opens that DOM and drives it with **stable web locators** — the same ergonomics as the native API:
 
 ```ts

@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type {
+  BrowserCapabilities,
   Coordinates,
   DeviceFileEntry,
   DeviceInfo,
@@ -51,6 +52,20 @@ import { createInspectorSession, type RuntimeInspectorSessionOptions } from './i
 import { preparePointerTargetForKeyboard } from './keyboard.js';
 import { by, captureMaskedScreenshot, findElements, MobileLocator, screenshotKey } from './locator.js';
 import { WebContext, type WebEvaluator } from './webBridge.js';
+import {
+  browserUnsupported,
+  connectBrowserPage,
+  defaultBrowserEngine,
+  defaultBrowserId,
+  currentUrl,
+  markNavigation,
+  pageMatcher,
+  runNavigation,
+  settlePage,
+  waitForLoad,
+  DEFAULT_PAGE_TIMEOUT_MS,
+  REUSE_PROBE_MS
+} from './browser.js';
 import { delay } from './wait.js';
 
 export interface AsturScreenshotOptions extends ScreenshotOptions {
@@ -115,7 +130,20 @@ export interface PlatformSession {
   startRecording?(): Promise<void>;
   stopRecording?(options?: RecordingStopOptions): Promise<Buffer | undefined>;
   screenshot(): Promise<Buffer>;
+  /**
+   * Hands a URL to the OS. Deliberately not browser-specific — a deep link into
+   * the app under test goes through here too, which is why it stays `void` and
+   * does not try to find a page afterwards.
+   */
   openWeb(url: string): Promise<void>;
+  /**
+   * Launches the configured browser at a URL, rather than letting the OS pick a
+   * handler. Drivers that cannot target a browser omit this, and
+   * {@link AsturDevice.browser} reports it as unsupported.
+   */
+  openBrowser?(url: string): Promise<void>;
+  /** What this session can do with a browser, detected at runtime. */
+  getBrowserCapabilities?(): Promise<BrowserCapabilities>;
   pushFile?(localPath: string, remotePath: string): Promise<void>;
   pullFile?(remotePath: string): Promise<Buffer>;
   saveFile?(remotePath: string, localPath: string): Promise<void>;
@@ -333,6 +361,101 @@ export class AsturDevice {
      */
     clear: async (): Promise<void> => {
       await this.session.clearNetworkRequests?.();
+    }
+  };
+
+  /**
+   * The page currently open in the browser, if one has been opened.
+   *
+   * Held so navigation can dispose it before re-resolving, and so a suite that
+   * forgets to close is still cleaned up when the session ends.
+   */
+  private browserPage?: WebContext;
+
+  /**
+   * Drives a **browser** rather than the app under test — for testing a mobile
+   * web page on the same real device or emulator the native suite runs on.
+   *
+   * Everything below the page is the existing WebView machinery: once a tab is
+   * inspectable, the same injected-JS bridge drives it. What this adds is the
+   * target and navigation, which an in-app WebView never needed.
+   *
+   * Ask {@link browser.capabilities} before using it, the same way
+   * {@link network.capabilities} is asked, so a spec stays portable.
+   */
+  readonly browser = {
+    /** What this session can do with a browser. Never throws. */
+    capabilities: async (): Promise<BrowserCapabilities> => {
+      if (!this.session.getBrowserCapabilities || !this.session.openBrowser) {
+        return browserUnsupported(this.deviceInfo.platform, 'this driver has no browser target');
+      }
+
+      return this.session.getBrowserCapabilities();
+    },
+
+    /**
+     * Launches the browser at `url` and returns a context on the page.
+     *
+     * The returned context is the handle to use until the next navigation —
+     * each navigation re-resolves the page and returns a fresh one.
+     */
+    open: async (url: string, options?: { timeout?: number }): Promise<WebContext> => {
+      const capabilities = await this.browser.capabilities();
+      if (!capabilities.supported || !this.session.openBrowser) {
+        throw new AsturError('BROWSER_NOT_SUPPORTED', capabilities.coverage);
+      }
+
+      await this.closeBrowserPage();
+
+      // Reuse a tab when the browser is already running, and only fall back to
+      // the launch intent when nothing is attachable.
+      //
+      // Firing the intent every time is what a first version does, and it leaks:
+      // Chrome opens a *new* tab per VIEW intent and offers no way to close one
+      // over the debugging socket, so a suite that opens a page per test walks
+      // up to dozens of tabs and eventually cannot attach to any of them.
+      // Navigating in-page keeps one tab for the whole run.
+      const existing = await this.tryResolveBrowserPage(REUSE_PROBE_MS);
+      if (existing) {
+        return this.ensureAt(existing, url, options?.timeout);
+      }
+
+      // The launch only has to *start* the browser; it is not trusted to land on
+      // the URL, because Chrome dedupes a VIEW intent against an already-open
+      // tab and simply focuses it.
+      await this.session.openBrowser(url);
+      const page = await this.resolveBrowserPage(undefined, options?.timeout);
+      return this.ensureAt(page, url, options?.timeout);
+    },
+
+    /** Navigates the open page and returns it, now showing `url`. */
+    navigate: async (url: string, options?: { timeout?: number }): Promise<WebContext> => {
+      return this.ensureAt(this.requireBrowserPage(), url, options?.timeout);
+    },
+
+    reload: async (options?: { timeout?: number }): Promise<WebContext> => {
+      // Reload must come back to the same page, so reattach by URL rather than
+      // taking whichever tab answers first.
+      const current = await this.browser.url().catch(() => undefined);
+      return this.renavigate('location.reload()', options?.timeout, current);
+    },
+
+    back: async (options?: { timeout?: number }): Promise<WebContext> => {
+      return this.renavigate('history.back()', options?.timeout);
+    },
+
+    forward: async (options?: { timeout?: number }): Promise<WebContext> => {
+      return this.renavigate('history.forward()', options?.timeout);
+    },
+
+    /** The open page's current URL. */
+    url: async (): Promise<string> => {
+      return String(await this.requireBrowserPage().evaluate('location.href') ?? '');
+    },
+
+    /** Closes the page transport. The browser itself is left running. */
+    close: async (): Promise<void> => {
+      await this.closeBrowserPage();
     }
   };
 
@@ -680,7 +803,111 @@ export class AsturDevice {
     return new WebContext(await this.session.createWebEvaluator(selector));
   }
 
+  /**
+   * Re-resolves the page after a history navigation.
+   *
+   * No URL to match on here — where `back()` lands is exactly what the test is
+   * asking about — so this takes whichever page the browser now shows.
+   */
+  /**
+   * Runs a history navigation on the attached tab and waits for it to settle.
+   *
+   * Deliberately stays on the same target rather than re-resolving. A browser
+   * keeps every tab a suite has opened, several on the same URL, so "find the
+   * page again" is ambiguous in a way it never is for an app's single WebView —
+   * and picking wrong silently drives a frozen background tab. Chromium keeps
+   * one target across a same-tab navigation; if the transport does die, the
+   * re-resolve below is the fallback rather than the norm.
+   */
+  private async renavigate(expression: string, timeout?: number, expectUrl?: string): Promise<WebContext> {
+    const page = this.requireBrowserPage();
+    const token = await markNavigation(page);
+
+    await runNavigation(page, expression);
+
+    if (await settlePage(page, timeout ?? DEFAULT_PAGE_TIMEOUT_MS, { token, expectUrl })) {
+      return page;
+    }
+
+    await this.closeBrowserPage();
+    return this.resolveBrowserPage(expectUrl, timeout);
+  }
+
+  /**
+   * Brings the attached tab to `url`, navigating only if it is not already
+   * there — so an intent that happened to land correctly costs nothing.
+   */
+  private async ensureAt(page: WebContext, url: string, timeout?: number): Promise<WebContext> {
+    const timeoutMs = timeout ?? DEFAULT_PAGE_TIMEOUT_MS;
+    const alreadyThere = pageMatcher(url).test(await currentUrl(page) ?? '');
+    const token = await markNavigation(page);
+
+    // Load even when the tab already shows this URL. Reusing a tab is what keeps
+    // the browser from leaking one per test, but a reused tab still carries the
+    // previous test's DOM — a filled field, a submitted form — and skipping the
+    // load would silently hand that state to the next test.
+    await runNavigation(
+      page,
+      alreadyThere ? 'location.reload()' : `location.href = ${JSON.stringify(url)}`
+    );
+
+    if (await settlePage(page, timeoutMs, { token, expectUrl: url })) {
+      return page;
+    }
+
+    await this.closeBrowserPage();
+    return this.resolveBrowserPage(url, timeout);
+  }
+
+  /** Attaches to an already-open page, or resolves undefined. Never throws. */
+  private async tryResolveBrowserPage(timeoutMs: number): Promise<WebContext | undefined> {
+    if (!this.session.createWebEvaluator) {
+      return undefined;
+    }
+
+    return this.resolveBrowserPage(undefined, timeoutMs).catch(() => undefined);
+  }
+
+  private async resolveBrowserPage(url: string | undefined, timeout?: number): Promise<WebContext> {
+    if (!this.session.createWebEvaluator) {
+      throw new AsturError(
+        'BROWSER_NOT_SUPPORTED',
+        `${this.deviceInfo.platform} has no DOM transport, so a browser page cannot be driven.`
+      );
+    }
+
+    const timeoutMs = timeout ?? DEFAULT_PAGE_TIMEOUT_MS;
+    const page = await connectBrowserPage(
+      (selector) => this.session.createWebEvaluator!(selector),
+      { url, timeoutMs }
+    );
+
+    // Settle before handing the page over, so the first assertion is not racing
+    // a document that is still parsing.
+    await waitForLoad(page, timeoutMs);
+    this.browserPage = page;
+    return page;
+  }
+
+  private requireBrowserPage(): WebContext {
+    if (!this.browserPage) {
+      throw new AsturError(
+        'BROWSER_PAGE_NOT_OPEN',
+        'No browser page is open. Call device.browser.open(url) first.'
+      );
+    }
+
+    return this.browserPage;
+  }
+
+  private async closeBrowserPage(): Promise<void> {
+    const page = this.browserPage;
+    this.browserPage = undefined;
+    await page?.close().catch(() => undefined);
+  }
+
   async close(): Promise<void> {
+    await this.closeBrowserPage();
     await this.session.close();
   }
 }

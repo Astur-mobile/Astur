@@ -24,6 +24,7 @@ export function normalizeCapabilities(config: AsturConfig): NormalizedCapabiliti
     platform: config.platform,
     device: config.device ?? {},
     app: normalizeApp(config.app),
+    ...(config.browser ? { browser: config.browser } : {}),
     timeout: config.timeout ?? 10_000,
     artifactsDir: config.artifactsDir ?? 'test-results/astur',
     artifacts: config.artifacts ?? {},

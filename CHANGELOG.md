@@ -3,6 +3,57 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## Unreleased
+
+### Added
+
+- **`device.browser` — drive a web page in the device's browser**
+  ([#25](https://github.com/Astur-mobile/Astur/issues/25)). Chrome on Android and
+  Safari on iOS, on the same emulator, simulator or real device the native suite
+  runs on.
+
+  ```ts
+  const page = await device.browser.open('https://example.com/pricing');
+  await expect(page.getByRole('heading', { name: 'Pricing' })).toBeVisible();
+  ```
+
+  `open`, `navigate`, `reload`, `back`, `forward`, `url`, and `capabilities` —
+  the last answering on every platform so a spec can `test.skip()` with a reason
+  the way `device.network` already allows. Each navigation returns the live
+  `WebContext`, the same object `device.webContext()` yields, so every locator
+  and action works unchanged.
+
+  Set `browser` instead of `app` and the session becomes **browser-only**: no app
+  install, and the native agent becomes optional rather than required — on iOS
+  that is the difference between opening a web page and needing a signing
+  identity first.
+
+  Three things this needed beyond the existing DOM transport:
+
+  - **One tab for the whole run.** Chrome opens a new tab per VIEW intent and
+    offers no way to close one over the debugging socket, so launching per test
+    walked up to dozens of tabs until nothing was attachable. `open()` now
+    reuses an open tab and navigates in-page, and always reloads — a reused tab
+    still carries the previous test's DOM.
+  - **Settling on the document, not the URL.** A reload leaves the URL identical,
+    so a URL-based wait returns instantly and hands back the *old* page. Astur
+    plants a token on `window` and waits for it to disappear, which is exactly
+    when the document is replaced.
+  - **First-run detection.** Chrome publishes no debugging socket until its
+    welcome flow is done, so a fresh emulator would wait for a page that never
+    appears. Reported as `BROWSER_FIRST_RUN_PENDING` instead.
+
+  `doctor` reports browser readiness on both platforms. See
+  [Mobile Web](https://astur-mobile.github.io/Astur/mobile-web/).
+
+### Fixed
+
+- **An app's WebView could be driven through the browser instead.** Android names
+  the sockets `webview_devtools_remote_<pid>` and `chrome_devtools_remote`, and
+  they sort alphabetically — so with Chrome running, `device.webContext()`
+  attached to the browser rather than the app under test. Sockets are now ordered
+  by what the caller asked for.
+
 ## 0.5.0-beta.5
 
 ### Added

@@ -80,6 +80,13 @@ const pages = [
     order: 10
   },
   {
+    source: 'docs/mobile-web.md',
+    target: 'mobile-web.md',
+    title: 'Mobile Web',
+    description: "Drive a web page in the device's browser — Chrome on Android, Safari on iOS — on the same devices your native suite runs on.",
+    order: 12
+  },
+  {
     source: 'docs/visual-comparison.md',
     target: 'visual-comparison.md',
     title: 'Visual Comparison',

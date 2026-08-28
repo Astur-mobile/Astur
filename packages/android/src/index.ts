@@ -58,9 +58,13 @@ import {
   DEFAULT_METRO_URL,
   REACT_NATIVE_NETWORK_CAPABILITIES,
   ReactNativeNetworkObserver,
+  browserUnsupported,
+  defaultBrowserId,
   preparePointerTargetForKeyboard,
   waitFor,
   CdpWebEvaluator,
+  type BrowserCapabilities,
+  type BrowserEngine,
   type NativeAgentClient,
   type PlatformDriver,
   type PlatformSession,
@@ -175,6 +179,33 @@ export class AndroidDriver implements PlatformDriver {
         message: error instanceof Error ? error.message : String(error),
         fix: 'Ensure the Android emulator binary is on PATH.'
       });
+    }
+
+    // Browser-target readiness. Only meaningful with a device attached, and a
+    // missing browser is a warning rather than a failure: most suites drive an
+    // app and never touch it.
+    try {
+      const devices = await this.listDevices();
+      const online = devices.find((device) => device.state === 'online');
+      if (online) {
+        const installed = await runText(this.adbPath, ['-s', online.id, 'shell', 'pm', 'list', 'packages', 'com.android.chrome'])
+          .then((output) => output.includes('package:com.android.chrome'))
+          .catch(() => false);
+
+        checks.push({
+          id: 'android.browser',
+          label: 'Android browser target',
+          status: installed ? 'pass' : 'warn',
+          message: installed
+            ? 'com.android.chrome is installed and can be driven with device.browser.'
+            : 'Chrome is not installed, so device.browser has no target on this device.',
+          fix: installed
+            ? undefined
+            : 'Use a system image that bundles Chrome, or install it, to test mobile web pages.'
+        });
+      }
+    } catch {
+      // Device listing already reports its own failure below; do not double-report.
     }
 
     try {
@@ -1489,6 +1520,75 @@ class AndroidSession implements PlatformSession {
     await this.adb(['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url]);
   }
 
+  /** Package id of the browser this session drives. */
+  private browserPackage(): string {
+    return this.capabilities.browser?.id ?? defaultBrowserId(this.browserEngine());
+  }
+
+  private browserEngine(): BrowserEngine {
+    return this.capabilities.browser?.engine ?? 'chrome';
+  }
+
+  async getBrowserCapabilities(): Promise<BrowserCapabilities> {
+    const engine = this.browserEngine();
+    if (engine !== 'chrome') {
+      return browserUnsupported('android', `${engine} does not run on Android; use engine 'chrome'`);
+    }
+
+    const identifier = this.browserPackage();
+    const installed = await this.adbText(['shell', 'pm', 'list', 'packages', identifier])
+      .then((output) => output.includes(`package:${identifier}`))
+      .catch(() => false);
+
+    if (!installed) {
+      return browserUnsupported('android', `${identifier} is not installed on this device`);
+    }
+
+    return {
+      supported: true,
+      engine,
+      identifier,
+      coverage: `Chromium DOM in ${identifier} over the Chrome DevTools Protocol; `
+        + "the browser's own UI (address bar, tabs) is native and not part of the page"
+    };
+  }
+
+  async openBrowser(url: string): Promise<void> {
+    const identifier = this.browserPackage();
+    // `-p` restricts the VIEW intent to this package, so a device with several
+    // browsers installed cannot answer with a chooser or the wrong one.
+    await this.adb([
+      'shell', 'am', 'start',
+      '-a', 'android.intent.action.VIEW',
+      '-d', url,
+      '-p', identifier
+    ]);
+
+    await this.assertBrowserPastFirstRun(identifier);
+  }
+
+  /**
+   * Chrome opens no tab, and publishes no DevTools socket, until its first-run
+   * flow is done — so a fresh emulator hangs on a welcome screen while the test
+   * waits for a page that will never appear. Detected here so the failure names
+   * the cause instead of timing out.
+   */
+  private async assertBrowserPastFirstRun(identifier: string): Promise<void> {
+    const activity = await this.adbText(['shell', 'dumpsys', 'activity', 'activities'])
+      .catch(() => '');
+
+    if (!/FirstRunActivity|firstrun/i.test(activity)) {
+      return;
+    }
+
+    throw new AsturError(
+      'BROWSER_FIRST_RUN_PENDING',
+      `${identifier} is showing its first-run screen, so it has no tab to drive. `
+      + 'Open the browser once on this device and complete the welcome flow '
+      + '(it is remembered per device/emulator image), then re-run.'
+    );
+  }
+
   async listContexts(): Promise<MobileContextInfo[]> {
     const sockets = parseAndroidWebViewSockets(await this.adbText(['shell', 'cat', '/proc/net/unix']));
 
@@ -1513,9 +1613,10 @@ class AndroidSession implements PlatformSession {
 
     while (Date.now() - startedAt <= timeout) {
       const sockets = parseAndroidWebViewSockets(await this.adbText(['shell', 'cat', '/proc/net/unix']).catch(() => ''));
-      const candidates = selector.id
-        ? sockets.filter((socket) => socket === selector.id)
-        : sockets;
+      const candidates = orderSocketsForTarget(
+        selector.id ? sockets.filter((socket) => socket === selector.id) : sockets,
+        selector.target ?? 'webview'
+      );
 
       for (const socket of candidates) {
         const port = await this.forwardWebView(socket);
@@ -1529,7 +1630,12 @@ class AndroidSession implements PlatformSession {
           };
         }
 
-        for (const target of targets) {
+        // DevTools lists targets oldest-first, so the newest match is the last
+        // one. Reversing only when asked keeps in-app WebView behaviour byte for
+        // byte what it was.
+        const ordered = selector.newest ? [...targets].reverse() : targets;
+
+        for (const target of ordered) {
           const context = webViewContextFromTarget(socket, target);
           lastContexts.push(context);
 
@@ -2046,6 +2152,24 @@ function webViewContextFromTarget(socket: string, target: DevtoolsTarget): Mobil
     socket,
     pageId: target.id
   };
+}
+
+/** True for the browser's own debugging socket, as opposed to an app WebView's. */
+export function isBrowserSocket(socket: string): boolean {
+  return socket.startsWith('chrome_devtools_remote');
+}
+
+/**
+ * Puts the sockets the caller actually wants first.
+ *
+ * Both kinds can be present at once — a suite that drives an app WebView while
+ * Chrome happens to be open — and they sort alphabetically, which silently puts
+ * the browser first. Neither is filtered out, because a device may name its
+ * WebView socket in a way this cannot predict; only the order changes.
+ */
+export function orderSocketsForTarget(sockets: string[], target: 'webview' | 'browser'): string[] {
+  const wanted = (socket: string) => isBrowserSocket(socket) === (target === 'browser');
+  return [...sockets].sort((left, right) => Number(wanted(right)) - Number(wanted(left)));
 }
 
 function matchesWebViewSelector(context: MobileContextInfo, selector: WebViewSelector): boolean {

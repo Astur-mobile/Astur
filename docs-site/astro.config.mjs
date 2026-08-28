@@ -94,6 +94,7 @@ export default defineConfig({
             { label: 'Flutter & React Native', translations: { ar: 'Flutter و React Native' }, slug: 'frameworks' },
             { label: 'Network Observation', translations: { ar: 'مراقبة الشبكة' }, slug: 'network' },
             { label: 'Visual Comparison', translations: { ar: 'المقارنة البصرية' }, slug: 'visual-comparison' },
+            { label: 'Mobile Web', translations: { ar: 'الويب على الجوال' }, slug: 'mobile-web' },
             { label: 'Configuration', translations: { ar: 'الإعدادات' }, slug: 'configuration' },
             { label: 'Troubleshooting', translations: { ar: 'حل المشكلات' }, slug: 'troubleshooting' }
           ]

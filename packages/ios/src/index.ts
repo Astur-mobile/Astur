@@ -50,6 +50,11 @@ import {
   DEFAULT_METRO_URL,
   REACT_NATIVE_NETWORK_CAPABILITIES,
   ReactNativeNetworkObserver,
+  browserUnsupported,
+  defaultBrowserId,
+  isBrowserOnlySession,
+  type BrowserCapabilities,
+  type BrowserEngine,
   type NativeAgentClient,
   type NetworkCapabilities,
   type NetworkRedactionOptions,
@@ -269,6 +274,26 @@ interface DevicectlLockStateJson {
   };
 }
 
+/**
+ * ios-webkit-debug-proxy is what bridges WebKit's inspector to a CDP-like
+ * transport. Without it there is no DOM on iOS — for a browser target *or* an
+ * in-app WKWebView — so it is worth reporting before a suite discovers it.
+ */
+async function iwdpDoctorCheck(): Promise<DoctorCheck> {
+  const binary = process.env.ASTUR_IWDP_PATH ?? 'ios_webkit_debug_proxy';
+  const found = await runText(binary, ['--help']).then(() => true).catch(() => false);
+
+  return {
+    id: 'ios.browser',
+    label: 'iOS browser / WebView DOM',
+    status: found ? 'pass' : 'warn',
+    message: found
+      ? `${binary} is available; device.browser and device.webContext can drive Safari and WKWebViews.`
+      : `${binary} was not found, so DOM automation is unavailable on iOS.`,
+    fix: found ? undefined : 'brew install ios-webkit-debug-proxy (v1.9+ for simulator support).'
+  };
+}
+
 export function createIosDriver(options: IosDriverOptions = {}): IosDriver {
   return new IosDriver(options);
 }
@@ -380,6 +405,10 @@ export class IosDriver implements PlatformDriver {
         : 'Keep agents/ios-xctest-agent available when running from source or install the published @astur-mobile/ios package assets.'
     });
 
+    // Safari is always present on iOS, so the useful check is the transport the
+    // DOM rides on rather than the browser itself.
+    checks.push(await iwdpDoctorCheck());
+
     return checks;
   }
 
@@ -440,7 +469,9 @@ export class IosDriver implements PlatformDriver {
 
     const readyDevice = await this.ensureDeviceReady(device, resolvedCapabilities.device);
     const preAgentSession = new IosSession(this.xcrunPath, readyDevice, resolvedCapabilities);
-    await ensureIosAppInstalled(preAgentSession, resolvedCapabilities);
+    if (!isBrowserOnlySession(resolvedCapabilities)) {
+      await ensureIosAppInstalled(preAgentSession, resolvedCapabilities);
+    }
 
     const nativeAgent = await this.resolveNativeAgent(resolvedCapabilities, readyDevice);
     // Read from the bundle on disk, because iOS exposes no runtime signal for
@@ -499,6 +530,15 @@ export class IosDriver implements PlatformDriver {
   ): Promise<IosNativeAgentRuntime | undefined> {
     if (capabilities.agent.mode === 'off') {
       return undefined;
+    }
+
+    // A browser-only session drives the DOM, not the native tree, and has no app
+    // under test for the agent to bind to. Requiring a buildable XCUITest agent
+    // there would make "open a web page" depend on Xcode signing for no benefit,
+    // so the agent becomes best-effort: present, native locators work too;
+    // absent, the session is DOM-only rather than dead.
+    if (isBrowserOnlySession(capabilities)) {
+      return this.tryBootstrapBundledNativeAgent(capabilities, device).catch(() => undefined);
     }
 
     const endpoint = capabilities.agent.endpoint ?? process.env.ASTUR_IOS_AGENT_ENDPOINT;
@@ -1553,6 +1593,40 @@ class IosSession implements PlatformSession {
     } finally {
       await unlink(recording.path).catch(() => undefined);
     }
+  }
+
+  private browserEngine(): BrowserEngine {
+    return this.capabilities.browser?.engine ?? 'safari';
+  }
+
+  private browserBundleId(): string {
+    return this.capabilities.browser?.id ?? defaultBrowserId(this.browserEngine());
+  }
+
+  async getBrowserCapabilities(): Promise<BrowserCapabilities> {
+    const engine = this.browserEngine();
+    if (engine !== 'safari') {
+      return browserUnsupported('ios', `${engine} cannot be driven on iOS; use engine 'safari'`);
+    }
+
+    const identifier = this.browserBundleId();
+    const real = this.isRealDevice();
+
+    return {
+      supported: true,
+      engine,
+      identifier,
+      coverage: 'WKWebView DOM in Safari over the WebKit remote inspector (ios-webkit-debug-proxy); '
+        + "Safari's own UI (address bar, tabs) is native and not part of the page"
+        + (real ? '. A real device also needs Settings > Safari > Advanced > Web Inspector enabled' : '')
+    };
+  }
+
+  async openBrowser(url: string): Promise<void> {
+    // Safari *is* the URL handler on iOS, so this is the same call `openWeb`
+    // makes — the distinction exists so a driver that cannot target a browser
+    // can omit it while still opening deep links.
+    await this.openWeb(url);
   }
 
   async openWeb(url: string): Promise<void> {
