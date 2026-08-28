@@ -104,7 +104,7 @@ export default defineConfig({
           items: [
             { label: 'CLI', translations: { ar: 'واجهة الأوامر CLI' }, slug: 'cli' },
             { label: 'Architecture', translations: { ar: 'البنية' }, slug: 'architecture' },
-            { label: 'Platform Limits', translations: { ar: 'حدود المنصات' }, slug: 'platform-limits' },
+            { label: 'Platform Limits', translations: { ar: 'قيود المنصات' }, slug: 'platform-limits' },
             { label: 'Release Notes', translations: { ar: 'ملاحظات الإصدار' }, slug: 'release-notes' },
             { label: 'Roadmap', translations: { ar: 'خارطة الطريق' }, slug: 'roadmap' }
           ]
