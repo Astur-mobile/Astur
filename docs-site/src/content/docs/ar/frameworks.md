@@ -309,6 +309,6 @@ const tree = await web.snapshot(); // شجرة DOM كاملة مع أفضل ال
 | --- | --- | --- |
 | ‏Android (‏Flutter + RN) | ‏Chromium WebView · Chrome DevTools Protocol | **يعمل** — فعّل `setWebContentsDebuggingEnabled(true)` (‏`WebView.enableDebugging` على Android / بناءات debug في RN) |
 | جهاز iOS حقيقي | ‏WKWebView · WebKit RWI عبر `ios-webkit-debug-proxy` | **يعمل** — ‏`WKWebView.isInspectable = true` (‏iOS 16.4 فأعلى) + الإعدادات ▸ Safari ▸ متقدم ▸ Web Inspector، مع `brew install ios-webkit-debug-proxy` |
-| محاكي iOS | ‏WKWebView · `webinspectord_sim` | **ليس بعد** — إذ يجسر `ios-webkit-debug-proxy` الأجهزة الفعلية فقط؛ وعميل محاكي مباشر مدرج في خارطة الطريق |
+| محاكي iOS | ‏WKWebView · `webinspectord_sim` | **يعمل** — يتطلب `WKWebView.isInspectable = true` (‏iOS 16.4+) و `brew install ios-webkit-debug-proxy`. ويحدد Astur مقبس المحاكي الخاص به ويشغّله عبر الوضع `-s` في iwdp تلقائياً، فلا حاجة لأي إعداد إضافي |
 
 راجع [حدود المنصات](../platform-limits/) للمرجع الكامل لحدود Android و iOS، و[الـ Inspector وتوليد الكود](../inspector/) لحلقة التأليف الحيّة.

@@ -442,9 +442,10 @@ await expect.soft(device.getByText('Optional banner')).toBeHidden();
 Native `MobileLocator` matchers:
 
 - `toBeVisible`, `toBeHidden`, `toExist`
-- `toBeEnabled`, `toBeDisabled`, `toBeSelected`, `toBeFocused`
-- `toHaveText`, `toContainText`, `toHaveValue`
-- `toHaveLabel`, `toHaveType`, `toHaveBounds`
+- `toBeEnabled`, `toBeDisabled`, `toBeSelected`, `toBeFocused`, `toBeChecked`
+- `toHaveText`, `toContainText`, `toHaveValue`, `toBeEmpty`
+- `toHaveLabel`, `toHaveType`, `toHaveBounds`, `toHaveCount`
+- `toHaveScreenshot` — see [Visual Comparison](../visual-comparison/)
 
 ## Soft Keyboard Handling
 

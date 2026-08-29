@@ -367,6 +367,6 @@ Transport per platform:
 | --- | --- | --- |
 | Android (Flutter + RN) | Chromium WebView · Chrome DevTools Protocol | **Works** — enable `setWebContentsDebuggingEnabled(true)` (Android `WebView.enableDebugging` / RN debug builds) |
 | iOS real device | WKWebView · WebKit RWI via `ios-webkit-debug-proxy` | **Works** — `WKWebView.isInspectable = true` (iOS 16.4+) + Settings ▸ Safari ▸ Advanced ▸ Web Inspector, and `brew install ios-webkit-debug-proxy` |
-| iOS simulator | WKWebView · `webinspectord_sim` | **Not yet** — `ios-webkit-debug-proxy` bridges physical devices only; a direct simulator client is on the roadmap |
+| iOS simulator | WKWebView · `webinspectord_sim` | **Works** — `WKWebView.isInspectable = true` (iOS 16.4+) and `brew install ios-webkit-debug-proxy`. Astur locates the per-simulator socket and drives it through iwdp's `-s` mode automatically, so nothing else is needed |
 
 See [Platform Limits](../platform-limits/) for the full Android/iOS boundary reference, and [Inspector And Codegen](../inspector/) for the live authoring loop.

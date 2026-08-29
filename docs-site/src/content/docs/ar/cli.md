@@ -159,6 +159,18 @@ npx astur-mobile codegen --ios --real --device <device-udid> --app ./MyApp.ipa -
 - `--no-launch`
 - `--json`
 
+## `screenshot`
+
+يلتقط شاشة جهاز متصل ويحفظها بصيغة PNG، دون كتابة أي اختبار.
+
+```bash
+npx astur-mobile screenshot
+npx astur-mobile screenshot -o home.png
+npx astur-mobile screenshot --android --device emulator-5554
+```
+
+يقبل خيارات اختيار الجهاز نفسها التي يقبلها `codegen`. ولا يثبّت شيئاً ولا يشغّل شيئاً — فالتقاط الشاشة يجب ألا يغيّر ما عليها.
+
 ## `inspect`
 
 اسم رديف (Alias) يُستخدم كبديل للأمر `codegen`.

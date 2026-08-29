@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const outputDir = resolve(root, 'docs-site/src/content/docs');
-const arabicOutputDir = resolve(root, 'docs-site/src/content/docs/ar');
+const localeOutputDir = (code) => resolve(root, `docs-site/src/content/docs/${code}`);
 const imagesSourceDir = resolve(root, 'docs/images');
 const imagesTargetDir = resolve(root, 'docs-site/src/content/docs/images');
 
@@ -195,8 +195,90 @@ const arabic = {
   }
 };
 
+const spanish = {
+  'getting-started.md': {
+    title: 'Primeros pasos',
+    description: 'Instala Astur, inspecciona una app en ejecución y lanza tu primer test móvil.'
+  },
+  'prerequisites.md': {
+    title: 'Requisitos previos',
+    description: 'Lo que necesitan tu equipo, Android e iOS para ejecutar Astur en local.'
+  },
+  'network.md': {
+    title: 'Observación de red',
+    description: 'Observa las peticiones HTTP que hace tu app durante el test: qué pidió, qué respondió y cuánto tardó.'
+  },
+  'visual-comparison.md': {
+    title: 'Comparación visual',
+    description: 'Compara la pantalla con una imagen de referencia, para que un cambio de aspecto falle el test en lugar de pasar desapercibido.'
+  },
+  'inspector.md': {
+    title: 'Inspector y codegen',
+    description: 'Usa el Inspector de Astur para ver dispositivos en vivo, examinar localizadores, grabar flujos y exportar tests.'
+  },
+  'android.md': {
+    title: 'Android',
+    description: 'Dispositivos, emuladores, apps, permisos y automatización mediante el agente nativo.'
+  },
+  'ios.md': {
+    title: 'iOS',
+    description: 'Simuladores, automatización con el agente XCUITest, ciclo de vida de la app y límites de la plataforma.'
+  },
+  'configuration.md': {
+    title: 'Configuración',
+    description: 'La configuración de Astur en Playwright: capacidades, gestión de la app y artefactos.'
+  },
+  'troubleshooting.md': {
+    title: 'Resolución de problemas',
+    description: 'Diagnostica problemas de dispositivo, app, agente, Inspector y ejecución de tests.'
+  },
+  'cli.md': {
+    title: 'Referencia de la CLI',
+    description: 'Los comandos doctor, devices, init, codegen, inspect, screenshot y test.'
+  },
+  'frameworks.md': {
+    title: 'Flutter y React Native',
+    description: 'Automatiza apps de Flutter y React Native con Astur: preparación, qué funciona y con qué límites contar.'
+  },
+  'roadmap.md': {
+    title: 'Hoja de ruta',
+    description: 'Lo que ya está hecho, lo que falta y en qué orden viene lo siguiente.'
+  },
+  'release-notes.md': {
+    title: 'Notas de versión',
+    description: 'Qué trae cada versión de Astur.'
+  },
+  'locators.md': {
+    title: 'Localizadores',
+    description: 'Encuentra un elemento, o reduce una pantalla llena de filas repetidas hasta la que querías.'
+  },
+  'mobile-web.md': {
+    title: 'Web móvil',
+    description: 'Controla una página en el navegador del dispositivo — Chrome en Android, Safari en iOS — en los mismos dispositivos donde corre tu suite nativa.'
+  },
+  'platform-limits.md': {
+    title: 'Límites de plataforma',
+    description: 'Límites reales de Android e iOS que Astur declara en vez de disimular.'
+  }
+};
+
+/**
+ * Translated locales, in sidebar order.
+ *
+ * A locale is nothing but a directory of translated markdown plus a title and
+ * description per page; everything else — ordering, frontmatter, image path
+ * rewriting — is shared. Adding a language means adding an entry here and a
+ * `docs/<code>/` directory, not another copy of the sync logic.
+ */
+const locales = [
+  { code: 'ar', meta: arabic },
+  { code: 'es', meta: spanish }
+];
+
 await mkdir(outputDir, { recursive: true });
-await mkdir(arabicOutputDir, { recursive: true });
+for (const locale of locales) {
+  await mkdir(localeOutputDir(locale.code), { recursive: true });
+}
 await rm(resolve(outputDir, 'architecture.md'), { force: true });
 
 for (const page of pages) {
@@ -210,19 +292,23 @@ for (const page of pages) {
     'utf8'
   );
 
-  // Arabic, when a translated source exists under docs/ar/.
-  const arabicSource = resolve(root, 'docs/ar', page.target);
-  const meta = arabic[page.target];
-  if (meta && await pathExists(arabicSource)) {
-    const arabicRaw = await readFile(arabicSource, 'utf8');
-    // Arabic pages live one directory deeper, so `./images/x.png` in the
+  // Each translation, where a translated source exists for this page.
+  for (const locale of locales) {
+    const translatedSource = resolve(root, 'docs', locale.code, page.target);
+    const meta = locale.meta[page.target];
+    if (!meta || !(await pathExists(translatedSource))) {
+      continue;
+    }
+
+    const translatedRaw = await readFile(translatedSource, 'utf8');
+    // Translated pages live one directory deeper, so `./images/x.png` in the
     // source has to climb out to reach the mirrored images directory.
-    const arabicBody = stripLeadingFrontmatter(stripFirstHeading(arabicRaw))
+    const translatedBody = stripLeadingFrontmatter(stripFirstHeading(translatedRaw))
       .trimStart()
       .replaceAll('](./images/', '](../images/');
     await writeFile(
-      resolve(arabicOutputDir, page.target),
-      `${buildFrontmatter(meta.title, meta.description, page.order)}${arabicBody}`,
+      resolve(localeOutputDir(locale.code), page.target),
+      `${buildFrontmatter(meta.title, meta.description, page.order)}${translatedBody}`,
       'utf8'
     );
   }

@@ -158,6 +158,18 @@ Flags:
 - `--no-launch`
 - `--json`
 
+## `screenshot`
+
+Captures the screen of a connected device to a PNG, without writing a test.
+
+```bash
+npx astur-mobile screenshot
+npx astur-mobile screenshot -o home.png
+npx astur-mobile screenshot --android --device emulator-5554
+```
+
+Takes the same device-selection flags as `codegen`. It installs and launches nothing — capturing a screen should never change what is on it.
+
 ## `inspect`
 
 Alias for `codegen`.

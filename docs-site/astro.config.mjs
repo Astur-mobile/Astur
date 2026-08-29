@@ -27,7 +27,8 @@ export default defineConfig({
       defaultLocale: 'root',
       locales: {
         root: { label: 'English', lang: 'en' },
-        ar: { label: 'العربية', lang: 'ar', dir: 'rtl' }
+        ar: { label: 'العربية', lang: 'ar', dir: 'rtl' },
+        es: { label: 'Español', lang: 'es' }
       },
       logo: {
         dark: '../packages/cli/assets/brand/astur-logo-dark.png',
@@ -75,40 +76,40 @@ export default defineConfig({
       sidebar: [
         {
           label: 'Start',
-          translations: { ar: 'البداية' },
+          translations: { ar: 'البداية', es: 'Inicio' },
           items: [
-            { label: 'Overview', translations: { ar: 'نظرة عامة' }, slug: 'index' },
-            { label: 'Why Astur', translations: { ar: 'لماذا Astur' }, slug: 'why-astur' },
-            { label: 'Getting Started', translations: { ar: 'البدء السريع' }, slug: 'getting-started' },
-            { label: 'Inspector And Codegen', translations: { ar: 'الـ Inspector وتوليد الكود' }, slug: 'inspector' },
-            { label: 'Demo App', translations: { ar: 'التطبيق التجريبي' }, slug: 'demo-app' }
+            { label: 'Overview', translations: { ar: 'نظرة عامة', es: 'Visión general' }, slug: 'index' },
+            { label: 'Why Astur', translations: { ar: 'لماذا Astur', es: 'Por qué Astur' }, slug: 'why-astur' },
+            { label: 'Getting Started', translations: { ar: 'البدء السريع', es: 'Primeros pasos' }, slug: 'getting-started' },
+            { label: 'Inspector And Codegen', translations: { ar: 'الـ Inspector وتوليد الكود', es: 'Inspector y codegen' }, slug: 'inspector' },
+            { label: 'Demo App', translations: { ar: 'التطبيق التجريبي', es: 'App de demostración' }, slug: 'demo-app' }
           ]
         },
         {
           label: 'Guides',
-          translations: { ar: 'الأدلة' },
+          translations: { ar: 'الأدلة', es: 'Guías' },
           items: [
-            { label: 'Prerequisites', translations: { ar: 'المتطلبات' }, slug: 'prerequisites' },
-            { label: 'Android', translations: { ar: 'Android' }, slug: 'android' },
-            { label: 'iOS', translations: { ar: 'iOS' }, slug: 'ios' },
-            { label: 'Flutter & React Native', translations: { ar: 'Flutter و React Native' }, slug: 'frameworks' },
-            { label: 'Network Observation', translations: { ar: 'مراقبة الشبكة' }, slug: 'network' },
-            { label: 'Visual Comparison', translations: { ar: 'المقارنة البصرية' }, slug: 'visual-comparison' },
-            { label: 'Locators', translations: { ar: 'المُحدِّدات' }, slug: 'locators' },
-            { label: 'Mobile Web', translations: { ar: 'الويب على الجوال' }, slug: 'mobile-web' },
-            { label: 'Configuration', translations: { ar: 'الإعدادات' }, slug: 'configuration' },
-            { label: 'Troubleshooting', translations: { ar: 'حل المشكلات' }, slug: 'troubleshooting' }
+            { label: 'Prerequisites', translations: { ar: 'المتطلبات', es: 'Requisitos previos' }, slug: 'prerequisites' },
+            { label: 'Android', translations: { ar: 'Android', es: 'Android' }, slug: 'android' },
+            { label: 'iOS', translations: { ar: 'iOS', es: 'iOS' }, slug: 'ios' },
+            { label: 'Flutter & React Native', translations: { ar: 'Flutter و React Native', es: 'Flutter y React Native' }, slug: 'frameworks' },
+            { label: 'Network Observation', translations: { ar: 'مراقبة الشبكة', es: 'Observación de red' }, slug: 'network' },
+            { label: 'Visual Comparison', translations: { ar: 'المقارنة البصرية', es: 'Comparación visual' }, slug: 'visual-comparison' },
+            { label: 'Locators', translations: { ar: 'المُحدِّدات', es: 'Localizadores' }, slug: 'locators' },
+            { label: 'Mobile Web', translations: { ar: 'الويب على الجوال', es: 'Web móvil' }, slug: 'mobile-web' },
+            { label: 'Configuration', translations: { ar: 'الإعدادات', es: 'Configuración' }, slug: 'configuration' },
+            { label: 'Troubleshooting', translations: { ar: 'حل المشكلات', es: 'Resolución de problemas' }, slug: 'troubleshooting' }
           ]
         },
         {
           label: 'Reference',
-          translations: { ar: 'المرجع' },
+          translations: { ar: 'المرجع', es: 'Referencia' },
           items: [
-            { label: 'CLI', translations: { ar: 'واجهة الأوامر CLI' }, slug: 'cli' },
-            { label: 'Architecture', translations: { ar: 'البنية' }, slug: 'architecture' },
-            { label: 'Platform Limits', translations: { ar: 'حدود المنصات' }, slug: 'platform-limits' },
-            { label: 'Release Notes', translations: { ar: 'ملاحظات الإصدار' }, slug: 'release-notes' },
-            { label: 'Roadmap', translations: { ar: 'خارطة الطريق' }, slug: 'roadmap' }
+            { label: 'CLI', translations: { ar: 'واجهة الأوامر CLI', es: 'CLI' }, slug: 'cli' },
+            { label: 'Architecture', translations: { ar: 'البنية', es: 'Arquitectura' }, slug: 'architecture' },
+            { label: 'Platform Limits', translations: { ar: 'حدود المنصات', es: 'Límites de plataforma' }, slug: 'platform-limits' },
+            { label: 'Release Notes', translations: { ar: 'ملاحظات الإصدار', es: 'Notas de versión' }, slug: 'release-notes' },
+            { label: 'Roadmap', translations: { ar: 'خارطة الطريق', es: 'Hoja de ruta' }, slug: 'roadmap' }
           ]
         }
       ]

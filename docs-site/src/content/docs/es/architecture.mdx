@@ -1,0 +1,115 @@
+---
+title: Arquitectura
+description: Arquitectura general de Astur y su modelo de ejecución con agentes nativos.
+sidebar:
+  order: 9
+---
+
+Astur mantiene pequeña la experiencia de escribir tests y traslada el trabajo móvil costoso a agentes nativos de cada plataforma.
+
+<div class="architecture-map" aria-label="Arquitectura general de Astur">
+  <div class="architecture-stage">
+    <div class="flow-node primary">Test del usuario<span>@astur-mobile/test</span></div>
+    <div class="flow-node">Runtime del core<span>localizadores, esperas, aserciones</span></div>
+    <div class="flow-node">Protocolo<span>selectores y comandos</span></div>
+  </div>
+
+  <div class="architecture-split">
+    <div class="architecture-lane">
+      <div class="lane-label">Android</div>
+      <div class="flow-node">Driver de Android<span>ciclo de vida con ADB</span></div>
+      <div class="flow-node accent">Agente UIAutomator<span>búsqueda y acciones nativas</span></div>
+      <div class="flow-node">App de Android<span>app bajo prueba</span></div>
+    </div>
+
+    <div class="architecture-lane">
+      <div class="lane-label">iOS</div>
+      <div class="flow-node">Driver de iOS<span>ciclo de vida con simctl y xcodebuild</span></div>
+      <div class="flow-node accent">Agente XCUITest<span>búsqueda y acciones nativas</span></div>
+      <div class="flow-node">App de iOS<span>app bajo prueba</span></div>
+    </div>
+  </div>
+</div>
+
+La API pública sigue siendo al estilo Playwright:
+
+```ts
+await device.getByRole('button', { name: 'Sign in' }).tap();
+await expect(device.getByText('Welcome')).toBeVisible();
+```
+
+El runtime que hay debajo se encarga de elegir el dispositivo, del ciclo de vida de la app, de la búsqueda nativa de localizadores, de las comprobaciones de accionabilidad, de los gestos, capturas, vídeo, trazas y del soporte para el Inspector y codegen.
+
+El fichero fuente `docs/architecture.md` conserva diagramas Mermaid para quien lea el repositorio. La documentación pública en Astro usa una versión en MDX/CSS del mismo grafo, porque Starlight no renderiza bloques Mermaid sin añadir una integración específica.
+
+## Por qué esto es rápido
+
+Las pilas al estilo Appium suelen meter un servidor WebDriver entre el test y el framework de automatización nativo. Astur se ahorra esa capa extra de traducción de protocolo.
+
+<div class="astur-sequence" aria-label="Flujo de un comando de acción en Astur">
+  <div class="sequence-step"><strong>1</strong><span>El test llama a `getByLabel("Login").tap()`</span></div>
+  <div class="sequence-step"><strong>2</strong><span>Astur envía un solo comando nativo: buscar, esperar, tocar</span></div>
+  <div class="sequence-step"><strong>3</strong><span>El agente de la plataforma resuelve y actúa en local</span></div>
+  <div class="sequence-step"><strong>4</strong><span>Astur recibe un resultado compacto, con tiempos y diagnósticos</span></div>
+</div>
+
+Para las acciones habituales, Astur envía la intención una sola vez. El agente resuelve y actúa localmente, así que el host no tiene que descargar árboles de interfaz enormes una y otra vez solo para reintentar un localizador.
+
+## Ciclo de vida frente a interacción
+
+Astur sigue usando las herramientas de plataforma allí donde son la herramienta adecuada:
+
+- Ciclo de vida en Android: `adb` instala apps, lanza paquetes, hace capturas, graba vídeo y recoge logs.
+- Ciclo de vida en iOS: `simctl`, `devicectl` y `xcodebuild` gestionan simuladores, instalación y arranque de apps, capturas y el runner de XCUITest.
+- Interacción con elementos: los agentes nativos de Android e iOS resuelven búsquedas, esperas, toques, escritura, arrastres, deslizamientos y comandos de teclado.
+- Flutter (Android): cuando detecta un APK de Flutter, Astur lee el árbol de widgets en vivo a través del **servicio Dart VM** en lugar de UIAutomator, mientras ADB sigue encargándose del ciclo de vida y los gestos. Consulta [Flutter y React Native](../frameworks/).
+
+<div class="astur-split">
+  <section>
+    <h3>Herramientas de ciclo de vida</h3>
+    <p>Gestionan dispositivos, apps, capturas, vídeo y logs mediante ADB, simctl, devicectl y xcodebuild.</p>
+  </section>
+  <section>
+    <h3>Agentes nativos persistentes</h3>
+    <p>Ejecutan el sondeo de localizadores, las comprobaciones de accionabilidad y los gestos cerca del framework de interfaz de la plataforma.</p>
+  </section>
+</div>
+
+Esta separación mantiene fiable el ciclo de vida sin meter comandos de shell lentos en el camino normal de interacción con elementos.
+
+## Inspector y codegen
+
+El Inspector de Astur usa el mismo runtime y el mismo modelo de selectores que los tests.
+
+<div class="astur-flow compact" aria-label="Flujo del inspector y codegen de Astur">
+  <div class="flow-node">Pantalla en vivo</div>
+  <div class="flow-arrow">+</div>
+  <div class="flow-node">Árbol semántico</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node accent">Ranking de localizadores</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node primary">Código de @astur-mobile/test</div>
+</div>
+
+El Inspector no se inventa un segundo sistema de localizadores. Cuando sugiere uno, graba un toque o exporta código, usa los mismos contratos de localizador —independientes de plataforma— que se ejecutan durante los tests.
+
+## Reglas de fiabilidad
+
+- Prefiere localizadores semánticos antes que coordenadas.
+- Mantén el sondeo nativo dentro del agente de la plataforma.
+- Usa capturas e instantáneas de la interfaz para diagnosticar, no como vía de control por defecto.
+- Mantén vivo un agente por worker de Playwright siempre que sea posible.
+- Reserva un dispositivo físico por worker; el paralelismo real exige varios dispositivos.
+- Cuando la configuración use un selector de dispositivo poco específico, deja que Astur elija uno disponible del conjunto local en vez de mandar a todos los workers al primero.
+- Reinicia o restablece la app entre specs solo cuando el aislamiento lo exija.
+- Mantén explícitos los requisitos de XCTest en iOS, en lugar de esconderlos detrás de WebDriver.
+
+## Forma de los paquetes
+
+La mayoría de la gente instala:
+
+```bash
+npm install -D @astur-mobile/test astur-mobile
+```
+
+`@astur-mobile/test` aporta el fixture de Playwright y las aserciones. `astur-mobile` aporta la CLI, con `doctor`, `devices`, `init`, `test` y `codegen`. Los paquetes internos como `@astur-mobile/core`, `@astur-mobile/android` y `@astur-mobile/ios` se publican como paquetes npm normales para que el proyecto siga siendo modular, pero no deberías necesitar conectarlos a mano.

@@ -442,9 +442,10 @@ await expect.soft(device.getByText('Optional banner')).toBeHidden();
 بعض المطابقات (Matchers) الأساسية الخاصة بـ `MobileLocator`:
 
 - `toBeVisible` و `toBeHidden` و `toExist`
-- `toBeEnabled` و `toBeDisabled` و `toBeSelected` و `toBeFocused`
-- `toHaveText` و `toContainText` و `toHaveValue`
-- `toHaveLabel` و `toHaveType` و `toHaveBounds`
+- `toBeEnabled` و `toBeDisabled` و `toBeSelected` و `toBeFocused` و `toBeChecked`
+- `toHaveText` و `toContainText` و `toHaveValue` و `toBeEmpty`
+- `toHaveLabel` و `toHaveType` و `toHaveBounds` و `toHaveCount`
+- `toHaveScreenshot` — راجع [المقارنة البصرية](../visual-comparison/)
 
 ## التعامل مع لوحة المفاتيح الافتراضية
 

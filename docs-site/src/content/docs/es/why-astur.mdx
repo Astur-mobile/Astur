@@ -1,0 +1,83 @@
+---
+title: Por qué Astur
+description: Por qué Astur es una nueva generación de automatización móvil — una arquitectura nativa e inteligente, sin servidor Appium.
+sidebar:
+  order: 2
+---
+
+Astur es una nueva generación de automatización de pruebas móviles. Las herramientas
+anteriores envuelven un **servidor** de automatización remoto (Appium / WebDriver) y
+un runner aparte que instalas y mantienes vivo. Astur elimina esa capa: habla con
+**agentes nativos** que él mismo compila y gestiona, detrás de una API al estilo
+Playwright. El resultado es más rápido, más simple de montar y más difícil de atascar.
+
+## El modelo antiguo frente a Astur
+
+| | Herramientas Appium / WebDriver | Astur |
+| --- | --- | --- |
+| Transporte | Un servidor HTTP/WebDriver remoto que tú ejecutas | Drivers en proceso y agentes nativos que Astur arranca por ti |
+| Preparación | Instalar y mantener un servidor Appium, drivers y capabilities | `npm install -D @astur-mobile/test astur-mobile` |
+| Motor de elementos | Selectores en el servidor, separados de tus aserciones | Un único motor de selectores compartido por los tests **y** el Inspector |
+| Autoría | Un inspector genérico sobre WebDriver | Inspector y codegen construidos sobre el mismo runtime que usan tus tests |
+| Ciclo de vida | Gestionas emuladores, runners y firma a mano | Astur arranca, compila, firma y se recupera solo |
+
+## Qué hace que la arquitectura sea «inteligente»
+
+**Un runtime, un motor de selectores — de principio a fin.** Los localizadores que
+escribes (`getByRole`, `getByText`, `getById`) los resuelve el mismo motor que usa el
+Inspector para ordenar localizadores del árbol en vivo. Lo que ves mientras escribes
+el test es lo que se ejecuta: no hay una segunda capa de coincidencias en el servidor
+que pueda desincronizarse.
+
+**Agentes nativos en lugar de un servidor remoto.** Astur incluye un agente
+**UIAutomator** en Kotlin para Android y un agente **XCUITest** en Swift para iOS.
+Se ejecutan en el dispositivo y resuelven búsquedas, esperas, toques, escritura,
+deslizamientos, arrastres y capturas del árbol de forma nativa. Astur los compila y
+los lanza con las herramientas de cada plataforma en cada sesión: sin servidor
+Appium, sin runner instalado a mano y sin puente WebDriver.
+
+**Ergonomía de Playwright en móvil.** La API pública es `@astur-mobile/test`:
+fixtures, projects, matchers de `expect` y localizadores que se leen como los de
+Playwright. Las vistas web se automatizan a través del mismo puente Playwright/CDP,
+así que los flujos nativos y web conviven en un mismo test.
+
+**Gestos ejecutados de forma nativa.** Toques, dobles toques, pulsaciones largas,
+deslizamientos, arrastres y `scrollIntoView` pasan por el agente nativo — incluida
+la temporización correcta del doble toque dentro de la ventana de reconocimiento del
+sistema, y un `locator.scrollIntoView()` multiplataforma que oculta la diferencia
+entre el viewport de iOS y el árbol de Android.
+
+**Un ciclo de vida que se repara solo — la parte que de verdad importa en CI.** La
+automatización móvil se rompe cuando emuladores, simuladores y sesiones de compilación
+quedan colgados. Astur trata el ciclo de vida como algo de primera clase:
+
+- **Arranque automático** del AVD de Android configurado cuando está apagado (se acabó el «device not found»).
+- **Compilación, firma y lanzamiento automáticos** del agente XCUITest mediante Xcode;
+  el agente nunca se instala a mano.
+- **Limpieza de sesiones huérfanas al arrancar** — una ejecución anterior que
+  reventó, o a la que hiciste `kill -9`, no deja un `xcodebuild` o un simulador
+  atascado para la siguiente.
+- **Poda de cachés de compilación obsoletas**, para que los DerivedData por versión
+  no se acumulen hasta llenar el disco.
+- **Cierre ordenado ante interrupciones** — Ctrl-C, e incluso cerrar la terminal de
+  golpe (SIGHUP), matan el grupo del agente para que nada quede reteniendo el dispositivo.
+- **Paralelismo por dispositivo** con reservas, para que dos workers nunca se peleen
+  por el mismo emulador o simulador.
+
+**Primero npm, y auditable.** Todo se instala desde npm. Los paquetes se publican con
+procedencia (provenance) y los agentes de plataforma viajan dentro de cada paquete,
+así que una instalación normal no necesita ningún paso extra de compilación (el agente
+de iOS se compila en tu Mac porque Apple lo exige).
+
+## Por qué es más rápido y más fiable
+
+Quitar el servidor remoto quita un salto de red y un proceso que mantener sano.
+Seleccionar y asertar con un único motor elimina toda una familia de fallos del tipo
+«el inspector decía X pero el test ve Y». Y el ciclo de vida que se repara solo elimina
+el motivo más común de inestabilidad de las suites móviles en CI: estado de
+dispositivo o runner que quedó de antes. Esa combinación — ejecución nativa, un solo
+motor de selectores y un ciclo de vida que recoge lo que ensucia — es lo que convierte
+a Astur en un salto generacional y no en otro envoltorio de Appium.
+
+Siguiente: consulta la página de [Arquitectura](../architecture/) para ver el modelo
+de ejecución, o [Primeros pasos](../getting-started/) para lanzar tu primer test.

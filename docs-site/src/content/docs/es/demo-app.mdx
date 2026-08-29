@@ -1,0 +1,92 @@
+---
+title: "App de demostración"
+description: "Recorre la app de demostración de Astur — cada pantalla ejercita una capacidad de automatización y viene lista para Android e iOS."
+---
+
+import homeImg from '../images/demo-home.png';
+import loginImg from '../images/demo-login.png';
+import formsImg from '../images/demo-forms.png';
+import swipeImg from '../images/demo-swipe.png';
+import dragImg from '../images/demo-drag.png';
+import webImg from '../images/demo-web.png';
+
+La **app de demostración de Astur** (`com.astur.demo`) es una pequeña app nativa cuyo único cometido es dar a la automatización un objetivo estable y predecible. Cada pantalla demuestra una capacidad — toque, scroll, deslizamiento, arrastre, entrada de formularios, subida de archivos y WebView híbrida — con identificadores de test fijos, para que los localizadores sigan siendo fiables entre ejecuciones y plataformas.
+
+Es la misma app que usan las suites ejecutables, así que las capturas de abajo se corresponden una a una con los specs del starter [astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate) (y con [`examples/`](https://github.com/Astur-mobile/astur-boilerplate) dentro del repositorio).
+
+## Qué demuestra cada pantalla
+
+<div class="astur-demo-grid not-content">
+  <figure>
+    <img src={homeImg.src} alt="Pantalla de inicio con tarjeta principal, lista de capacidades y navegación inferior." />
+    <figcaption><strong>Inicio</strong> — estructura de la app, menú y permisos. Baja hasta el Tap Laboratory para ejercitar <strong>toque simple, doble toque y pulsación larga</strong> contra contadores en vivo.</figcaption>
+  </figure>
+  <figure>
+    <img src={loginImg.src} alt="Pantalla de credenciales con campos de correo y contraseña, acceso y biometría." />
+    <figcaption><strong>Login</strong> — <strong>escritura de texto, validación de campos, alertas y biometría</strong>. Rellena los campos, oculta el teclado y envía.</figcaption>
+  </figure>
+  <figure>
+    <img src={formsImg.src} alt="Pantalla de controles de entrada con campo de texto, deslizador, interruptor y casilla." />
+    <figcaption><strong>Formularios</strong> — <strong>entrada de texto, interruptor, casilla, arrastre del deslizador, desplegable y subida de archivos</strong>, todo en una pantalla.</figcaption>
+  </figure>
+  <figure>
+    <img src={swipeImg.src} alt="Pantalla del carrusel de capacidades mostrando un carrusel horizontal de tarjetas." />
+    <figcaption><strong>Swipe</strong> — <strong>deslizamiento horizontal</strong> por el carrusel y luego <strong>scroll vertical</strong> hasta un panel oculto.</figcaption>
+  </figure>
+  <figure>
+    <img src={dragImg.src} alt="Pantalla de arrastrar y soltar con un puzle de cuatro piezas del icono de Astur." />
+    <figcaption><strong>Arrastrar y soltar</strong> — <strong>gestos de arrastre</strong>. Reconstruye el icono de Astur llevando cada pieza a su hueco.</figcaption>
+  </figure>
+  <figure>
+    <img src={webImg.src} alt="Pantalla Web Lab mostrando una WebView nativa con objetivos DOM." />
+    <figcaption><strong>Web Lab</strong> — <strong>WebView híbrida</strong>: entra al contexto web con <code>device.webContext()</code>, maneja localizadores del DOM, envía un formulario web y sube un archivo dentro de la WebView.</figcaption>
+  </figure>
+</div>
+
+## De dónde sacarla
+
+Las compilaciones vienen con el boilerplate y en `assets/` de este repositorio:
+
+- **Android:** `assets/astur.demo.android.apk`
+- **Android (Flutter):** `assets/astur.demo.android_flutter.apk`
+- **Simulador de iOS:** `assets/astur.demo.ios.simulator.zip` (descomprime en `assets/Astur.app`)
+- **Simulador de iOS (Flutter):** `assets/astur.demo.ios.simulator_flutter.zip` (descomprime en `assets/Runner.app`)
+- **Dispositivo iOS real:** `assets/astur.demo.ios.ipa`
+
+## Dónde se puede ejecutar
+
+Los mismos specs corren en cuatro destinos. Astur instala la app de demostración en la primera ejecución e instala su propio agente automáticamente, así que el único requisito es que haya un dispositivo visible.
+
+| Destino | Se ve con | Qué necesitas |
+| --- | --- | --- |
+| **Emulador de Android** | `adb devices` (p. ej. `emulator-5554`) | Un AVD arrancado. Nada más: Astur instala el APK y su agente. |
+| **Dispositivo Android real** | `adb devices` | Depuración USB activada y el dispositivo autorizado. Misma instalación automática. |
+| **Simulador de iOS** | `xcrun simctl list devices booted` | Un simulador arrancado y `Astur.app` descomprimido. |
+| **Dispositivo iOS real** | `xcrun devicectl list devices` | Un dispositivo de confianza con Modo Desarrollador, el `.ipa`, y `ASTUR_IOS_DEVELOPMENT_TEAM` definido para poder firmar el agente XCUITest. |
+
+Pruébala desde el Inspector sin escribir ni un test:
+
+```bash
+# Emulador de Android
+npx astur-mobile codegen --android --device emulator-5554 \
+  --app ./assets/astur.demo.android.apk --app-id com.astur.demo
+
+# Simulador de iOS
+npx astur-mobile codegen --ios --simulator \
+  --app ./assets/Astur.app --app-id com.astur.demo
+```
+
+O lanza la suite completa desde el starter [astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate):
+
+```bash
+npx astur-mobile test --config config/android/playwright.config.ts
+```
+
+:::note[Control del DOM en WebViews]
+`device.webContext()` maneja el DOM de las WebViews en **Android y iOS (simulador y dispositivos reales)**.
+
+- **Android** — la app activa la depuración de WebView (`WebView.setWebContentsDebuggingEnabled(true)`), lo que expone el socket del Chrome DevTools Protocol. El APK de demostración ya viene con esto activado.
+- **iOS** — la app pone `WKWebView.isInspectable = true` (iOS 16.4+) y tienes `ios-webkit-debug-proxy` (v1.9+) instalado (`brew install ios-webkit-debug-proxy`). Astur conecta el Web Inspector del simulador automáticamente.
+
+El fixture `webview()` basado en Page de Playwright (`web.page`) sigue siendo solo para Android; en iOS usa `device.webContext()` o localizadores nativos.
+:::

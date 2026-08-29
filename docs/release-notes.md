@@ -24,7 +24,20 @@ Three problems this had to solve beyond the existing DOM transport:
 - **Settling on the document, not the URL.** A reload leaves the URL identical, so a URL-based wait returns instantly and hands back the *old* page. Astur plants a token on `window` and waits for it to disappear, which is exactly when the document is replaced.
 - **First-run detection.** Chrome publishes no debugging socket until its welcome flow is finished, so a fresh emulator would wait forever for a page that never appears. Reported as `BROWSER_FIRST_RUN_PENDING` instead of a timeout.
 
-Worth knowing before building a suite on it: a tab is **not** a Playwright browser *context* — cookies and `localStorage` belong to the browser profile and are shared. The browser's own UI is native, not page content. Real iOS devices are written but not yet verified on hardware. The [Mobile Web](https://astur-mobile.github.io/Astur/mobile-web/) page lists the full set.
+### Limitations
+
+Worth reading before you build a suite on this. None are bugs; they are what the platforms expose.
+
+| Limitation | Affects |
+| --- | --- |
+| A tab is **not** a Playwright browser *context* — cookies and `localStorage` are shared across the profile | Both |
+| No tab isolation on iOS; WebKit exposes no tab lifecycle | iOS |
+| The browser's own UI is native, not page content | Both |
+| No tab switching or multiple windows | Both |
+| Chrome must be past its first-run screen | Android |
+| Real iOS devices are written but unverified on hardware | iOS real device |
+
+The [Mobile Web](https://astur-mobile.github.io/Astur/mobile-web/) page carries the full reference.
 
 **The documentation is now available in Arabic**, at [/ar/](https://astur-mobile.github.io/Astur/ar/) — every page, with English API and protocol names kept as they are.
 

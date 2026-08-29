@@ -1,0 +1,255 @@
+---
+title: Documentación de Astur
+description: Automatización móvil nativa con la ergonomía de Playwright.
+template: splash
+---
+
+<header class="futuristic-hero">
+  {/* Glowing astrolabe background effect */}
+  <div class="astrolabe-orbits" aria-hidden="true">
+    <div class="orbit-ring orbit-outer">
+      <div class="orbit-marker"></div>
+    </div>
+    <div class="orbit-ring orbit-middle">
+      <div class="orbit-marker"></div>
+    </div>
+    <div class="orbit-ring orbit-inner">
+      <div class="orbit-marker"></div>
+    </div>
+  </div>
+
+  <div class="futuristic-hero-content">
+    <div class="badge-row">
+      <span class="cyber-badge">✦ RUNTIME NATIVO</span>
+      <span class="cyber-badge">✦ 0% DE SOBRECARGA DE APPIUM</span>
+      <span class="cyber-badge">✦ ERGONOMÍA DE PLAYWRIGHT</span>
+    </div>
+    
+    <h1 class="gradient-headline">Automatización móvil nativa y rápida, sin servidor Appium.</h1>
+    
+    <div class="futuristic-tagline">
+      Astur se salta la capa proxy de WebDriver usando agentes nativos de alta velocidad en Android e iOS.
+      Inspecciona árboles de interfaz en tiempo real, graba gestos al instante y escribe tests con la ergonomía limpia de Playwright.
+    </div>
+    
+    <div class="hero-cta-buttons">
+      <a href="./getting-started/" class="cta-button primary">
+        Empezar
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="arrow-icon"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+      </a>
+      <a href="./inspector/" class="cta-button secondary">
+        Abrir el Inspector
+      </a>
+    </div>
+  </div>
+</header>
+
+<section class="astur-video-card astur-video-card--featured" aria-labelledby="astur-teaser-title">
+  <div class="astur-video-copy">
+    <span class="astur-video-kicker">AVANCE DEL PRODUCTO</span>
+    <h2 id="astur-teaser-title">Mira el flujo de trabajo completo de Astur en marcha.</h2>
+    <p>Un recorrido rápido por la inspección, la escritura de tests, la interacción nativa y la ejecución multiplataforma de Astur.</p>
+    <a class="astur-video-link" href="https://youtu.be/X0PW4jQOj58" target="_blank" rel="noreferrer">Ver en YouTube <span aria-hidden="true">↗</span></a>
+  </div>
+  <div class="astur-video-frame">
+    <iframe
+      src="https://www.youtube-nocookie.com/embed/X0PW4jQOj58"
+      title="Avance de las capacidades de automatización móvil de Astur"
+      loading="lazy"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowfullscreen
+    ></iframe>
+  </div>
+</section>
+
+<section class="platform-band" aria-label="Plataformas y frameworks compatibles">
+  <div class="platform-band-head">
+    <div class="section-badge">PLATAFORMAS Y FRAMEWORKS</div>
+    <h2 class="section-headline">Una sola API de tests para nativo, Flutter y React Native.</h2>
+    <p class="section-description">
+      Astur controla la app real en Android e iOS — hecha con SDK nativos, Flutter o React Native —
+      mediante agentes nativos rápidos, el servicio Dart VM para inspeccionar a fondo el árbol de widgets de Flutter en Android,
+      y control a nivel de DOM de las WebViews internas desde la misma API de tests.
+    </p>
+  </div>
+
+  <div class="platform-grid">
+    <div class="platform-card">
+      <div class="platform-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="#3DDC84"><path d="M17.6 9.48l1.84-3.18a.38.38 0 00-.66-.38l-1.86 3.22a11.43 11.43 0 00-9.84 0L5.22 5.92a.38.38 0 10-.66.38L6.4 9.48A10.81 10.81 0 001 18h22a10.81 10.81 0 00-5.4-8.52zM7 15.25A1.25 1.25 0 117 12.75a1.25 1.25 0 010 2.5zm10 0a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5z"/></svg>
+      </div>
+      <div class="platform-name">Android</div>
+      <div class="platform-note">Emuladores y dispositivos · agente UIAutomator</div>
+    </div>
+
+    <div class="platform-card">
+      <div class="platform-icon platform-icon--mono" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.43c0 1.13-.46 2.22-1.18 3.05-.78.93-2.04 1.65-3.07 1.57a3.5 3.5 0 01-.04-.4c0-1.1.55-2.27 1.22-2.99.78-.86 2.1-1.5 3.02-1.55.03.1.05.21.05.32zM20.9 17.1c-.03.08-.47 1.6-1.55 3.16-.93 1.35-1.9 2.69-3.42 2.72-1.5.03-1.98-.89-3.69-.89-1.71 0-2.24.86-3.66.92-1.47.05-2.59-1.46-3.53-2.8-1.92-2.76-3.39-7.8-1.42-11.2a5.27 5.27 0 014.45-2.71c1.45-.03 2.81.97 3.69.97.88 0 2.54-1.2 4.28-1.03.73.03 2.78.3 4.1 2.22-.11.07-2.45 1.43-2.42 4.26.03 3.39 2.96 4.51 3 4.53z"/></svg>
+      </div>
+      <div class="platform-name">iOS</div>
+      <div class="platform-note">Simuladores y dispositivos · agente XCUITest</div>
+    </div>
+
+    <div class="platform-card">
+      <div class="platform-icon" aria-hidden="true">
+        <svg viewBox="0 0 256 317"><path fill="#47C5FB" d="M157.7 0L0 157.7l48.8 48.8L255.3 0z"/><path fill="#47C5FB" d="M156.6 145.4l-83.3 83.2 48.9 49.1 48.8-48.9 85.2-85.2z"/><path fill="#00569E" d="M121.3 277.6l37.2 37.3h96.8l-85.2-85.2z"/><path fill="#00B5F8" d="M72.2 228.8l48.9-48.8 35.5 35.5-48.8 48.9z"/><path fill="#00569E" fill-opacity=".8" d="M121.3 277.6l40.5-13.5 4-31z"/></svg>
+      </div>
+      <div class="platform-name">Flutter</div>
+      <div class="platform-note">Árbol de widgets Dart VM (Android) · árbol XCUITest (iOS)</div>
+    </div>
+
+    <div class="platform-card">
+      <div class="platform-icon" aria-hidden="true">
+        <svg viewBox="-11.5 -10.23 23 20.46"><circle r="2.05" fill="#61DAFB"/><g stroke="#61DAFB" stroke-width="1" fill="none"><ellipse rx="11" ry="4.2"/><ellipse rx="11" ry="4.2" transform="rotate(60)"/><ellipse rx="11" ry="4.2" transform="rotate(120)"/></g></svg>
+      </div>
+      <div class="platform-name">React Native</div>
+      <div class="platform-note">Vistas nativas vía testID / accesibilidad</div>
+    </div>
+  </div>
+</section>
+
+<section class="control-deck-section" aria-label="Panel de control">
+  <div class="control-deck-intro">
+    <div class="section-badge">RUNTIME MÓVIL NATIVO</div>
+    <h2 class="section-headline">Inspecciona, escribe y publica tests móviles en un único ciclo rápido.</h2>
+    <p class="section-description">
+      Astur mantiene ajustada la superficie de escritura: transmite el dispositivo, inspecciona el árbol semántico,
+      graba el flujo y exporta código reutilizable de <span class="cyber-inline-code">@astur-mobile/test</span> sin añadir una capa de Appium ni de WebDriver.
+    </p>
+    
+    <div class="tech-specs-grid">
+      <div class="spec-platforms">
+        <span>Emuladores y dispositivos Android</span>
+        <span>Simuladores y dispositivos iOS</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="control-deck-wrapper">
+    {/* Right side: Sleek Glassmorphic Terminal/Console */}
+    <div class="cyber-terminal-mock">
+      <div class="terminal-header">
+        <div class="terminal-controls">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+        <div class="terminal-tab">astur-fast-loop</div>
+        <div class="terminal-status">
+          <span class="status-pulse"></span>
+          <span class="status-text">READY</span>
+        </div>
+      </div>
+      <div class="terminal-body workflow-terminal-body">
+        <pre><code><span class="t-line t-stage-row"><span class="t-stage">01 INSTALAR</span></span><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npm</span> <span class="t-method">install</span> <span class="t-flag">-D</span> <span class="t-pkg">@astur-mobile/test</span> <span class="t-pkg">astur-mobile</span></span>
+<span class="t-line t-stage-row"><span class="t-stage">02 INSPECCIONAR</span></span><span class="t-line t-highlight"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">inspector</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// árbol semántico reflejado, gestos visibles, localizadores ordenados</span>
+<span class="t-line t-stage-row"><span class="t-stage">03 ESCRIBIR</span></span><span class="t-line t-highlight"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">codegen</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// exporta flujos al estilo Playwright que puedes conservar y refinar</span>
+<span class="t-line t-stage-row"><span class="t-stage">04 PUBLICAR</span></span><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npm</span> <span class="t-method">test</span></span><span class="t-line"><span class="t-cursor"></span></span></code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="quantum-feature-grid" aria-label="Capacidades principales de Astur">
+  <article class="quantum-feature-card">
+    <div class="card-glow-bg"></div>
+    <div class="card-header">
+      <div class="quantum-index-badge">
+        <span>01</span>
+        <div class="badge-ring animate-pulse"></div>
+      </div>
+    </div>
+    <h3>Escritura al estilo Playwright</h3>
+    <p>Usa fixtures, localizadores, aserciones, reintentos e informes que a quien viene de Playwright ya le resultan naturales.</p>
+  </article>
+
+  <article class="quantum-feature-card">
+    <div class="card-glow-bg"></div>
+    <div class="card-header">
+      <div class="quantum-index-badge">
+        <span>02</span>
+        <div class="badge-ring animate-pulse"></div>
+      </div>
+    </div>
+    <h3>Agentes nativos de plataforma</h3>
+    <p>Android va por UIAutomator e iOS por XCUITest. Las apps de Flutter suman la inspección profunda del árbol de widgets mediante el servicio Dart VM en Android, y React Native viaja directamente sobre los agentes nativos.</p>
+  </article>
+
+  <article class="quantum-feature-card">
+    <div class="card-glow-bg"></div>
+    <div class="card-header">
+      <div class="quantum-index-badge">
+        <span>03</span>
+        <div class="badge-ring animate-pulse"></div>
+      </div>
+    </div>
+    <h3>Inspector en vivo y codegen</h3>
+    <p>Refleja el dispositivo físico, ordena los localizadores semánticos, graba acciones y exporta flujos iniciales sin salir de la documentación.</p>
+  </article>
+
+  <article class="quantum-feature-card">
+    <div class="card-glow-bg"></div>
+    <div class="card-header">
+      <div class="quantum-index-badge">
+        <span>04</span>
+        <div class="badge-ring animate-pulse"></div>
+      </div>
+    </div>
+    <h3>Un repositorio, un sistema</h3>
+    <p>Drivers, agentes, API de tests, CLI, ejemplos y documentación evolucionan juntos en un mismo monorepo, en lugar de repartirse entre herramientas desconectadas.</p>
+  </article>
+</section>
+
+<section class="quantum-summary-paragraph">
+  Astur mantiene los tests pequeños mientras el runtime y los agentes nativos absorben la elección de dispositivo, las esperas, los gestos, las capturas, los diagnósticos y el estado del Inspector.
+</section>
+
+<section class="quantum-why-section">
+  <div class="why-accent-line"></div>
+  <div class="why-content">
+    <div class="section-badge">LA FILOSOFÍA</div>
+    <h2 class="section-headline">¿Por qué Astur?</h2>
+    <p>
+      Astur toma su nombre del <strong>astrolabio</strong>: un instrumento astronómico portátil e histórico que comprimió cálculos complejos y observaciones del cielo en algo lo bastante pequeño como para sostenerlo en la mano.
+    </p>
+    <p>
+      Astur traslada esa misma filosofía a la automatización en dispositivos de mano: una API de tests compacta y de alto rendimiento, respaldada por un runtime nativo velocísimo que se ocupa por debajo del ciclo de vida del dispositivo, la orquestación de red y los diagnósticos con capturas.
+    </p>
+  </div>
+</section>
+
+<section class="quantum-code-section" aria-label="Ejemplo de test generado">
+  <div class="quantum-code-intro">
+    <div class="section-badge">PUNTO DE PARTIDA GENERADO</div>
+    <h2 class="section-headline">Parte del flujo grabado y quédate con el spec de verdad.</h2>
+    <p class="section-description">
+      Codegen te lleva rápido a un test que funciona. A partir de ahí, guarda en el control de versiones el spec exportado al estilo Playwright y amplíalo con fixtures, helpers y aserciones más sólidas.
+    </p>
+  </div>
+
+  <div class="generated-code-card">
+    <div class="generated-code-header">
+      <div class="terminal-controls">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+      </div>
+      <div class="generated-code-meta">
+        <span class="generated-code-filename">tests/login.spec.ts</span>
+        <span class="generated-code-badge">spec generado</span>
+      </div>
+    </div>
+    <pre class="generated-code-body"><code><span class="t-line"><span class="t-keyword">import</span> &#123; <span class="t-obj">expect</span>, <span class="t-obj">test</span> &#125; <span class="t-keyword">from</span> <span class="t-str">'@astur-mobile/test'</span>;</span>
+<span class="t-line"><span class="t-call">test</span>(<span class="t-str">'login'</span>, <span class="t-keyword">async</span> (&#123; <span class="t-obj">device</span> &#125;) =&gt; &#123;</span>
+<span class="t-line">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Email'</span>).<span class="t-method">fill</span>(<span class="t-str">'qa@example.com'</span>);</span>
+<span class="t-line">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Password'</span>).<span class="t-method">fill</span>(<span class="t-str">'secret'</span>);</span>
+<span class="t-line t-highlight">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByRole</span>(<span class="t-str">'button'</span>, &#123; <span class="t-prop">name</span>: <span class="t-str">'Login'</span> &#125;).<span class="t-method">tap</span>();</span>
+<span class="t-line t-highlight">  <span class="t-keyword">await</span> <span class="t-call">expect</span>(<span class="t-obj">device</span>.<span class="t-method">getByText</span>(<span class="t-str">'Welcome'</span>)).<span class="t-method">toBeVisible</span>();</span>
+<span class="t-line">&#125;);</span></code></pre>
+  </div>
+</section>
+
+<footer class="quantum-footer">
+  Empieza por <a href="./getting-started/" class="text-glow-link">Primeros pasos</a> o abre <a href="./inspector/" class="text-glow-link">Inspector y codegen</a> para generar tu primer test desde un dispositivo en marcha.
+</footer>
