@@ -73,11 +73,7 @@ Close to Playwright's, within what each platform allows:
 
 **iOS is weaker here, and it is a platform limit rather than a choice.** WebKit's remote inspector exposes no way to create or close a Safari tab, so an iOS session reuses one tab and reloads it. State that lives in the document is still reset by the reload; tab history is not.
 
-**Neither platform isolates storage.** A tab is not a Playwright browser *context* — cookies, `localStorage`, and permissions belong to the browser profile and are shared across tabs. If a test depends on starting signed-out, clear that state explicitly:
-
-```ts
-await page.evaluate('localStorage.clear(); sessionStorage.clear()');
-```
+Storage is a separate matter, and is **not** isolated — see [Limitations](#limitations).
 
 Everything the page returns is a `WebContext`, the same object `device.webContext()` gives you — `getByTestId`, `getById`, `getByRole`, `getByText`, `locator(css)`, `fill`, `tap`, `textContent`, `evaluate`.
 
@@ -90,11 +86,24 @@ const capabilities = await device.browser.capabilities();
 test.skip(!capabilities.supported, capabilities.coverage);
 ```
 
-## What it covers, and what it does not
+## Limitations
 
-The **page** is fully driveable. The browser's own UI is not part of it: the address bar, tab switcher, and permission sheets are native views, so they need native locators and an agent — and there are no page objects for them yet.
+Worth reading before you build a suite on this. None of these are bugs; they are what the platforms expose.
 
-One tab is used per session. Tab switching, multiple windows, and profile/cookie management are not exposed.
+| Limitation | Why | Affects |
+| --- | --- | --- |
+| **Storage is not isolated** | A tab is not a Playwright browser *context*. Cookies, `localStorage` and permissions belong to the browser profile and are shared across tabs. | Both |
+| **No tab isolation on iOS** | WebKit's remote inspector exposes no way to create or close a Safari tab, so the session reuses one and reloads it. | iOS |
+| **The browser's own UI is not the page** | The address bar, tab switcher and permission sheets are native views. They need native locators and an agent, and there are no page objects for them yet. | Both |
+| **No tab switching or multiple windows** | Only the tab under test is addressed. | Both |
+| **Chrome must be past its first-run screen** | Until the welcome flow is completed Chrome opens no tab and publishes no debugging socket. Reported as `BROWSER_FIRST_RUN_PENDING` rather than a timeout. | Android |
+| **Real iOS devices are unverified** | The code path exists (`devicectl` → Safari) but has not been run against physical hardware. | iOS real device |
+
+If a test depends on starting signed-out, clear that state explicitly rather than assuming a fresh tab did it:
+
+```ts
+await page.evaluate('localStorage.clear(); sessionStorage.clear()');
+```
 
 ## Prerequisites
 

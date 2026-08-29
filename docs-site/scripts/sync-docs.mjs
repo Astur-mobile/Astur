@@ -174,6 +174,10 @@ const arabic = {
     title: 'ملاحظات الإصدار',
     description: 'ما الجديد في كل إصدار من Astur.'
   },
+  'mobile-web.md': {
+    title: 'الويب على الجوال',
+    description: 'شغّل صفحة ويب داخل متصفح الجهاز — Chrome على Android و Safari على iOS — على الأجهزة نفسها التي تعمل عليها اختباراتك الأصلية.'
+  },
   'platform-limits.md': {
     title: 'حدود المنصات',
     description: 'حدود عملية في Android و iOS يوضّحها Astur صراحةً بدل إخفائها.'
