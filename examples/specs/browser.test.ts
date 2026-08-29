@@ -15,7 +15,7 @@ import { expect, test } from './fixtures.js';
  * markup and fail a run that has nothing to do with Astur.
  */
 
-/** Port the config's `webServer` serves `examples/assets/web` on. */
+/** Port the config's `webServer` serves the demo web pages on. */
 const PORT = 4319;
 
 /**
