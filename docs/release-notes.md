@@ -2,6 +2,38 @@
 
 What's new in each Astur release.
 
+## 0.6.0-beta
+
+**Test a website in the device's own browser.** `device.browser` drives Chrome on Android and Safari on iOS, on the same emulator, simulator or real device the native suite already runs on — so a responsive site and a native app can be covered in one run and one report.
+
+```ts
+const page = await device.browser.open('https://example.com/pricing');
+await expect(page.getByRole('heading', { name: 'Pricing' })).toBeVisible();
+await page.getByTestId('plan-pro').tap();
+```
+
+`open`, `navigate`, `reload`, `back`, `forward`, `url`, and `capabilities` — the last answering on every platform, so a spec can `test.skip()` with a reason the way `device.network` already allows. Each navigation returns the live `WebContext`, the same object `device.webContext()` yields, so every locator and action works unchanged.
+
+Set `browser` instead of `app` and the session becomes **browser-only**: no app install, and the native agent turns optional rather than required. On iOS that is the difference between opening a page and needing a signing identity first.
+
+Playwright already tests mobile web well through device emulation, and it is faster in CI. This is for when emulation is not the thing you need: a real mobile browser, on the same device pool, in the same report as the native suite.
+
+Three problems this had to solve beyond the existing DOM transport:
+
+- **A tab per test, closed when it ends**, the way Playwright hands each test its own page. Android creates and closes tabs over the debugging socket. WebKit exposes no tab lifecycle, so iOS reuses one tab and reloads it — and `open()` always loads even when the tab already shows that URL, because a reused tab still carries the previous test's DOM.
+- **Settling on the document, not the URL.** A reload leaves the URL identical, so a URL-based wait returns instantly and hands back the *old* page. Astur plants a token on `window` and waits for it to disappear, which is exactly when the document is replaced.
+- **First-run detection.** Chrome publishes no debugging socket until its welcome flow is finished, so a fresh emulator would wait forever for a page that never appears. Reported as `BROWSER_FIRST_RUN_PENDING` instead of a timeout.
+
+Worth knowing before building a suite on it: a tab is **not** a Playwright browser *context* — cookies and `localStorage` belong to the browser profile and are shared. The browser's own UI is native, not page content. Real iOS devices are written but not yet verified on hardware. The [Mobile Web](https://astur-mobile.github.io/Astur/mobile-web/) page lists the full set.
+
+**The documentation is now available in Arabic**, at [/ar/](https://astur-mobile.github.io/Astur/ar/) — every page, with English API and protocol names kept as they are.
+
+### Fixed
+
+- **An app's WebView could be driven through the browser instead.** Android names the sockets `webview_devtools_remote_<pid>` and `chrome_devtools_remote`, and they sort alphabetically — so with Chrome running, `device.webContext()` attached to the browser rather than the app under test. Sockets are now ordered by what the caller asked for.
+
+Full detail in the [changelog](https://github.com/Astur-mobile/Astur/blob/main/CHANGELOG.md).
+
 ## 0.5.0-beta.5
 
 **Compare screenshots.** `toHaveScreenshot()` checks an element or the whole screen against a stored baseline, so a visual change fails a test instead of slipping through. Playwright's own matcher needs a `Page`; this is the native equivalent.

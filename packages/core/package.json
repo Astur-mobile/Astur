@@ -1,6 +1,6 @@
 {
   "name": "@astur-mobile/core",
-  "version": "0.5.0-beta.5",
+  "version": "0.6.0-beta",
   "description": "Core Astur runtime, sessions, locators, and auto-waiting.",
   "keywords": [
     "astur",
@@ -42,7 +42,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/protocol": "0.5.0-beta.5",
+    "@astur-mobile/protocol": "0.6.0-beta",
     "pngjs": "^7.0.0"
   },
   "repository": {
