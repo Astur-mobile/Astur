@@ -4,91 +4,57 @@
   </a>
 </p>
 
-# Astur
+<p align="center">
+  <b>Mobile test automation with Playwright ergonomics — and no Appium server.</b>
+</p>
 
-[![npm: astur-mobile](https://img.shields.io/npm/v/astur-mobile?logo=npm&label=astur-mobile&color=cb3837)](https://www.npmjs.com/package/astur-mobile)
-[![npm: @astur-mobile/test](https://img.shields.io/npm/v/@astur-mobile/test?logo=npm&label=%40astur-mobile%2Ftest&color=cb3837)](https://www.npmjs.com/package/@astur-mobile/test)
-[![latest release](https://img.shields.io/github/v/release/Astur-mobile/Astur?include_prereleases&sort=semver&logo=github&label=release)](https://github.com/Astur-mobile/Astur/releases/latest)
-[![downloads](https://img.shields.io/npm/dm/astur-mobile?logo=npm&label=downloads&color=cb3837)](https://www.npmjs.com/package/astur-mobile)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Android](https://img.shields.io/badge/Android-supported-3DDC84?logo=android&logoColor=white)](docs/android.md)
-[![iOS](https://img.shields.io/badge/iOS-supported-black?logo=apple&logoColor=white)](docs/ios.md)
+<p align="center">
+  <a href="https://www.npmjs.com/package/astur-mobile"><img src="https://img.shields.io/npm/v/astur-mobile?logo=npm&label=npm&color=cb3837" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/astur-mobile"><img src="https://img.shields.io/npm/dm/astur-mobile?label=downloads&color=cb3837" alt="downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
+  <a href="https://astur-mobile.github.io/Astur/"><img src="https://img.shields.io/badge/docs-astur--mobile.github.io-informational" alt="Documentation"></a>
+</p>
 
-> The npm badges follow the **`latest`** dist-tag, which is where this project
-> publishes while pre-1.0 — `./scripts/publish-npm.sh` defaults to it. The
-> release badge follows the latest GitHub release, pre-releases included.
+---
 
-Astur is a device-native mobile automation toolkit that brings the speed and ergonomics of Playwright Test directly to mobile pipelines.
+Astur drives **real Android and iOS devices, emulators, and simulators** through native platform APIs — UIAutomator on Android, XCUITest on iOS — under the test API you already know from Playwright.
 
-Astur is named after the astrolabe: an ancient portable instrument used to calculate position, direction, and paths with precision. The name is also inspired by the legacy associated with Mariam al-Asturlabiya, whose work represents compact, practical computation long before modern devices.
-
-Before the astrolabe, calculating celestial events required large, stationary observatory equipment. The astrolabe compressed that power into a brass instrument you could hold and carry. Astur follows the same idea for handheld devices: it distills complex mobile automation into a lean native runtime instead of routing every action through a heavy Appium server stack.
-
-Astur is an npm-first open source project. It uses native platform control paths instead of WebDriver:
-
-- Android: Kotlin UIAutomator native-agent command path by default, with ADB reserved for lifecycle, artifacts, and explicit legacy fallback.
-- iOS: `simctl`, `devicectl`, and a Swift XCUITest agent boundary. Native iOS element control requires XCTest.
-- Test runner: Playwright Test fixtures, assertions, retries, reports, and native artifacts.
-
-## Current Status
-
-This repository is the first implementation scaffold. The Android driver can discover devices, boot configured emulators, download or install APKs, launch already-installed apps, capture screenshots, record native video, and open mobile web URLs. The default interaction path is the Kotlin UIAutomator native agent, with the old ADB/XML path retained as an explicit fallback mode.
-
-The iOS driver can run diagnostics, list simulators and USB-connected real devices, install and launch apps through `simctl` or `devicectl`, terminate apps, capture screenshots, and bootstrap the bundled Swift XCUITest agent for native element lookup, waits, actions, gestures, orientation, and keyboard commands. Real iOS devices require an Apple signing team for the XCUITest runner and an app signed for the device.
-
-Both platform drivers support endpoint-based native agent transport wiring (`use.astur.agent.endpoint` or `ASTUR_ANDROID_AGENT_ENDPOINT` / `ASTUR_IOS_AGENT_ENDPOINT`). Astur defaults to the native-agent engine and starts one Astur session per Playwright worker. The example fixture isolates specs with a lightweight terminate + launch cycle instead of reinstalling the native agent or clearing app data every spec. `automation.engine: 'auto'` is available as a migration setting when legacy fallback is still needed.
-
-**Flutter** apps run through the same API: on Android via the Dart VM service (live widget tree), and on iOS via the XCUITest accessibility tree. **In-app WebViews** are automated at the DOM level with `device.webContext()` — engine-agnostic across Flutter and React Native — on Android (Chrome DevTools Protocol) and iOS simulators and real devices (`ios-webkit-debug-proxy`). See [Frameworks](docs/frameworks.md) and the [Changelog](CHANGELOG.md).
-
-Locators also expose Playwright-style state readers (`textContent()`, `inputValue()`, `count()`, `bounds()`, enabled/selected/focused checks, `clear()`, `waitFor({ state })`) plus a polling `toHaveCount` matcher, and multi-match queries on Android resolve natively on-device through the UiAutomator agent instead of full UI-tree dumps. For the elements none of that can express, `by.native({ ios, android })` is a raw escape hatch straight to the agents.
-
-## What Is Still Missing
-
-- Fluent relative/filter locator chaining (`.nth`/`.first`/`.last`, `.filter`, `.locator(child)`) — multi-match reads exist; index-addressed native actions do not yet.
-- Pinch/zoom gestures and a dedicated native clear-text command in the agent protocol.
-- Deeper strict-locator diagnostics (ranked candidate lists for every selector strategy).
-- Hosted-CI enforcement of `agent.mode: 'required'` — today this runs as a manual smoke workflow on self-hosted runners (Android, iOS simulator, and signed real iOS hardware), since hosted CI cannot drive real mobile hardware.
-- Cloud/device-farm execution beyond the BrowserStack scaffold.
-
-## Next Best Steps
-
-1. Fluent locator chaining on `MobileLocator`, building on the shipped native multi-match commands.
-2. Expand Android and iOS agent diagnostics and selector parity, with cross-platform contract tests.
-3. Extend the required-agent smoke workflow from manual runs toward scheduled/hosted enforcement.
-4. Add pinch/zoom and native clear to the shared agent protocol.
-
-See [Roadmap](docs/roadmap.md) for a structured implementation sequence.
-
-## Install
-
-```bash
-npm install
-npm run build
-npx astur-mobile doctor
+```ts
+await device.getByLabel('Email').fill('qa@example.com');
+await device.getByRole('button', { name: 'Sign in' }).tap();
+await expect(device.getByText('Welcome')).toBeVisible();
 ```
 
-## CLI
+No WebDriver layer, no Appium server to run. It is built **on** Playwright Test, so retries, projects, reporters, the HTML report, and the VS Code play button all work exactly as they already do.
+
+## Quick start
 
 ```bash
-npx astur-mobile doctor
-npx astur-mobile devices
-npx astur-mobile init
-npx astur-mobile codegen
-npx astur-mobile test
+npm create astur@latest
 ```
 
-`npx astur-mobile inspect` is an alias for `npx astur-mobile codegen`.
+The scaffolder asks what you target and writes a working config and first test. Then:
 
-`npx astur-mobile init` runs a setup wizard that asks whether the project targets Android, iOS, or both; emulator/simulator/real device/BrowserStack placeholder; app path, app URL, or installed package/bundle; timeout; reports; screenshots; and video.
+```bash
+npx astur-mobile doctor    # check your environment
+npx astur-mobile test      # run
+```
 
-## Documentation
+Adding Astur to an existing project instead:
 
-Full documentation site: **https://astur-mobile.github.io/Astur/**
+```bash
+npm install -D @astur-mobile/test astur-mobile
+```
 
-The source guides live in [`docs/`](docs/) and are published to the site above
-via the [`Docs`](.github/workflows/docs.yml) workflow.
+### Requirements
 
-## Example Test
+- **Node.js 18+**
+- **Android**: Android SDK platform-tools (`adb`) and an emulator or a device with USB debugging
+- **iOS**: macOS with Xcode. Real devices need an Apple signing team for the XCUITest runner
+
+`npx astur-mobile doctor` checks all of it and tells you what is missing.
+
+## Writing a test
 
 ```ts
 import { expect, test } from '@astur-mobile/test';
@@ -96,14 +62,6 @@ import { expect, test } from '@astur-mobile/test';
 test.use({
   astur: {
     platform: 'android',
-    timeout: 20_000,
-    artifacts: {
-      screenshot: 'only-on-failure',
-      video: 'retain-on-failure'
-    },
-    keyboard: {
-      dismiss: 'auto'
-    },
     device: { kind: 'emulator' },
     app: './apps/demo.apk'
   }
@@ -111,148 +69,125 @@ test.use({
 
 test('login', async ({ device }) => {
   await device.app.launch();
+
   await device.getByLabel('Email').fill('qa@example.com');
   await device.getByLabel('Password').fill('secret');
-  await device.keyboard.dismiss();
   await device.getByRole('button', { name: 'Sign in' }).tap();
+
   await expect(device.getByText('Welcome')).toBeVisible();
 });
 ```
 
-Astur keeps the low-level selector engine available through `device.locator(by.id(...))` or `device.find(by.id(...))`, but the recommended test API is Playwright-style:
+### Finding elements
 
 ```ts
-device.getByText('Welcome');
-device.getByLabel('Email');
 device.getByTestId('login-submit');
+device.getByLabel('Email');
+device.getByText('Welcome');
 device.getByRole('button', { name: 'Sign in' });
+device.getByPlaceholder('Search…');
+device.getByType('android.widget.Button');
 ```
 
-For the rare element none of those can pin down — a screen with no
-accessibility metadata, where the only reliable match is by structure —
-`by.native({ ios, android })` is a raw escape hatch straight to the agents:
-NSPredicate on iOS, a structured `By`/`BySelector` chain on Android. See
-[docs/android.md](docs/android.md#native-selector-escape-hatch-bynative) and
-[docs/ios.md](docs/ios.md#native-selector-escape-hatch-bynative).
+A screen of repeated rows needs more than one selector, so locators compose:
 
-## Native Assertions
+```ts
+const row = device.getByType('Cell').filter({ hasText: 'Rye' });
+await row.getByRole('button', { name: 'Add' }).tap();
 
-`expect` from `@astur-mobile/test` extends Playwright assertions for native `MobileLocator` objects. These assertions use `use.astur.timeout` by default and still allow local overrides:
+device.getByRole('listitem').filter({ hasNotText: 'Sold out' }).first();
+device.getByText('Retry').or(device.getByText('Try again'));
+```
+
+Scope to a parent, `filter({ hasText, hasNotText, has, hasNot })`, combine with `and()` / `or()`, and pick with `first()` / `last()` / `nth(i)`. See [Locators](docs/locators.md).
+
+For the rare element none of that can pin down, `by.native({ ios, android })` sends a platform query straight to the agent — NSPredicate on iOS, a `BySelector` chain on Android.
+
+### Asserting
+
+Assertions retry until they pass or time out, and every action auto-waits.
 
 ```ts
 await expect(device.getByText('Welcome')).toBeVisible();
 await expect(device.getByLabel('Email')).toHaveValue('qa@example.com');
-await expect(device.getByRole('button', { name: 'Submit' })).toBeEnabled({ timeout: 5_000 });
+await expect(device.getByRole('checkbox')).toBeChecked();
 await expect(device.getByRole('menuitem')).toHaveCount(3);
-await expect.soft(device.getByText('Optional banner')).toBeHidden();
+await expect(device.getByTestId('hero')).toHaveScreenshot('hero.png');
 ```
 
-Supported native matchers include `toBeVisible`, `toBeHidden`, `toExist`, `toBeEnabled`, `toBeDisabled`, `toBeSelected`, `toBeFocused`, `toHaveText`, `toContainText`, `toHaveValue`, `toHaveLabel`, `toHaveType`, `toHaveBounds`, and `toHaveCount`.
+`toBeVisible`, `toBeHidden`, `toExist`, `toBeEnabled`, `toBeDisabled`, `toBeChecked`, `toBeSelected`, `toBeFocused`, `toBeEmpty`, `toHaveText`, `toContainText`, `toHaveValue`, `toHaveLabel`, `toHaveType`, `toHaveBounds`, `toHaveCount`, `toHaveScreenshot`.
 
-Native screenshots and Android file transfer are available on the same device fixture:
-
-```ts
-await device.screenshot({ path: 'test-results/screens/home.png' });
-await device.files.push('./fixtures/avatar.png', '/sdcard/Download/avatar.png');
-await device.files.save('/sdcard/Download/app.log', 'test-results/device/app.log');
-```
-
-App and device management APIs cover the common Appium-style lifecycle gaps:
+### Gestures, state, and the device
 
 ```ts
-await device.app.install();
-await device.app.launch();
-await device.app.terminate();
-await device.app.clearData();
-await device.app.clearCache();
-await device.app.reset({ launch: true });
-await device.app.uninstall();
-
-await device.lock();
-await device.unlock();
-await device.isLocked();
-```
-
-## Reading Element State
-
-`MobileLocator` also exposes Playwright-style state readers, so tests can branch
-on native UI state without dropping down to raw snapshots:
-
-```ts
-const email = device.getByLabel('Email');
-
-await email.textContent();   // rendered text
-await email.inputValue();    // current input value
-await email.bounds();        // { x, y, width, height }
-await email.count();         // number of current matches (returns immediately)
-await email.isEnabled();     // also: isDisabled(), isSelected(), isFocused()
-
-await email.clear();         // empty the field (same engine path as fill)
-await email.waitFor({ state: 'visible' }); // 'visible' | 'hidden' | 'attached'
-```
-
-Readers auto-wait for the element with the same rules as actions; `count()` is
-the exception and reports the current match total without waiting.
-
-## Gestures And Scrolling
-
-`MobileLocator` exposes native gestures and a cross-platform scroll-to, so tests
-do not hand-roll coordinate math:
-
-```ts
-await device.getByRole('button', { name: 'Like' }).tap();
-await device.getByText('Counter').doubleTap();
-await device.getByText('Item').longPress();
 await device.getByTestId('card').dragTo(device.getByTestId('dropzone'));
 await device.getByText('Footer link').scrollIntoView();
+await device.getByText('Item').longPress();
+
+await device.getByLabel('Email').textContent();
+await device.getByLabel('Email').inputValue();
+await device.getByLabel('Email').isEnabled();
+
+await device.app.launch();
+await device.app.reset({ launch: true });
+await device.orientation.landscape();
+await device.screenshot({ path: 'test-results/home.png' });
 ```
 
-`scrollIntoView()` swipes the nearest scrollable region (falling back to the
-viewport) until the target is on screen, then waits for it. Pass `direction`,
-`maxScrolls`, or a `container` locator to scope the search. Double-tap uses the
-platform's native double-tap gesture so the recognition window is honored.
+## What it can do
+
+| | |
+| --- | --- |
+| **Any native-rendering framework** | Native SDK, React Native, Expo, Jetpack Compose, SwiftUI, .NET MAUI, NativeScript, Capacitor — [full table](docs/frameworks.md) |
+| **Flutter** | Live widget tree over the Dart VM service on Android; accessibility tree on iOS |
+| **In-app WebViews** | Real DOM automation with `device.webContext()` — [WebViews](docs/frameworks.md#webviews-dom) |
+| **Mobile web** | Drive a site in Chrome or Safari on the device itself — [Mobile Web](docs/mobile-web.md) |
+| **Network observation** | Assert on the HTTP calls an app makes, not just what it renders — [Network](docs/network.md) |
+| **Visual comparison** | `toHaveScreenshot()` with per-device baselines and masking — [Visual Comparison](docs/visual-comparison.md) |
+| **Inspector & codegen** | Live element inspection and recorded specs — [Inspector](docs/inspector.md) |
+
+## CLI
+
+```bash
+npx astur-mobile doctor        # check the environment
+npx astur-mobile devices       # list devices, emulators, simulators
+npx astur-mobile init          # scaffold config and a first test
+npx astur-mobile codegen       # live inspector and spec recorder
+npx astur-mobile screenshot    # capture a device screen to a PNG
+npx astur-mobile test          # run the suite
+```
+
+`inspect` is an alias for `codegen`.
+
+## Documentation
+
+**[astur-mobile.github.io/Astur](https://astur-mobile.github.io/Astur/)** — also available [in Arabic](https://astur-mobile.github.io/Astur/ar/).
+
+[Getting Started](docs/getting-started.md) · [Configuration](docs/configuration.md) · [Locators](docs/locators.md) · [Android](docs/android.md) · [iOS](docs/ios.md) · [Platform Limits](docs/platform-limits.md) · [Troubleshooting](docs/troubleshooting.md)
 
 ## Examples
 
-Runnable Android and iOS suites live in [`examples/`](examples/) and, as a
-standalone starter you can clone, in
-[astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate). They run
-against the Astur demo app; the iOS simulator build ships zipped at
-`assets/astur.demo.ios.simulator.zip` (unzip to `assets/Astur.app`).
+Runnable Android and iOS suites live in [`examples/`](examples/), and as a clonable starter in [astur-boilerplate](https://github.com/Astur-mobile/astur-boilerplate). Both run against the Astur demo app, which ships with them.
 
-## Package Layout
+## Design principles
 
-```text
-packages/
-  protocol/       Shared protocol and public data types
-  core/           Sessions, locators, auto-waiting, runtime
-  android/        ADB and Android UIAutomator driver
-  ios/            simctl/devicectl and XCUITest driver boundary
-  test/           Playwright Test integration
-  cli/            doctor, devices, init, codegen, inspector, test
-  astur-mobile/   Public CLI package exposing the `astur-mobile` executable
-  create-astur/   Project scaffolder (`npm create astur`)
-  android-agent/  Kotlin UIAutomator agent sources (internal, not published)
-```
-
-## Design Principles
-
-- No Appium server.
-- No WebDriver compatibility layer.
-- Native platform primitives under a Playwright-style test API.
+- No Appium server, no WebDriver compatibility layer.
+- Native platform primitives under a Playwright-style API.
 - Semantic locators before coordinates.
 - Failure artifacts by default.
-- Honest platform boundaries, especially on iOS.
+- Honest platform boundaries — where a platform cannot do something, Astur says so instead of pretending. See [Platform Limits](docs/platform-limits.md).
 
-## Contributing & Security
+## About the name
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). To report a
-vulnerability, follow [SECURITY.md](SECURITY.md) (please don't open a public
-issue for security problems).
+Astur is named after the astrolabe, the portable instrument that compressed an observatory's worth of calculation into something you could hold — and after [Mariam al-Asturlabiya](https://en.wikipedia.org/wiki/Mariam_al-Asturlabi), who built them. Same idea here: a lean native runtime in place of a heavy server stack.
+
+## Contributing & security
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). For vulnerabilities, follow [SECURITY.md](SECURITY.md) rather than opening a public issue.
 
 ## Sponsor
 
-Astur is open source and built in the open. If it saves your team time, consider supporting development:
+If Astur saves your team time, consider supporting development:
 
 <p>
   <a href="https://ko-fi.com/asturmobile"><img src="https://img.shields.io/badge/Ko--fi-Support%20Astur-FF5E5B?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
@@ -262,6 +197,6 @@ Astur is open source and built in the open. If it saves your team time, consider
 
 ## License
 
-Astur is open source under the [Apache License 2.0](LICENSE).
+[Apache 2.0](LICENSE). Copyright 2026 Amr Salem and Astur contributors.
 
-Copyright 2026 Amr Salem and Astur contributors.
+"Astur" is a trademark — see the [trademark policy](TRADEMARK.md).
