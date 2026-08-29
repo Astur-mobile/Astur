@@ -5,8 +5,8 @@ import { createServer as createNetServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
-  AppUnderTest,
   AppResetOptions,
+  AppUnderTest,
   Bounds,
   Coordinates,
   DeviceFileEntry,
@@ -14,27 +14,29 @@ import type {
   DeviceOrientation,
   DeviceSelector,
   DoctorCheck,
-  DragGesture,
   DoubleTapOptions,
+  DragGesture,
+  ElementDoubleTapOptions,
   ElementDragOptions,
   ElementDragTarget,
-  ElementDoubleTapOptions,
   ElementFillOptions,
   ElementLongPressOptions,
   ElementSelector,
   ElementTapOptions,
   ElementWaitOptions,
+  ForegroundApp,
+  InstalledApp,
   KeyboardState,
   LaunchOptions,
   LongPressOptions,
   MobileContextInfo,
-  NetworkCapabilities,
-  NetworkRedactionOptions,
-  NetworkRequestRecord,
   MobileElementSnapshot,
   NativeAgentCommandParams,
   NativeAgentCommandResponse,
   NativeAgentMethod,
+  NetworkCapabilities,
+  NetworkRedactionOptions,
+  NetworkRequestRecord,
   NormalizedCapabilities,
   RecordingStopOptions,
   SwipeGesture,
@@ -936,6 +938,42 @@ class AndroidSession implements PlatformSession {
     }
 
     await delay(500);
+  }
+
+  async getOrientation(): Promise<DeviceOrientation> {
+    // `user_rotation` only reflects reality while rotation is locked, which is
+    // exactly the state setOrientation leaves the device in. When rotation is
+    // still automatic the setting is stale, so derive the answer from the
+    // viewport instead — that cannot disagree with what is on screen.
+    const locked = (await this.adbText(['shell', 'settings', 'get', 'system', 'accelerometer_rotation'])).trim();
+    if (locked === '0') {
+      const rotation = Number.parseInt(
+        (await this.adbText(['shell', 'settings', 'get', 'system', 'user_rotation'])).trim(),
+        10
+      );
+      if (Number.isInteger(rotation)) {
+        return androidOrientationForRotation(rotation);
+      }
+    }
+
+    const viewport = await this.getViewport();
+    return viewport.width > viewport.height ? 'landscape' : 'portrait';
+  }
+
+  async listApps(options: { system?: boolean } = {}): Promise<InstalledApp[]> {
+    const output = await this.adbText([
+      'shell',
+      'pm',
+      'list',
+      'packages',
+      options.system ? '-a' : '-3'
+    ]);
+    return parseAndroidPackageList(output, options.system === true);
+  }
+
+  async getForegroundApp(): Promise<ForegroundApp | undefined> {
+    return parseAndroidForegroundApp(await this.adbText(['shell', 'dumpsys', 'window', 'windows']))
+      ?? parseAndroidForegroundApp(await this.adbText(['shell', 'dumpsys', 'activity', 'activities']));
   }
 
   async lockDevice(): Promise<void> {
@@ -2161,6 +2199,62 @@ export function parseAndroidKeyboardState(output: string): KeyboardState {
     : undefined;
 
   return bounds && bounds.height > 0 ? { visible: true, bounds } : { visible: true };
+}
+
+function androidOrientationForRotation(rotation: number): DeviceOrientation {
+  switch (rotation) {
+    case 1:
+      return 'landscape-left';
+    case 2:
+      return 'portrait-upside-down';
+    case 3:
+      return 'landscape-right';
+    default:
+      return 'portrait';
+  }
+}
+
+/** `pm list packages` prints one `package:<name>` per line, unordered. */
+export function parseAndroidPackageList(output: string, system: boolean): InstalledApp[] {
+  const identifiers = new Set<string>();
+
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^package:(\S+)$/.exec(line.trim());
+    if (match) {
+      identifiers.add(match[1]);
+    }
+  }
+
+  return [...identifiers]
+    .sort()
+    .map((identifier) => (system ? { identifier, system: true } : { identifier }));
+}
+
+/**
+ * Foreground app from a `dumpsys` dump.
+ *
+ * Both `mCurrentFocus` and `mResumedActivity` carry `package/activity`, and
+ * which one is present varies by Android version — so match the shape rather
+ * than the key. The focused *window* is checked first because a dialog or an
+ * IME can sit above the resumed activity, and the window is what the user is
+ * actually looking at.
+ */
+export function parseAndroidForegroundApp(output: string): ForegroundApp | undefined {
+  const patterns = [
+    /mCurrentFocus=Window\{[^}]*\s([A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)\}/,
+    /mFocusedApp=.*?\s([A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)/,
+    /mResumedActivity:.*?\s([A-Za-z0-9_.]+)\/([A-Za-z0-9_.$]+)/
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(output);
+    if (match) {
+      const [, identifier, activity] = match;
+      return { identifier, activity: activity.startsWith('.') ? `${identifier}${activity}` : activity };
+    }
+  }
+
+  return undefined;
 }
 
 export function parseAndroidLockState(output: string): boolean {

@@ -17,8 +17,10 @@ import { dirname, join } from 'node:path';
 import { createAndroidDriver } from '@astur-mobile/android';
 import {
   by,
+  checkedStateOf,
   delay,
   MobileLocator,
+  subtreeText,
   waitFor,
   AsturRuntime,
   type AsturConfig,
@@ -51,6 +53,7 @@ export {
   findElement,
   flattenTree,
   MobileLocator,
+  placeholderOf,
   pointInBounds
 } from '@astur-mobile/core';
 export type * from '@astur-mobile/core';
@@ -491,6 +494,52 @@ export const expect = baseExpect.extend({
       options,
       `Expected ${actual.toString()} to be focused.`,
       `Expected ${actual.toString()} not to be focused.`
+    );
+  },
+
+  async toBeChecked(actual: unknown, options?: WaitOptions): AsturMatcherResult {
+    if (isPlaywrightLocator(actual)) {
+      return runPlaywrightPredicateAssertion(
+        () => actual.isChecked({ timeout: 1_000 }),
+        options,
+        'Expected Playwright locator to be checked.',
+        'Expected Playwright locator not to be checked.'
+      );
+    }
+
+    if (!(actual instanceof MobileLocator)) {
+      return unsupportedActual('toBeChecked');
+    }
+
+    return runMobileSnapshotAssertion(
+      actual,
+      (snapshot) => checkedStateOf(snapshot) === true,
+      options,
+      `Expected ${actual.toString()} to be checked.`,
+      `Expected ${actual.toString()} not to be checked.`
+    );
+  },
+
+  async toBeEmpty(actual: unknown, options?: WaitOptions): AsturMatcherResult {
+    if (isPlaywrightLocator(actual)) {
+      return runPlaywrightPredicateAssertion(
+        async () => ((await actual.textContent({ timeout: 1_000 })) ?? '').trim().length === 0,
+        options,
+        'Expected Playwright locator to be empty.',
+        'Expected Playwright locator not to be empty.'
+      );
+    }
+
+    if (!(actual instanceof MobileLocator)) {
+      return unsupportedActual('toBeEmpty');
+    }
+
+    return runMobileSnapshotAssertion(
+      actual,
+      (snapshot) => subtreeText(snapshot).trim().length === 0,
+      options,
+      `Expected ${actual.toString()} to be empty.`,
+      `Expected ${actual.toString()} not to be empty.`
     );
   },
 

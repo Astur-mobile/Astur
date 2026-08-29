@@ -25,6 +25,7 @@ export type LocatorStrategy =
   | 'role'
   | 'text'
   | 'type'
+  | 'placeholder'
   | 'xpath'
   | 'coordinates'
   | 'native';
@@ -541,6 +542,29 @@ export interface ElementDragOptions extends ElementActionOptions {
   durationMs?: number;
 }
 
+/** One app installed on the device, as reported by {@link AsturDevice.app.list}. */
+export interface InstalledApp {
+  /** Package name on Android, bundle identifier on iOS. */
+  identifier: string;
+  /** Display name where the platform reports one cheaply; absent otherwise. */
+  name?: string;
+  /**
+   * `true` for an app that ships with the system image.
+   *
+   * Listing is filtered to third-party apps by default because a system list
+   * runs to hundreds of entries and buries the app under test.
+   */
+  system?: boolean;
+}
+
+/** The app currently in the foreground, as reported by {@link AsturDevice.app.foreground}. */
+export interface ForegroundApp {
+  /** Package name on Android, bundle identifier on iOS. */
+  identifier: string;
+  /** Fully qualified Activity on Android. Not reported on iOS. */
+  activity?: string;
+}
+
 export interface MobileElementSnapshot {
   id?: string;
   text?: string;
@@ -551,6 +575,15 @@ export interface MobileElementSnapshot {
   visible: boolean;
   selected?: boolean;
   focused?: boolean;
+  /**
+   * Checked state of a checkbox, switch, radio button, or toggle.
+   *
+   * Left `undefined` by drivers that cannot report it, and by elements the
+   * concept does not apply to — which is why it is a tri-state rather than a
+   * boolean defaulting to `false`. A missing value means "unknown", not
+   * "unchecked", so an assertion can fail with that distinction intact.
+   */
+  checked?: boolean;
   bounds: Bounds;
   children: MobileElementSnapshot[];
   platform?: PlatformName;

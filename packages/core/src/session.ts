@@ -1,36 +1,42 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type {
+  AppResetOptions,
+  AppUnderTest,
+  AsturConfig,
+  Bounds,
   BrowserCapabilities,
   Coordinates,
   DeviceFileEntry,
   DeviceInfo,
   DeviceOrientation,
   DoctorCheck,
-  DragGesture,
   DoubleTapOptions,
+  DragGesture,
+  ElementDoubleTapOptions,
   ElementDragOptions,
   ElementDragTarget,
-  ElementDoubleTapOptions,
   ElementFillOptions,
   ElementLongPressOptions,
   ElementSelector,
   ElementTapOptions,
   ElementWaitOptions,
-  LaunchOptions,
-  LongPressOptions,
+  ForegroundApp,
+  InspectorSession,
+  InstalledApp,
   KeyboardState,
+  LaunchOptions,
+  LocatorSuggestion,
+  LongPressOptions,
   MobileContextInfo,
+  MobileElementSnapshot,
+  MobileRole,
   NetworkCapabilities,
   NetworkRedactionOptions,
   NetworkRequestFilter,
   NetworkRequestRecord,
-  MobileElementSnapshot,
-  MobileRole,
   NormalizedCapabilities,
   PlatformName,
-  InspectorSession,
-  LocatorSuggestion,
   RecordingStopOptions,
   RoleSelectorOptions,
   ScreenshotOptions,
@@ -38,10 +44,6 @@ import type {
   TapOptions,
   UiTreeSubscribeOptions,
   UiTreeUpdate,
-  AsturConfig,
-  AppResetOptions,
-  AppUnderTest,
-  Bounds,
   WebViewEndpoint,
   WebViewSelector
 } from '@astur-mobile/protocol';
@@ -101,6 +103,9 @@ export interface PlatformSession {
   revokePermission?(identifier: string, permission: string): Promise<void>;
   resetApp(options?: AppResetOptions): Promise<void>;
   setOrientation?(orientation: DeviceOrientation): Promise<void>;
+  getOrientation?(): Promise<DeviceOrientation>;
+  listApps?(options?: { system?: boolean }): Promise<InstalledApp[]>;
+  getForegroundApp?(): Promise<ForegroundApp | undefined>;
   lockDevice(): Promise<void>;
   unlockDevice(): Promise<void>;
   isDeviceLocked(): Promise<boolean>;
@@ -231,6 +236,39 @@ export class AsturDevice {
 
     reset: async (options?: AppResetOptions): Promise<void> => {
       await this.session.resetApp(options);
+    },
+
+    /**
+     * Apps installed on the device.
+     *
+     * Third-party apps only by default: a full system listing runs to hundreds
+     * of entries and buries the one being tested. Pass `{ system: true }` when
+     * a test genuinely needs to assert on a built-in app.
+     */
+    list: async (options?: { system?: boolean }): Promise<InstalledApp[]> => {
+      if (!this.session.listApps) {
+        throw new AsturError(
+          'APP_LIST_UNSUPPORTED',
+          'This platform session cannot list installed apps.'
+        );
+      }
+
+      return this.session.listApps(options);
+    },
+
+    /**
+     * The app in the foreground right now, or `undefined` when the device is
+     * showing the launcher or a system surface rather than an app.
+     */
+    foreground: async (): Promise<ForegroundApp | undefined> => {
+      if (!this.session.getForegroundApp) {
+        throw new AsturError(
+          'FOREGROUND_APP_UNSUPPORTED',
+          'This platform session cannot report the foreground app.'
+        );
+      }
+
+      return this.session.getForegroundApp();
     }
   };
 
@@ -275,6 +313,18 @@ export class AsturDevice {
   };
 
   readonly orientation = {
+    /** The device's current orientation. */
+    get: async (): Promise<DeviceOrientation> => {
+      if (!this.session.getOrientation) {
+        throw new AsturError(
+          'ORIENTATION_READ_UNSUPPORTED',
+          'This platform session cannot report the current orientation.'
+        );
+      }
+
+      return this.session.getOrientation();
+    },
+
     set: async (orientation: DeviceOrientation): Promise<void> => {
       await this.setOrientation(orientation);
     },
@@ -671,6 +721,10 @@ export class AsturDevice {
     return this.find(by.type(value, options));
   }
 
+  getByPlaceholder(value: string, options?: { exact?: boolean }): MobileLocator {
+    return this.find(by.placeholder(value, options));
+  }
+
   inspector(options?: RuntimeInspectorSessionOptions): InspectorSession {
     return createInspectorSession(this.session, options);
   }
@@ -703,6 +757,10 @@ export class AsturDevice {
 
   async pressAndHold(point: Coordinates, options?: LongPressOptions): Promise<void> {
     await this.longPress(point, options);
+  }
+
+  async getOrientation(): Promise<DeviceOrientation> {
+    return this.orientation.get();
   }
 
   async setOrientation(orientation: DeviceOrientation): Promise<void> {

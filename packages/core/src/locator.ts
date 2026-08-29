@@ -48,6 +48,19 @@ export const by = {
     return { strategy: 'type', value, exact: options?.exact ?? true };
   },
 
+  /**
+   * Placeholder / hint text of an empty input.
+   *
+   * Neither platform exposes this as a first-class accessibility field, so it
+   * is read from the driver's raw attributes where they carry it (`hint` on
+   * Android, `placeholderValue` on iOS) and falls back to the element's own
+   * value or label when the field is empty — which is how a placeholder
+   * surfaces on a field the user has not typed into. See {@link placeholderOf}.
+   */
+  placeholder(value: string, options?: { exact?: boolean }): ElementSelector {
+    return { strategy: 'placeholder', value, exact: options?.exact ?? true };
+  },
+
   xpath(value: string): ElementSelector {
     return { strategy: 'xpath', value, exact: true };
   },
@@ -115,17 +128,152 @@ export interface ScrollIntoViewOptions extends WaitOptions {
   container?: MobileLocator;
 }
 
+/** Narrowing predicate for {@link MobileLocator.filter}. */
+export interface LocatorFilter {
+  /** Keep matches whose own text, or any descendant's, contains this. */
+  hasText?: string | RegExp;
+  /** Drop matches whose own text, or any descendant's, contains this. */
+  hasNotText?: string | RegExp;
+  /** Keep matches containing at least one element the given locator matches. */
+  has?: MobileLocator;
+  /** Drop matches containing an element the given locator matches. */
+  hasNot?: MobileLocator;
+}
+
+/**
+ * Everything layered on top of a locator's base selector.
+ *
+ * Held separately rather than folded into {@link ElementSelector} because a
+ * selector is the atom the native agents understand. A locator carrying no
+ * refinement is still handed to the agent whole, exactly as before; only a
+ * refined one is resolved here against a tree snapshot.
+ */
+interface LocatorRefinement {
+  /** Search only within this locator's matches. */
+  within?: MobileLocator;
+  filters: LocatorFilter[];
+  /** Intersected with the base match set. */
+  and: MobileLocator[];
+  /** Unioned with the base match set. */
+  or: MobileLocator[];
+  /** Positional narrowing, applied last. Negative counts from the end. */
+  index?: number;
+}
+
+function emptyRefinement(): LocatorRefinement {
+  return { filters: [], and: [], or: [] };
+}
+
 export class MobileLocator {
   readonly selector: ElementSelector;
   private readonly session: PlatformSession;
+  /** `undefined` for a plain locator — the fast path that reaches the agent untouched. */
+  private readonly refinement?: LocatorRefinement;
 
-  constructor(session: PlatformSession, selector: ElementSelector) {
+  constructor(session: PlatformSession, selector: ElementSelector, refinement?: LocatorRefinement) {
     this.session = session;
     this.selector = selector;
+    this.refinement = refinement;
+  }
+
+  /**
+   * True when this locator is nothing but its base selector.
+   *
+   * Every action checks this before taking a driver's element fast path: those
+   * take an {@link ElementSelector}, which cannot carry a refinement, so a
+   * refined locator has to resolve here and act on the resulting coordinates.
+   */
+  private get isPlain(): boolean {
+    return this.refinement === undefined;
+  }
+
+  private derive(change: Partial<LocatorRefinement>): MobileLocator {
+    const base = this.refinement ?? emptyRefinement();
+    return new MobileLocator(this.session, this.selector, { ...base, ...change });
+  }
+
+  /** Scope a child lookup to this locator's matches. */
+  private scoped(selector: ElementSelector): MobileLocator {
+    return new MobileLocator(this.session, selector, { ...emptyRefinement(), within: this });
+  }
+
+  locator(selector: ElementSelector): MobileLocator {
+    return this.scoped(selector);
+  }
+
+  getByLabel(value: string, options?: { exact?: boolean }): MobileLocator {
+    return this.scoped(by.label(value, options));
+  }
+
+  getByA11y(value: string, options?: { exact?: boolean }): MobileLocator {
+    return this.scoped(by.a11y(value, options));
+  }
+
+  getByText(value: string, options?: { exact?: boolean }): MobileLocator {
+    return this.scoped(by.text(value, options));
+  }
+
+  getByTestId(value: string, options?: { exact?: boolean }): MobileLocator {
+    return this.scoped(by.testId(value, options));
+  }
+
+  getById(value: string, options?: { exact?: boolean }): MobileLocator {
+    return this.scoped(by.id(value, options));
+  }
+
+  getByRole(role: MobileRole | string, options?: RoleSelectorOptions): MobileLocator {
+    return this.scoped(by.role(role, options));
+  }
+
+  getByType(value: string, options?: { exact?: boolean }): MobileLocator {
+    return this.scoped(by.type(value, options));
+  }
+
+  getByPlaceholder(value: string, options?: { exact?: boolean }): MobileLocator {
+    return this.scoped(by.placeholder(value, options));
+  }
+
+  /**
+   * Narrow a locator that matches several elements.
+   *
+   * ```ts
+   * device.getByType('Cell').filter({ hasText: 'In stock' })
+   * ```
+   *
+   * Repeated calls stack: every filter must pass.
+   */
+  filter(filter: LocatorFilter): MobileLocator {
+    const base = this.refinement ?? emptyRefinement();
+    return this.derive({ filters: [...base.filters, filter] });
+  }
+
+  /** Match elements this locator and `other` both match. */
+  and(other: MobileLocator): MobileLocator {
+    const base = this.refinement ?? emptyRefinement();
+    return this.derive({ and: [...base.and, other] });
+  }
+
+  /** Match elements either this locator or `other` matches, in document order. */
+  or(other: MobileLocator): MobileLocator {
+    const base = this.refinement ?? emptyRefinement();
+    return this.derive({ or: [...base.or, other] });
+  }
+
+  first(): MobileLocator {
+    return this.nth(0);
+  }
+
+  last(): MobileLocator {
+    return this.nth(-1);
+  }
+
+  /** Match at `index`; negative counts from the end, so `-1` is the last. */
+  nth(index: number): MobileLocator {
+    return this.derive({ index });
   }
 
   async tap(options: WaitOptions & TapOptions = {}): Promise<void> {
-    if (this.session.tapElement) {
+    if (this.isPlain && this.session.tapElement) {
       await this.session.tapElement(this.selector, withKeyboardDefault(this.session, options));
       return;
     }
@@ -140,7 +288,7 @@ export class MobileLocator {
   }
 
   async doubleTap(options: WaitOptions & DoubleTapOptions = {}): Promise<void> {
-    if (this.session.doubleTapElement) {
+    if (this.isPlain && this.session.doubleTapElement) {
       await this.session.doubleTapElement(
         this.selector,
         withKeyboardDefault(this.session, options) as WaitOptions & ElementDoubleTapOptions
@@ -166,7 +314,7 @@ export class MobileLocator {
   }
 
   async longPress(options: WaitOptions & LongPressOptions = {}): Promise<void> {
-    if (this.session.longPressElement) {
+    if (this.isPlain && this.session.longPressElement) {
       await this.session.longPressElement(this.selector, withKeyboardDefault(this.session, options));
       return;
     }
@@ -185,7 +333,7 @@ export class MobileLocator {
   }
 
   async dragTo(target: MobileLocator | Coordinates, options: WaitOptions & { durationMs?: number } = {}): Promise<void> {
-    if (this.session.dragElement) {
+    if (this.isPlain && this.session.dragElement) {
       if (target instanceof MobileLocator && target.session !== this.session) {
         throw new AsturError('CROSS_SESSION_LOCATOR', 'Cannot drag between locators from different Astur device sessions.');
       }
@@ -286,9 +434,58 @@ export class MobileLocator {
   }
 
   private async currentMatch(): Promise<MobileElementSnapshot | undefined> {
-    return this.session.findElement
-      ? this.session.findElement(this.selector)
-      : findElement(await this.session.getTree(), this.selector);
+    if (this.isPlain) {
+      return this.session.findElement
+        ? this.session.findElement(this.selector)
+        : findElement(await this.session.getTree(), this.selector);
+    }
+
+    return (await this.queryAll())[0];
+  }
+
+  /**
+   * A plain locator addressing the same element, when the element can be named
+   * on its own.
+   *
+   * A composed locator cannot be handed to a driver, because the drivers take
+   * an {@link ElementSelector} and a refinement does not fit in one. Falling
+   * straight to coordinates would work for pointer actions but quietly lose
+   * everything else the drivers do — clearing a field before typing, waiting
+   * on the IME, honouring per-element options. So before giving up on the fast
+   * path, check whether the resolved element happens to be uniquely
+   * identifiable by an id, label, or text of its own. In a list of look-alike
+   * rows nothing will be unique and this returns `undefined`; for the far more
+   * common "the field inside that section" it succeeds, and the composed
+   * locator then behaves exactly like a plain one.
+   */
+  private async plainEquivalent(): Promise<MobileLocator | undefined> {
+    if (this.isPlain) {
+      return this;
+    }
+
+    const tree = await this.session.getTree();
+    const element = this.resolveAgainst(tree, documentOrder(tree))[0];
+    if (!element) {
+      return undefined;
+    }
+
+    const candidates = [
+      element.id === undefined ? undefined : by.id(element.id),
+      element.label === undefined ? undefined : by.label(element.label),
+      element.text === undefined ? undefined : by.text(element.text)
+    ];
+
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      const found = findElements(tree, candidate);
+      if (found.length === 1 && found[0] === element) {
+        return new MobileLocator(this.session, candidate);
+      }
+    }
+
+    return undefined;
   }
 
   private async scrollRegion(): Promise<Bounds> {
@@ -300,6 +497,29 @@ export class MobileLocator {
   }
 
   async fill(value: string, options: WaitOptions & ElementFillOptions = {}): Promise<void> {
+    if (!this.isPlain) {
+      const plain = await this.plainEquivalent();
+      if (plain) {
+        await plain.fill(value, options);
+        return;
+      }
+
+      // Nothing names this element on its own, so the drivers' selector-based
+      // fill is out of reach. Focus it by tapping and type into that focus.
+      if (!this.session.typeText) {
+        throw new AsturError(
+          'COMPOSED_LOCATOR_FILL_UNSUPPORTED',
+          `Cannot fill ${formatSelector(this.selector)} through a composed locator: the element is not uniquely identifiable on its own, and this platform cannot type into the focused element. Target the field with a plain locator instead.`
+        );
+      }
+
+      const target = await this.waitForVisible(options);
+      await preparePointerTargetForKeyboard(this.session, centerOf(target.bounds), options.keyboard);
+      await this.session.tap(centerOf(target.bounds));
+      await this.session.typeText(value);
+      return;
+    }
+
     if (this.session.fillElement) {
       await this.session.fillElement(this.selector, value, withKeyboardDefault(this.session, options));
       return;
@@ -329,7 +549,7 @@ export class MobileLocator {
   }
 
   async waitForVisible(options: WaitOptions = {}): Promise<MobileElementSnapshot> {
-    if (this.session.waitForElement) {
+    if (this.isPlain && this.session.waitForElement) {
       return this.session.waitForElement(this.selector, {
         ...options,
         state: 'visible'
@@ -346,15 +566,14 @@ export class MobileLocator {
   }
 
   async waitForHidden(options: WaitOptions = {}): Promise<void> {
-    if (this.session.waitForElementHidden) {
+    if (this.isPlain && this.session.waitForElementHidden) {
       await this.session.waitForElementHidden(this.selector, options);
       return;
     }
 
     await waitFor(
       async () => {
-        const root = await this.session.getTree();
-        const match = findElement(root, this.selector);
+        const match = await this.currentMatch();
         return !match || !match.visible;
       },
       {
@@ -371,9 +590,7 @@ export class MobileLocator {
   ): Promise<MobileElementSnapshot> {
     return waitFor(
       async () => {
-        const match = this.session.findElement
-          ? await this.session.findElement(this.selector)
-          : findElement(await this.session.getTree(), this.selector);
+        const match = await this.currentMatch();
         return match && predicate(match) ? match : undefined;
       },
       {
@@ -409,9 +626,90 @@ export class MobileLocator {
   }
 
   async queryAll(): Promise<MobileElementSnapshot[]> {
-    return this.session.findElements
-      ? this.session.findElements(this.selector)
-      : findElements(await this.session.getTree(), this.selector);
+    if (this.isPlain) {
+      return this.session.findElements
+        ? this.session.findElements(this.selector)
+        : findElements(await this.session.getTree(), this.selector);
+    }
+
+    // A refinement is relative to a whole tree, so it must be resolved against
+    // one snapshot. Taking a single snapshot also keeps the comparison honest:
+    // resolving each stage with its own query could interleave with a UI
+    // change and produce a set that never existed on screen at one instant.
+    const tree = await this.session.getTree();
+    return this.resolveAgainst(tree, documentOrder(tree));
+  }
+
+  /**
+   * Resolve selector + refinement against one tree snapshot.
+   *
+   * Order matters and mirrors how the API reads left to right: scope, then the
+   * base match, then set combination, then filters, then position. `nth` last
+   * is what makes `.filter(...).first()` mean "first of the filtered set"
+   * rather than "the first match, if it survives the filter".
+   */
+  /** @internal — module-level helpers resolve nested locators through this. */
+  resolveAgainst(
+    tree: MobileElementSnapshot,
+    order: Map<MobileElementSnapshot, number>
+  ): MobileElementSnapshot[] {
+    const refinement = this.refinement;
+    if (!refinement) {
+      return findElements(tree, this.selector);
+    }
+
+    let matches: MobileElementSnapshot[];
+    if (refinement.within) {
+      // Strict descendants: a parent does not contain itself.
+      const roots = refinement.within.resolveAgainst(tree, order);
+      matches = roots.flatMap((root) => root.children.flatMap((child) => findElements(child, this.selector)));
+    } else {
+      matches = findElements(tree, this.selector);
+    }
+
+    for (const other of refinement.and) {
+      const allowed = new Set(other.resolveAgainst(tree, order));
+      matches = matches.filter((element) => allowed.has(element));
+    }
+
+    for (const other of refinement.or) {
+      matches = matches.concat(other.resolveAgainst(tree, order));
+    }
+
+    matches = sortByDocumentOrder(dedupe(matches), order);
+
+    for (const filter of refinement.filters) {
+      matches = matches.filter((element) => this.passesFilter(element, filter, tree, order));
+    }
+
+    if (refinement.index !== undefined) {
+      const index = refinement.index < 0 ? matches.length + refinement.index : refinement.index;
+      const picked = matches[index];
+      return picked ? [picked] : [];
+    }
+
+    return matches;
+  }
+
+  private passesFilter(
+    element: MobileElementSnapshot,
+    filter: LocatorFilter,
+    tree: MobileElementSnapshot,
+    order: Map<MobileElementSnapshot, number>
+  ): boolean {
+    if (filter.hasText !== undefined && !textMatches(subtreeText(element), filter.hasText)) {
+      return false;
+    }
+    if (filter.hasNotText !== undefined && textMatches(subtreeText(element), filter.hasNotText)) {
+      return false;
+    }
+    if (filter.has !== undefined && !containsMatch(element, filter.has, tree, order)) {
+      return false;
+    }
+    if (filter.hasNot !== undefined && containsMatch(element, filter.hasNot, tree, order)) {
+      return false;
+    }
+    return true;
   }
 
   async waitFor(options: WaitOptions & { state?: 'visible' | 'hidden' | 'attached' } = {}): Promise<void> {
@@ -488,6 +786,31 @@ export class MobileLocator {
     return (await this.snapshot(options)).focused === true;
   }
 
+  /**
+   * Checked state of a checkbox, switch, radio, or toggle.
+   *
+   * Throws rather than returning `false` when the element reports no checked
+   * state at all — "this is not a checkable control" is a different fact from
+   * "it is unchecked", and silently conflating them turns a mis-aimed locator
+   * into a passing assertion.
+   */
+  async isChecked(options: WaitOptions = {}): Promise<boolean> {
+    const element = await this.snapshot(options);
+    const checked = checkedStateOf(element);
+    if (checked === undefined) {
+      throw new AsturError(
+        'ELEMENT_NOT_CHECKABLE',
+        `${formatSelector(this.selector)} reports no checked state. It resolved to a ${element.type}, which is not a checkbox, switch, radio button, or toggle.`
+      );
+    }
+    return checked;
+  }
+
+  /** True when the element and everything beneath it carry no text at all. */
+  async isEmpty(options: WaitOptions = {}): Promise<boolean> {
+    return subtreeText(await this.snapshot(options)).trim().length === 0;
+  }
+
   toString(): string {
     return formatSelector(this.selector);
   }
@@ -534,6 +857,10 @@ export function matches(element: MobileElementSnapshot, selector: ElementSelecto
         return true;
       }
       return matchValue(element.type, selector);
+    case 'placeholder': {
+      const placeholder = placeholderOf(element);
+      return placeholder === undefined ? false : matchValue(placeholder, selector);
+    }
     case 'coordinates':
       return false;
     case 'xpath':
@@ -547,6 +874,140 @@ export function matches(element: MobileElementSnapshot, selector: ElementSelecto
         'by.native() selectors resolve on the native agent and cannot be matched against a cached UI-tree snapshot. Use agent.mode: "required" (recommended), or ensure a native agent is connected in "auto" mode.'
       );
   }
+}
+
+/**
+ * Placeholder / hint text for an element, or `undefined` when it has none.
+ *
+ * Read from the driver's raw attributes first, because that is the only place
+ * either platform reports it faithfully. The fallback covers the common case
+ * the raw attributes miss: an *empty* field whose only visible string is the
+ * placeholder, which both platforms surface as the value or the label. A field
+ * the user has typed into reports its content there instead, so the fallback is
+ * deliberately skipped once `text` is present — otherwise typing into a field
+ * would silently change what `getByPlaceholder` matches.
+ */
+export function placeholderOf(element: MobileElementSnapshot): string | undefined {
+  const raw = element.raw;
+  if (raw && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>;
+    for (const key of ['hint', 'hintText', 'placeholder', 'placeholderValue']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.length > 0) {
+        return value;
+      }
+    }
+  }
+
+  // Only an empty field can be showing its placeholder.
+  if (element.text !== undefined && element.text.length > 0) {
+    return undefined;
+  }
+
+  return emptyToUndefined(element.value) ?? emptyToUndefined(element.label);
+}
+
+/**
+ * Checked state of a checkbox, switch, radio, or toggle.
+ *
+ * Prefers the driver's own report. Where a driver does not carry one, the state
+ * is derived from the raw attributes and then from the value string the
+ * platforms use for toggles (`"1"`, `"true"`, `"on"`). Returns `undefined`
+ * rather than `false` when nothing answers, so "this element has no checked
+ * state" stays distinguishable from "it is unchecked".
+ */
+export function checkedStateOf(element: MobileElementSnapshot): boolean | undefined {
+  if (element.checked !== undefined) {
+    return element.checked;
+  }
+
+  const raw = element.raw;
+  if (raw && typeof raw === 'object') {
+    const value = (raw as Record<string, unknown>).checked;
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'string' && value.length > 0) {
+      return value === 'true';
+    }
+  }
+
+  if (!isToggleType(element.type)) {
+    return undefined;
+  }
+
+  const value = element.value?.trim().toLowerCase();
+  if (value === '1' || value === 'true' || value === 'on') {
+    return true;
+  }
+  if (value === '0' || value === 'false' || value === 'off') {
+    return false;
+  }
+
+  return element.selected;
+}
+
+function isToggleType(type: string): boolean {
+  const normalized = type.toLowerCase();
+  return normalized.includes('switch')
+    || normalized.includes('checkbox')
+    || normalized.includes('toggle')
+    || normalized.includes('radio');
+}
+
+function emptyToUndefined(value: string | undefined): string | undefined {
+  return value === undefined || value.length === 0 ? undefined : value;
+}
+
+/** Every text-ish string an element carries, used by `filter({ hasText })`. */
+function textOf(element: MobileElementSnapshot): string {
+  return [element.text, element.label, element.value].filter(Boolean).join(' ');
+}
+
+/** Concatenated text of an element and everything beneath it. */
+export function subtreeText(element: MobileElementSnapshot): string {
+  return flattenTree(element).map(textOf).join(' ');
+}
+
+function textMatches(haystack: string, expected: string | RegExp): boolean {
+  return expected instanceof RegExp ? expected.test(haystack) : haystack.includes(expected);
+}
+
+/** Position of every node in a pre-order walk, so unions can be re-sorted. */
+function documentOrder(tree: MobileElementSnapshot): Map<MobileElementSnapshot, number> {
+  const order = new Map<MobileElementSnapshot, number>();
+  flattenTree(tree).forEach((element, index) => order.set(element, index));
+  return order;
+}
+
+function sortByDocumentOrder(
+  elements: MobileElementSnapshot[],
+  order: Map<MobileElementSnapshot, number>
+): MobileElementSnapshot[] {
+  return [...elements].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+}
+
+/**
+ * Identity here is object identity, which holds because every stage resolves
+ * against the same snapshot object. Two elements with identical fields are
+ * still two elements, and that is the behaviour a list of look-alike rows
+ * needs.
+ */
+function dedupe(elements: MobileElementSnapshot[]): MobileElementSnapshot[] {
+  return [...new Set(elements)];
+}
+
+/** Does `candidate`'s subtree contain anything `locator` matches? */
+function containsMatch(
+  candidate: MobileElementSnapshot,
+  locator: MobileLocator,
+  tree: MobileElementSnapshot,
+  order: Map<MobileElementSnapshot, number>
+): boolean {
+  const withinCandidate = new Set(flattenTree(candidate));
+  return locator
+    .resolveAgainst(tree, order)
+    .some((element) => element !== candidate && withinCandidate.has(element));
 }
 
 export function flattenTree(root: MobileElementSnapshot): MobileElementSnapshot[] {

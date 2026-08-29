@@ -16,16 +16,18 @@ import type {
   DeviceOrientation,
   DeviceSelector,
   DoctorCheck,
-  DragGesture,
   DoubleTapOptions,
+  DragGesture,
+  ElementDoubleTapOptions,
   ElementDragOptions,
   ElementDragTarget,
-  ElementDoubleTapOptions,
   ElementFillOptions,
   ElementLongPressOptions,
   ElementSelector,
   ElementTapOptions,
   ElementWaitOptions,
+  ForegroundApp,
+  InstalledApp,
   KeyboardState,
   LaunchOptions,
   LongPressOptions,
@@ -1087,6 +1089,34 @@ class IosSession implements PlatformSession {
     }
 
     throw xctestRequired('setting iOS orientation');
+  }
+
+  async getOrientation(): Promise<DeviceOrientation> {
+    // Derived from the viewport rather than asked of the runner: a rotated
+    // screen reports rotated bounds, and that cannot disagree with what is on
+    // screen. It does not distinguish the two landscape directions, which is
+    // the honest limit of reading geometry alone.
+    const viewport = await this.getViewport();
+    return viewport.width > viewport.height ? 'landscape' : 'portrait';
+  }
+
+  async listApps(options: { system?: boolean } = {}): Promise<InstalledApp[]> {
+    if (this.isRealDevice()) {
+      throw new AsturError(
+        'IOS_REAL_DEVICE_APP_LIST_NOT_SUPPORTED',
+        'Listing installed apps on a real iOS device is not exposed by devicectl. Use a simulator, or assert on the app under test directly.'
+      );
+    }
+
+    const output = await runText(this.xcrunPath, ['simctl', 'listapps', this.deviceInfo.id]);
+    return parseSimctlAppList(output, options.system === true);
+  }
+
+  async getForegroundApp(): Promise<ForegroundApp | undefined> {
+    throw new AsturError(
+      'IOS_FOREGROUND_APP_NOT_SUPPORTED',
+      'iOS does not expose the foreground app to the host. Neither simctl nor devicectl reports it, and the XCTest runner is scoped to the app it launched. Assert on a screen element instead of on which app is frontmost.'
+    );
   }
 
   async lockDevice(): Promise<void> {
@@ -3064,4 +3094,35 @@ function allowsLegacyFallback(
     case 'on-agent-failure':
       return true;
   }
+}
+
+/**
+ * `simctl listapps` prints an old-style plist, not JSON.
+ *
+ * Rather than pull in a plist parser for one command, read the two things that
+ * matter: the bundle id that opens each block, and the ApplicationType that
+ * says whether Apple shipped it. Anything the shape does not match is skipped,
+ * so a format change degrades to a short list instead of a crash.
+ */
+export function parseSimctlAppList(output: string, system: boolean): InstalledApp[] {
+  const apps: InstalledApp[] = [];
+  const blocks = output.split(/\n(?=\s*"[^"]+"\s*=\s*\{)/);
+
+  for (const block of blocks) {
+    const identifier = /"([A-Za-z0-9_.-]+)"\s*=\s*\{/.exec(block)?.[1];
+    if (!identifier) {
+      continue;
+    }
+
+    const type = /ApplicationType\s*=\s*(\w+)/.exec(block)?.[1];
+    const isSystem = type === 'System';
+    if (isSystem && !system) {
+      continue;
+    }
+
+    const name = /CFBundleDisplayName\s*=\s*"?([^";\n]+)"?/.exec(block)?.[1]?.trim();
+    apps.push({ identifier, ...(name ? { name } : {}), ...(isSystem ? { system: true } : {}) });
+  }
+
+  return apps.sort((a, b) => a.identifier.localeCompare(b.identifier));
 }

@@ -3,6 +3,67 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## Unreleased
+
+### Added
+
+- **Composable locators.** A screen of repeated rows has no single selector that
+  distinguishes one row from another, so locators can now be built up instead.
+
+  ```ts
+  const row = device.getByType('Cell').filter({ hasText: 'Rye' });
+  await row.getByRole('button', { name: 'Add' }).tap();
+  ```
+
+  - **Scoping** — every `getBy*` factory exists on a locator as well as on the
+    device, and searches that locator's descendants. A parent never matches
+    itself.
+  - **`filter({ hasText, hasNotText, has, hasNot })`** — text predicates read the
+    element and everything beneath it, so a row matches on its children's text.
+    Filters stack.
+  - **`and()` / `or()`** — set intersection and union, the union in document
+    order and without repeating an element both sides matched.
+  - **`first()` / `last()` / `nth(i)`**, negative indices counting from the end.
+    Position applies last, so `filter(...).first()` means the first of the
+    filtered set.
+
+  Composition resolves against a single tree snapshot rather than being pushed
+  into the drivers, which keeps the selector the drivers receive exactly what it
+  was before — a plain locator still takes the driver fast path untouched. Where
+  a composed locator resolves to an element that is uniquely nameable, Astur
+  hands the driver that plain selector so behaviour stays identical.
+
+- **`getByPlaceholder()`** for the placeholder or hint of an empty input. Read
+  from driver raw attributes where they carry it, falling back to the value or
+  label of an empty field. A field with content deliberately stops matching its
+  own placeholder.
+
+- **`toBeChecked()` and `isChecked()`** for checkboxes, switches, radios, and
+  toggles. Reports *unknown* rather than `false` for an element that has no
+  checked state, and `isChecked()` throws on one — "not a checkable control" and
+  "unchecked" are different facts.
+
+- **`toBeEmpty()` and `isEmpty()`** — true when an element and its subtree carry
+  no text.
+
+- **`device.app.list()` and `device.app.foreground()`.** Third-party apps only by
+  default, because a system listing buries the app under test. Foreground
+  reporting is Android-only; iOS exposes it to neither `simctl` nor `devicectl`.
+
+- **`device.orientation.get()`** (also `device.getOrientation()`). Android reads
+  the rotation setting while rotation is locked and falls back to viewport
+  geometry; iOS derives it from the viewport, which cannot disagree with what is
+  on screen but does not distinguish the two landscape directions.
+
+- **`astur screenshot`** captures a device screen to a PNG without writing a
+  test. Takes the same device-selection flags as `codegen`, and neither installs
+  nor launches anything — capturing a screen should not change it.
+
+- **Documentation**: a [Locators](https://astur-mobile.github.io/Astur/locators/)
+  guide, and a framework support table covering .NET MAUI, NativeScript,
+  Cordova/Capacitor, Kotlin Multiplatform, and why game engines cannot work.
+  Both in English and Arabic.
+
 ## 0.6.0-beta
 
 ### Added
