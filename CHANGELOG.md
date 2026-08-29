@@ -30,11 +30,13 @@ All notable changes to Astur are documented here. Versions follow the
 
   Three things this needed beyond the existing DOM transport:
 
-  - **One tab for the whole run.** Chrome opens a new tab per VIEW intent and
-    offers no way to close one over the debugging socket, so launching per test
-    walked up to dozens of tabs until nothing was attachable. `open()` now
-    reuses an open tab and navigates in-page, and always reloads — a reused tab
-    still carries the previous test's DOM.
+  - **A tab per test, closed when it ends**, the way Playwright hands each test
+    its own page. Android creates and closes tabs over the debugging socket; the
+    fixture closes them, so they cannot accumulate. WebKit exposes no tab
+    lifecycle, so iOS reuses one tab and reloads it. `open()` always loads even
+    when the tab already shows that URL — a reused tab still carries the
+    previous test's DOM. Note that a tab is not a Playwright browser *context*:
+    cookies and `localStorage` belong to the browser profile and are shared.
   - **Settling on the document, not the URL.** A reload leaves the URL identical,
     so a URL-based wait returns instantly and hands back the *old* page. Astur
     plants a token on `window` and waits for it to disappear, which is exactly

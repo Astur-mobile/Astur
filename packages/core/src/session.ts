@@ -144,6 +144,17 @@ export interface PlatformSession {
   openBrowser?(url: string): Promise<void>;
   /** What this session can do with a browser, detected at runtime. */
   getBrowserCapabilities?(): Promise<BrowserCapabilities>;
+  /**
+   * Opens a **new** browser tab and returns its target id.
+   *
+   * Optional because tab lifecycle is not universal: Chrome exposes it over the
+   * debugging socket, WebKit's remote inspector does not. A driver that omits
+   * these falls back to reusing one tab, which is weaker isolation but the only
+   * thing the platform allows.
+   */
+  openBrowserTab?(url: string): Promise<string | undefined>;
+  /** Closes a browser tab by target id. */
+  closeBrowserTab?(id: string): Promise<void>;
   pushFile?(localPath: string, remotePath: string): Promise<void>;
   pullFile?(remotePath: string): Promise<Buffer>;
   saveFile?(remotePath: string, localPath: string): Promise<void>;
@@ -372,6 +383,9 @@ export class AsturDevice {
    */
   private browserPage?: WebContext;
 
+  /** Target id of the tab this session opened, when it opened one itself. */
+  private browserTabId?: string;
+
   /**
    * Drives a **browser** rather than the app under test — for testing a mobile
    * web page on the same real device or emulator the native suite runs on.
@@ -405,24 +419,37 @@ export class AsturDevice {
         throw new AsturError('BROWSER_NOT_SUPPORTED', capabilities.coverage);
       }
 
-      await this.closeBrowserPage();
+      await this.browser.close();
 
-      // Reuse a tab when the browser is already running, and only fall back to
-      // the launch intent when nothing is attachable.
-      //
-      // Firing the intent every time is what a first version does, and it leaks:
-      // Chrome opens a *new* tab per VIEW intent and offers no way to close one
-      // over the debugging socket, so a suite that opens a page per test walks
-      // up to dozens of tabs and eventually cannot attach to any of them.
-      // Navigating in-page keeps one tab for the whole run.
+      // Prefer a genuinely fresh tab, the way Playwright hands each test a new
+      // page. Chrome supports it over the debugging socket; WebKit's inspector
+      // does not, so iOS falls back to reusing one tab and reloading it.
+      if (this.session.openBrowserTab) {
+        const id = await this.session.openBrowserTab(url).catch(() => undefined);
+        if (id) {
+          this.browserTabId = id;
+          // Attach to the new tab without filtering on the URL. A tab created
+          // over the debugging socket starts at about:blank and only reaches the
+          // requested URL once it has loaded, so matching on the URL here waits
+          // out the whole budget before falling back. `ensureAt` drives it there
+          // in-page, which is both faster and the same code path as navigate().
+          const opened = await this.resolveBrowserPage(undefined, options?.timeout);
+          return this.ensureAt(opened, url, options?.timeout);
+        }
+      }
+
+      // Fallback: reuse whatever tab is open rather than firing the launch
+      // intent again. Each intent leaves another tab behind, so a suite that
+      // opens a page per test would climb to dozens and eventually attach to
+      // none of them.
       const existing = await this.tryResolveBrowserPage(REUSE_PROBE_MS);
       if (existing) {
         return this.ensureAt(existing, url, options?.timeout);
       }
 
-      // The launch only has to *start* the browser; it is not trusted to land on
-      // the URL, because Chrome dedupes a VIEW intent against an already-open
-      // tab and simply focuses it.
+      // Nothing attachable: start the browser. The launch is not trusted to land
+      // on the URL, because Chrome dedupes a VIEW intent against an open tab and
+      // simply focuses it.
       await this.session.openBrowser(url);
       const page = await this.resolveBrowserPage(undefined, options?.timeout);
       return this.ensureAt(page, url, options?.timeout);
@@ -453,9 +480,21 @@ export class AsturDevice {
       return String(await this.requireBrowserPage().evaluate('location.href') ?? '');
     },
 
-    /** Closes the page transport. The browser itself is left running. */
+    /**
+     * Closes the page, and its tab where the platform allows it. The browser
+     * itself is left running — starting it again per test costs seconds.
+     *
+     * The Astur fixture calls this after every test, so tabs cannot accumulate
+     * and no test inherits the previous one's page.
+     */
     close: async (): Promise<void> => {
       await this.closeBrowserPage();
+
+      const id = this.browserTabId;
+      this.browserTabId = undefined;
+      if (id && this.session.closeBrowserTab) {
+        await this.session.closeBrowserTab(id).catch(() => undefined);
+      }
     }
   };
 
@@ -907,7 +946,7 @@ export class AsturDevice {
   }
 
   async close(): Promise<void> {
-    await this.closeBrowserPage();
+    await this.browser.close().catch(() => undefined);
     await this.session.close();
   }
 }

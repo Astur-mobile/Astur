@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
-import { get as httpGet } from 'node:http';
+import { get as httpGet, request as httpRequest } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1568,6 +1568,55 @@ class AndroidSession implements PlatformSession {
   }
 
   /**
+   * Base URL of the browser's forwarded DevTools HTTP endpoint.
+   *
+   * Separate from the WebView sockets on purpose: a device can expose both, and
+   * tab lifecycle belongs to the browser's socket only.
+   */
+  private async browserDevtoolsUrl(): Promise<string | undefined> {
+    const sockets = parseAndroidWebViewSockets(
+      await this.adbText(['shell', 'cat', '/proc/net/unix']).catch(() => '')
+    ).filter(isBrowserSocket);
+
+    if (!sockets.length) {
+      return undefined;
+    }
+
+    return `http://127.0.0.1:${await this.forwardWebView(sockets[0])}`;
+  }
+
+  async openBrowserTab(url: string): Promise<string | undefined> {
+    const base = await this.browserDevtoolsUrl();
+    if (!base) {
+      return undefined;
+    }
+
+    // PUT, not GET: Chrome answers 405 to a GET here, which is easy to mistake
+    // for "tab creation is unsupported" and was exactly the wrong conclusion.
+    const created = await devtoolsRequest(`${base}/json/new?url=${encodeURIComponent(url)}`, 'PUT')
+      .catch(() => undefined);
+
+    if (!created) {
+      return undefined;
+    }
+
+    try {
+      return (JSON.parse(created) as { id?: string }).id;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async closeBrowserTab(id: string): Promise<void> {
+    const base = await this.browserDevtoolsUrl();
+    if (!base) {
+      return;
+    }
+
+    await devtoolsRequest(`${base}/json/close/${encodeURIComponent(id)}`, 'GET').catch(() => undefined);
+  }
+
+  /**
    * Chrome opens no tab, and publishes no DevTools socket, until its first-run
    * flow is done — so a fresh emulator hangs on a welcome screen while the test
    * waits for a page that will never appear. Detected here so the failure names
@@ -2198,6 +2247,28 @@ function matchesText(actual: string | undefined, expected: string | RegExp): boo
   }
 
   return expected instanceof RegExp ? expected.test(actual) : actual.includes(expected);
+}
+
+/** Minimal HTTP call against Chrome's DevTools endpoint. */
+function devtoolsRequest(url: string, method: 'GET' | 'PUT'): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(url, { method }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+          resolve(body);
+          return;
+        }
+        reject(new AsturError('BROWSER_DEVTOOLS_REQUEST_FAILED', `${method} ${url} responded ${response.statusCode}.`, { body }));
+      });
+    });
+
+    request.on('error', reject);
+    request.setTimeout(5_000, () => request.destroy(new Error(`${method} ${url} timed out.`)));
+    request.end();
+  });
 }
 
 function readDevtoolsTargets(cdpUrl: string): Promise<DevtoolsTarget[]> {

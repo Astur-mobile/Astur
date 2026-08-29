@@ -63,7 +63,21 @@ await device.browser.close();   // closes the transport, leaves the browser runn
 
 Each navigation returns the live page — use the returned handle from that point on.
 
-`open()` always loads the page fresh, even when the tab already shows that URL. Astur reuses one tab for the whole run, and a reused tab still carries the previous test's DOM, so skipping the load would quietly hand one test's filled form to the next.
+## Tab lifecycle
+
+Close to Playwright's, within what each platform allows:
+
+- **`open()` gives the test a fresh tab.** On Android, Astur creates one over the debugging socket, the way Playwright opens a new page.
+- **The tab is closed when the test ends.** The Astur fixture does this for you, so tabs never accumulate and no test inherits the previous one's DOM, history, or scroll position.
+- **`open()` always loads**, even when the tab already shows that URL, so a reused tab cannot hand one test's filled form to the next.
+
+**iOS is weaker here, and it is a platform limit rather than a choice.** WebKit's remote inspector exposes no way to create or close a Safari tab, so an iOS session reuses one tab and reloads it. State that lives in the document is still reset by the reload; tab history is not.
+
+**Neither platform isolates storage.** A tab is not a Playwright browser *context* — cookies, `localStorage`, and permissions belong to the browser profile and are shared across tabs. If a test depends on starting signed-out, clear that state explicitly:
+
+```ts
+await page.evaluate('localStorage.clear(); sessionStorage.clear()');
+```
 
 Everything the page returns is a `WebContext`, the same object `device.webContext()` gives you — `getByTestId`, `getById`, `getByRole`, `getByText`, `locator(css)`, `fill`, `tap`, `textContent`, `evaluate`.
 
