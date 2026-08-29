@@ -18,6 +18,10 @@ export function parseUiAutomatorXml(xml: string): MobileElementSnapshot {
       visible: bounds.width > 0 && bounds.height > 0,
       selected: attributes.selected === 'true',
       focused: attributes.focused === 'true',
+      // `checkable` tells us the concept applies at all. Without that guard
+      // every plain view would report `checked: false`, which reads as "this
+      // checkbox is off" rather than "this is not a checkbox".
+      checked: attributes.checkable === 'true' ? attributes.checked === 'true' : undefined,
       bounds,
       platform: 'android' as const,
       children: [],

@@ -1900,6 +1900,12 @@ function uiNodeMatchesSelector(node: UiNode, selector: ElementSelector): boolean
       return matchSelectorValue(node.text, selector) || matchSelectorValue(node.label, selector);
     case 'type':
       return selector.value.trim().toLowerCase() === 'any' || matchSelectorValue(node.type, selector);
+    case 'placeholder':
+      // The Inspector's node carries no raw driver attributes, so only the
+      // empty-field fallback is available here: a field showing text is
+      // showing content, not a placeholder.
+      return (node.text === undefined || node.text.length === 0)
+        && (matchSelectorValue(node.value, selector) || matchSelectorValue(node.label, selector));
     case 'coordinates':
     case 'xpath':
     case 'native':

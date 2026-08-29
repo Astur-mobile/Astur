@@ -80,6 +80,13 @@ const pages = [
     order: 10
   },
   {
+    source: 'docs/locators.md',
+    target: 'locators.md',
+    title: 'Locators',
+    description: 'Find one element, or narrow a screen full of repeated rows down to the one you meant.',
+    order: 5
+  },
+  {
     source: 'docs/mobile-web.md',
     target: 'mobile-web.md',
     title: 'Mobile Web',
@@ -173,6 +180,10 @@ const arabic = {
   'release-notes.md': {
     title: 'ملاحظات الإصدار',
     description: 'ما الجديد في كل إصدار من Astur.'
+  },
+  'locators.md': {
+    title: 'المُحدِّدات',
+    description: 'اعثر على عنصر واحد، أو ضيّق شاشة مليئة بالصفوف المتكررة وصولاً إلى العنصر الذي تقصده.'
   },
   'mobile-web.md': {
     title: 'الويب على الجوال',

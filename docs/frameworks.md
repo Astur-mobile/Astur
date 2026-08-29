@@ -10,6 +10,26 @@ The difference is *how* the UI tree is read:
 | React Native | UIAutomator agent (native views) | XCUITest agent (native views) |
 | Flutter | **Dart VM service** (widget tree) | XCUITest agent (accessibility/semantics) |
 
+## Which frameworks work
+
+The rule is simple: **if the framework renders real native views, Astur drives it** — the tree it reads is the platform's own, so nothing framework-specific is required. Only frameworks that paint their own pixels need a dedicated path.
+
+| Framework | Android | iOS | Notes |
+| --- | --- | --- | --- |
+| Native SDK (Kotlin/Java, Swift/Obj-C) | Yes | Yes | The baseline everything else is measured against |
+| Jetpack Compose | Yes | — | Renders to native accessibility nodes |
+| SwiftUI | — | Yes | Maps to standard `XCUIElementType` |
+| React Native | Yes | Yes | Real native components; `testID` becomes the native identifier |
+| Expo | Yes | Yes | Builds to React Native |
+| Flutter | Yes | Yes | Custom-rendered, so it has its own path — Dart VM on Android, semantics tree on iOS |
+| .NET MAUI | Yes | Yes | Compiles to native controls on both |
+| NativeScript | Yes | Yes | Renders to native views |
+| Cordova / Capacitor / Ionic | Yes | Yes | Shell is native; the web content is reached with `device.webContext()` |
+| Kotlin Multiplatform (shared UI) | Yes | Not verified | Android side is ordinary Compose; Compose Multiplatform on iOS is untested |
+| Unity / game engines | Not supported | Not supported | One drawing surface, no element tree — nothing to locate against |
+
+Only the rows marked otherwise have been exercised against a real app. The rest follow from rendering to native views, which is the thing that actually decides the answer.
+
 ## React Native
 
 React Native renders **native views**, so Astur automates it exactly like a native app — no extra setup, no special driver, on both Android and iOS.

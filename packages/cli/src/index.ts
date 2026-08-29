@@ -4,7 +4,7 @@ import { constants } from 'node:fs';
 import { realpathSync } from 'node:fs';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAndroidDriver } from '@astur-mobile/android';
 import { AsturError, AsturRuntime, AsturDevice } from '@astur-mobile/core';
@@ -73,6 +73,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     case 'codegen':
       await codegen(rest);
       break;
+    case 'screenshot':
+      await screenshot(rest);
+      break;
     case 'inspect':
       await codegen(rest);
       break;
@@ -134,6 +137,83 @@ async function init(args: string[]): Promise<void> {
 
   console.log('\nCreated Astur starter files.');
   console.log(colors.dim('Next: run `npx astur-mobile doctor`, then `npx astur-mobile test`.'));
+}
+
+/**
+ * Capture one frame from a connected device.
+ *
+ * Reuses codegen's argument parsing and device selection so `--android`,
+ * `--device`, and the rest mean the same thing here as they do there; the only
+ * addition is `-o` for the output path. Deliberately does not install or launch
+ * anything — capturing a screen should never change what is on it.
+ */
+async function screenshot(args: string[]): Promise<void> {
+  const outputIndex = args.findIndex((arg) => arg === '-o' || arg === '--output');
+  const output = outputIndex >= 0 ? args[outputIndex + 1] : undefined;
+  const passthrough = outputIndex >= 0 ? args.filter((_, i) => i !== outputIndex && i !== outputIndex + 1) : args;
+  const parsed = parseCodegenArgs(passthrough);
+
+  if (parsed.help) {
+    printHeader('screenshot', 'Capture a device screen');
+    console.log(`
+${colors.bold('Usage')}
+  astur screenshot [options]
+
+${colors.bold('Options')}
+  -o, --output <path>  Where to write the PNG. Default: screenshot.png
+  --android | --ios    Restrict to one platform
+  --device <id>        Capture from a specific device id/UDID
+  --emulator | --simulator | --real
+`);
+    return;
+  }
+
+  if (outputIndex >= 0 && !output) {
+    printHeader('screenshot', 'Capture a device screen');
+    console.log(`\n${colors.yellow('--output needs a file path.')}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (parsed.platform === 'ios' && !supportsLocalIos()) {
+    printHeader('screenshot', 'Capture a device screen');
+    console.log(`\n${colors.yellow('iOS capture requires macOS with Xcode.')}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const runtime = createRuntime();
+  const available = await runtime.listDevices(parsed.platform);
+  const selected = selectCodegenDevice(available, parsed.deviceId, parsed.deviceKind);
+
+  if (!selected) {
+    printHeader('screenshot', 'Capture a device screen');
+    console.log(`\n${colors.yellow('No matching online/booted device was found.')}`);
+    console.log(colors.dim('Run `astur devices` to list available targets.'));
+    process.exitCode = 1;
+    return;
+  }
+
+  printHeader('screenshot', 'Capture a device screen');
+
+  const target = resolve(process.cwd(), output ?? 'screenshot.png');
+  const config = buildCodegenConfig(selected, { ...parsed, launch: false });
+  let device: AsturDevice;
+  try {
+    device = await createCodegenDevice(runtime, config, { forceIosAppInstall: false });
+  } catch (err) {
+    console.error(`\n${colors.red('Failed to connect to device:')} ${formatCodegenConnectionError(err)}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  try {
+    await writeFile(target, await device.screenshot());
+    console.log(`\n${colors.green('Saved')} ${target}`);
+    console.log(colors.dim(`${selected.name} (${selected.platform}, ${selected.id})`));
+  } finally {
+    await device.close().catch(() => undefined);
+  }
 }
 
 async function codegen(args: string[]): Promise<void> {
@@ -532,6 +612,7 @@ ${colors.bold('Usage')}
   astur init         Create starter Playwright config and test interactively
   astur init --yes   Create starter files with Android emulator defaults
   astur codegen      Bootstrap runtime-backed inspector/codegen session
+  astur screenshot   Capture the screen of a connected device to a PNG
   astur test [args]  Run Playwright Test
   astur inspect      Alias for astur codegen
 `);

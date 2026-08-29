@@ -186,3 +186,21 @@ drwxrwx--- 2 shell shell 4096 2026-05-21 00:03 screenshots
     ]);
   });
 });
+
+describe('uiautomator checked state', () => {
+  it('reports checked only for elements that are checkable', () => {
+    const tree = parseUiAutomatorXml(
+      '<hierarchy>'
+      + '<node class="android.widget.CheckBox" checkable="true" checked="true" bounds="[0,0][10,10]" />'
+      + '<node class="android.widget.CheckBox" checkable="true" checked="false" bounds="[0,0][10,10]" />'
+      + '<node class="android.widget.TextView" checkable="false" checked="false" bounds="[0,0][10,10]" />'
+      + '</hierarchy>'
+    );
+
+    expect(tree.children[0].checked).toBe(true);
+    expect(tree.children[1].checked).toBe(false);
+    // Not checkable: the concept does not apply, so it must stay unknown
+    // rather than report an unchecked checkbox that does not exist.
+    expect(tree.children[2].checked).toBeUndefined();
+  });
+});
