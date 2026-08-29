@@ -19,7 +19,8 @@
     "docs:sync": "npm run sync -w docs-site",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:build": "npm run build && vitest run"
+    "test:build": "npm run build && vitest run",
+    "sync:sponsors": "node ./scripts/sync-sponsors.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

@@ -1273,10 +1273,94 @@ body:not(:has(#starlight__sidebar)) .content-panel:has(h1#_top) {
 /* Support / Ko-fi button in the footer */
 .astur-support-footer {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
   margin-top: 1.75rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--cyber-border-glass);
+}
+.astur-support-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+}
+.astur-sponsors {
+  width: 100%;
+  text-align: center;
+}
+.astur-sponsors-title {
+  margin: 0 0 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+/* Arabic is cursive: positive letter-spacing severs the joins, and uppercase
+   is meaningless. Both are undone for the RTL locale. */
+:root[dir="rtl"] .astur-sponsors-title {
+  letter-spacing: normal;
+  text-transform: none;
+}
+.astur-sponsor-logos,
+.astur-sponsor-names {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.astur-sponsor-names {
+  gap: 0.5rem 1.25rem;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+.astur-sponsor-logos img {
+  max-height: 34px;
+  max-width: 150px;
+  width: auto;
+  /* Desaturated at rest so a wall of brand colours does not outshout the page,
+     and restored on hover — the sponsor still gets their colours on attention. */
+  filter: grayscale(1);
+  opacity: 0.75;
+  transition: filter 0.25s ease, opacity 0.25s ease;
+}
+.astur-sponsor-logos a:hover img {
+  filter: grayscale(0);
+  opacity: 1;
+}
+.astur-sponsor-names a {
+  color: inherit !important;
+  text-decoration: none !important;
+  opacity: 0.8;
+  transition: opacity 0.25s ease, color 0.25s ease;
+}
+.astur-sponsor-names a:hover {
+  opacity: 1;
+  color: var(--cyber-primary) !important;
+}
+.astur-sponsor-cta {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.6rem 1.2rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none !important;
+  color: var(--cyber-primary) !important;
+  border: 1px solid rgba(20, 184, 166, 0.45);
+  background: transparent;
+  transition: background 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.astur-sponsor-cta:hover {
+  background: rgba(20, 184, 166, 0.12);
+  transform: translateY(-2px);
 }
 .astur-kofi {
   display: inline-flex;

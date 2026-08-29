@@ -185,14 +185,20 @@ Astur is named after the astrolabe, the portable instrument that compressed an o
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). For vulnerabilities, follow [SECURITY.md](SECURITY.md) rather than opening a public issue.
 
-## Sponsor
+## Sponsors
+
+<!-- sponsors:start -->
+
+Astur is built in the open and has no sponsors yet — [be the first](https://github.com/sponsors/Astur-mobile).
+
+<!-- sponsors:end -->
 
 If Astur saves your team time, consider supporting development:
 
 <p>
-  <a href="https://ko-fi.com/asturmobile"><img src="https://img.shields.io/badge/Ko--fi-Support%20Astur-FF5E5B?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
-  &nbsp;
   <a href="https://github.com/sponsors/Astur-mobile"><img src="https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"></a>
+  &nbsp;
+  <a href="https://ko-fi.com/asturmobile"><img src="https://img.shields.io/badge/Ko--fi-Support%20Astur-FF5E5B?logo=kofi&logoColor=white" alt="Support on Ko-fi"></a>
 </p>
 
 ## License

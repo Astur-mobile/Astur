@@ -1,35 +1,117 @@
 ---
-// Extends Starlight's default footer with an elegant "Support Astur" Ko-fi link.
+// Extends Starlight's default footer with the sponsors strip and a Ko-fi link.
+//
+// Sponsors come from the repository's sponsors.json so a new sponsor is a
+// single edit; the README is regenerated from the same file by
+// `npm run sync:sponsors`. With no sponsors yet, the strip shows the invitation
+// on its own rather than an empty heading — the same way SocialIcons renders
+// nothing at all when the star count is unavailable.
 import Default from '@astrojs/starlight/components/Footer.astro';
+import sponsors from '../../../sponsors.json';
+
+const strings = {
+  en: {
+    sponsors: 'Sponsors',
+    support: 'Support Astur',
+    become: 'Become a sponsor',
+    kofiLabel: 'Support Astur on Ko-fi'
+  },
+  ar: {
+    sponsors: 'الرعاة',
+    support: 'ادعم Astur',
+    become: 'كن راعياً',
+    kofiLabel: 'ادعم Astur عبر Ko-fi'
+  },
+  es: {
+    sponsors: 'Patrocinadores',
+    support: 'Apoya a Astur',
+    become: 'Hazte patrocinador',
+    kofiLabel: 'Apoya a Astur en Ko-fi'
+  }
+} as const;
+
+type Locale = keyof typeof strings;
+
+// Derived from the path rather than a Starlight helper so it stays correct
+// under a project-pages base like /Astur/, where the locale is not the first
+// segment of the pathname.
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const path = Astro.url.pathname.startsWith(base)
+  ? Astro.url.pathname.slice(base.length)
+  : Astro.url.pathname;
+const segment = path.split('/').filter(Boolean)[0];
+const locale: Locale = segment === 'ar' || segment === 'es' ? segment : 'en';
+const t = strings[locale];
+
+const sponsorsUrl = 'https://github.com/sponsors/Astur-mobile';
+const logoSponsors = sponsors.logo ?? [];
+const nameSponsors = sponsors.name ?? [];
+const hasSponsors = logoSponsors.length > 0 || nameSponsors.length > 0;
 ---
 
 <Default><slot /></Default>
 
 <div class="astur-support-footer">
-  <a
-    class="astur-kofi"
-    href="https://ko-fi.com/asturmobile"
-    target="_blank"
-    rel="noopener noreferrer"
-    aria-label="Support Astur on Ko-fi"
-  >
-    <svg
-      aria-hidden="true"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+  {hasSponsors && (
+    <section class="astur-sponsors" aria-label={t.sponsors}>
+      <h2 class="astur-sponsors-title">{t.sponsors}</h2>
+
+      {logoSponsors.length > 0 && (
+        <ul class="astur-sponsor-logos">
+          {logoSponsors.map((sponsor) => (
+            <li>
+              <a href={sponsor.url} target="_blank" rel="noopener noreferrer sponsored">
+                <img src={sponsor.logo} alt={sponsor.name} loading="lazy" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {nameSponsors.length > 0 && (
+        <ul class="astur-sponsor-names">
+          {nameSponsors.map((sponsor) => (
+            <li>
+              <a href={sponsor.url} target="_blank" rel="noopener noreferrer sponsored">
+                {sponsor.name}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )}
+
+  <div class="astur-support-actions">
+    <a
+      class="astur-kofi"
+      href="https://ko-fi.com/asturmobile"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={t.kofiLabel}
     >
-      <path d="M17 8h1a4 4 0 1 1 0 8h-1"></path>
-      <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path>
-      <line x1="6" y1="1" x2="6" y2="4"></line>
-      <line x1="10" y1="1" x2="10" y2="4"></line>
-      <line x1="14" y1="1" x2="14" y2="4"></line>
-    </svg>
-    <span>Support Astur</span>
-  </a>
+      <svg
+        aria-hidden="true"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M17 8h1a4 4 0 1 1 0 8h-1"></path>
+        <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path>
+        <line x1="6" y1="1" x2="6" y2="4"></line>
+        <line x1="10" y1="1" x2="10" y2="4"></line>
+        <line x1="14" y1="1" x2="14" y2="4"></line>
+      </svg>
+      <span>{t.support}</span>
+    </a>
+
+    <a class="astur-sponsor-cta" href={sponsorsUrl} target="_blank" rel="noopener noreferrer">
+      {t.become}
+    </a>
+  </div>
 </div>

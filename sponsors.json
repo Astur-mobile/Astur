@@ -1,0 +1,9 @@
+{
+  "note": "Astur sponsors, in one place. Add an entry below, then run `npm run sync:sponsors` to rewrite the README block. The docs site footer reads this file directly, so it needs no second edit. Order within each list is the display order.",
+  "tiers": {
+    "logo": "$100+/month — logo and link in the README and on the docs site",
+    "name": "$25+/month — name or handle in the README and on the docs site"
+  },
+  "logo": [],
+  "name": []
+}
