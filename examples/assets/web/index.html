@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Astur Web Lab</title></head>
+<body>
+  <h1 id="page-title">Astur Web Lab</h1>
+  <p id="page-role">home</p>
+
+  <form id="signin-form">
+    <label for="web-email">Email</label>
+    <input id="web-email" data-testid="web-email" type="email" />
+    <button id="web-submit" data-testid="web-submit" type="button">Sign in</button>
+    <p id="web-result" data-testid="web-result">idle</p>
+  </form>
+
+  <a id="web-next-link" href="./details.html">Go to details</a>
+
+  <script>
+    document.getElementById('web-submit').addEventListener('click', function () {
+      var email = document.getElementById('web-email').value;
+      document.getElementById('web-result').textContent = email ? 'Submitted ' + email : 'Email required';
+    });
+  </script>
+</body>
+</html>

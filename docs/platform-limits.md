@@ -27,6 +27,17 @@ Current state:
 - Kotlin agent supports baseline `tree.get`, element wait/find/actions, gesture commands, and keyboard state/dismiss
 - richer diagnostics and deeper selector parity are still in progress
 
+## Mobile web (browser targets)
+
+`device.browser` drives a page in the device's browser — Chrome on Android, Safari on iOS. See [Mobile Web](../mobile-web/) for the guide; the boundaries are summarized here.
+
+- **Storage is not isolated on either platform.** A tab is not a Playwright browser context: cookies, `localStorage` and permissions belong to the browser profile and are shared across tabs. Clear them explicitly when a test depends on it.
+- **Android gets a tab per test**, created and closed over the debugging socket. **iOS does not** — WebKit's remote inspector exposes no tab lifecycle, so the session reuses one tab and reloads it.
+- **The browser's own UI is not part of the page.** The address bar, tab switcher and permission sheets are native views; they need native locators and an agent, and no page objects ship for them.
+- **Chrome must be past its first-run screen** before it opens a tab or publishes a debugging socket. Astur reports `BROWSER_FIRST_RUN_PENDING` instead of timing out. Completing it once per emulator image is enough.
+- **iOS needs `ios-webkit-debug-proxy` (v1.9+)**, and a real device additionally needs Settings ▸ Safari ▸ Advanced ▸ Web Inspector.
+- **Real iOS devices are unverified.** The code path exists but has not been run against physical hardware.
+
 ## Flutter
 
 Astur automates Flutter apps without Appium or a Flutter-specific third-party driver. See [Frameworks: Flutter & React Native](../frameworks/) for the full setup guide; the boundaries are summarized here.

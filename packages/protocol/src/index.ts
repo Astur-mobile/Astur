@@ -237,10 +237,46 @@ export interface NormalizedNativeAgentConfig {
   transport: AsturAutomationTransport;
 }
 
+/** Stock browser Astur can drive as the target of a session. */
+export type BrowserEngine = 'chrome' | 'safari';
+
+/**
+ * Drive a browser instead of an app.
+ *
+ * Set this *instead of* `app` when the thing under test is a web page rather
+ * than an installed binary. Both may be set when a suite does each in turn, but
+ * the browser is never launched implicitly — only `device.browser` reaches it.
+ */
+export interface BrowserTarget {
+  /** Defaults to the platform's stock browser: Chrome on Android, Safari on iOS. */
+  engine?: BrowserEngine;
+  /**
+   * Package or bundle id override, for a Chrome channel (`com.chrome.beta`) or
+   * a device that ships a differently-named build.
+   */
+  id?: string;
+}
+
+/** What a session can actually do with a browser, answered at runtime. */
+export interface BrowserCapabilities {
+  /** A browser can be launched and its DOM driven. */
+  supported: boolean;
+  engine?: BrowserEngine;
+  /** Package/bundle id Astur will launch. */
+  identifier?: string;
+  /**
+   * Human-readable statement of what is and is not available, for error
+   * messages and for `test.skip()` reasons.
+   */
+  coverage: string;
+}
+
 export interface AsturConfig {
   platform: PlatformName;
   device?: DeviceSelector;
   app?: string | AppUnderTest;
+  /** Drive a browser rather than an app. See {@link BrowserTarget}. */
+  browser?: BrowserTarget;
   timeout?: number;
   artifactsDir?: string;
   artifacts?: AsturArtifacts;
@@ -258,6 +294,7 @@ export interface NormalizedCapabilities extends AsturConfig {
   platform: PlatformName;
   device: DeviceSelector;
   app?: AppUnderTest;
+  browser?: BrowserTarget;
   timeout: number;
   artifactsDir: string;
   artifacts: AsturArtifacts;
@@ -301,6 +338,25 @@ export interface WebViewSelector {
   url?: string | RegExp;
   packageName?: string;
   timeout?: number;
+  /**
+   * Prefer the most recently opened matching page over the first one found.
+   *
+   * Off by default, because an app normally hosts one WebView and "first match"
+   * is both cheaper and stable. A browser is the opposite: it keeps every tab a
+   * suite ever opened, several of them on the same URL, and the oldest is
+   * backgrounded — so driving "the first match" silently drives a frozen tab
+   * where navigation never runs.
+   */
+  newest?: boolean;
+  /**
+   * Which debugging socket to prefer when a device exposes several.
+   *
+   * Defaults to `'webview'`. Android names them `webview_devtools_remote_<pid>`
+   * for an app's WebView and `chrome_devtools_remote` for the browser, and they
+   * sort alphabetically — so with Chrome running, "first socket" is the browser
+   * and an app's WebView automation silently drives the wrong process.
+   */
+  target?: 'webview' | 'browser';
 }
 
 export interface WebViewEndpoint {

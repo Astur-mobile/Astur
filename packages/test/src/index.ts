@@ -195,6 +195,13 @@ export const test = base.extend<AsturTestFixtures, AsturWorkerFixtures>({
       if (recordingStarted) {
         await attachNativeVideo(testInfo, device, shouldAttachVideo(videoMode, failed));
       }
+
+      // Close the browser tab this test opened, matching how Playwright hands
+      // each test its own page. The device is worker-scoped and shared, so
+      // without this a tab — and the DOM, history and scroll position on it —
+      // would outlive the test that opened it. Best-effort: a session with no
+      // browser has nothing to close.
+      await device.browser.close().catch(() => undefined);
     }
   },
 

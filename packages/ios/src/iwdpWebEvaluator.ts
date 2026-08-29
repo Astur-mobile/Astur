@@ -226,7 +226,10 @@ async function findPage(basePort: number, options: IwdpEvaluatorOptions): Promis
 function selectPage(pages: IwdpPage[], options: IwdpEvaluatorOptions): IwdpPage | undefined {
   const url = options.selector?.url;
   const title = options.selector?.title;
-  return pages.find((page) => {
+  // See WebViewSelector.newest: a browser keeps old tabs on the same URL, and
+  // the stale one is listed first.
+  const ordered = options.selector?.newest ? [...pages].reverse() : pages;
+  return ordered.find((page) => {
     if (url) {
       return typeof url === 'string' ? page.url === url : url.test(page.url ?? '');
     }

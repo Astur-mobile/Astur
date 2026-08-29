@@ -80,6 +80,13 @@ const pages = [
     order: 10
   },
   {
+    source: 'docs/mobile-web.md',
+    target: 'mobile-web.md',
+    title: 'Mobile Web',
+    description: "Drive a web page in the device's browser — Chrome on Android, Safari on iOS — on the same devices your native suite runs on.",
+    order: 12
+  },
+  {
     source: 'docs/visual-comparison.md',
     target: 'visual-comparison.md',
     title: 'Visual Comparison',
@@ -166,6 +173,10 @@ const arabic = {
   'release-notes.md': {
     title: 'ملاحظات الإصدار',
     description: 'ما الجديد في كل إصدار من Astur.'
+  },
+  'mobile-web.md': {
+    title: 'الويب على الجوال',
+    description: 'شغّل صفحة ويب داخل متصفح الجهاز — Chrome على Android و Safari على iOS — على الأجهزة نفسها التي تعمل عليها اختباراتك الأصلية.'
   },
   'platform-limits.md': {
     title: 'حدود المنصات',
