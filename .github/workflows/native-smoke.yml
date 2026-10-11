@@ -14,9 +14,9 @@ on:
           - ios-simulator
           - ios-real
       spec:
-        description: Optional example spec path
+        description: Optional example spec path, relative to examples/
         required: false
-        default: android-native/login.test.ts
+        default: specs/login.test.ts
 
 permissions:
   contents: read
@@ -50,7 +50,8 @@ jobs:
         env:
           ASTUR_ANDROID_AGENT_MODE: required
           ASTUR_ANDROID_LEGACY_FALLBACK: never
-        run: npm --prefix examples run test:android:spec -- ${{ inputs.spec }}
+          SPEC: ${{ inputs.spec }}
+        run: npm --prefix examples run test:android -- "$SPEC"
 
   ios-simulator-required-agent:
     name: iOS simulator required-agent smoke
@@ -80,7 +81,8 @@ jobs:
         env:
           ASTUR_IOS_AGENT_MODE: required
           ASTUR_IOS_LEGACY_FALLBACK: never
-        run: npm --prefix examples run test:ios:spec -- ${{ inputs.spec }}
+          SPEC: ${{ inputs.spec }}
+        run: npm --prefix examples run test:ios:simulator -- "$SPEC"
 
   ios-real-required-agent:
     name: iOS real-device required-agent smoke
@@ -111,4 +113,5 @@ jobs:
           ASTUR_IOS_DEVICE_KIND: real
           ASTUR_IOS_AGENT_MODE: required
           ASTUR_IOS_LEGACY_FALLBACK: never
-        run: npm --prefix examples run test:ios:real -- ${{ inputs.spec }}
+          SPEC: ${{ inputs.spec }}
+        run: npm --prefix examples run test:ios:real -- "$SPEC"

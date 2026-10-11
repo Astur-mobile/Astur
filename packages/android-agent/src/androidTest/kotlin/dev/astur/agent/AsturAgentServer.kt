@@ -5,18 +5,35 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.nio.charset.Charset
+import java.security.MessageDigest
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
+/**
+ * The agent's HTTP endpoint, reached from the host through `adb forward`.
+ *
+ * It listens on loopback only, which keeps it off the network. Loopback does
+ * not separate apps on the same device, though: any installed app can connect
+ * to this port and would get UiAutomation's reach into every other app. So
+ * every request must present the per-session token the host passed in the
+ * instrumentation arguments, and that check runs before the body is read.
+ *
+ * Commands run one at a time. UiAutomation is not safe to drive concurrently,
+ * and a command the host gave up on must not overlap the next one.
+ */
 class AsturAgentServer(
     private val port: Int,
+    token: String,
     private val agent: AsturAgent = AsturAgent()
 ) {
     private val executor = Executors.newCachedThreadPool()
+    private val expectedAuthorization = "Bearer $token".toByteArray(Charsets.UTF_8)
+    private val dispatchLock = Any()
 
     @Volatile
     private var running = false
@@ -25,14 +42,17 @@ class AsturAgentServer(
     fun startBlocking() {
         running = true
 
-        ServerSocket(port).use { server ->
+        ServerSocket(port, BACKLOG, InetAddress.getLoopbackAddress()).use { server ->
             serverSocket = server
 
             while (running) {
                 try {
                     val client = server.accept()
+                    // The host's budget starts counting here, before the request
+                    // waits for a worker thread or for the command ahead of it.
+                    val acceptedAt = SystemClock.elapsedRealtime()
                     executor.execute {
-                        handleClient(client)
+                        handleClient(client, acceptedAt)
                     }
                 } catch (error: SocketException) {
                     if (running) {
@@ -55,20 +75,50 @@ class AsturAgentServer(
         executor.shutdownNow()
     }
 
-    private fun handleClient(socket: Socket) {
+    private fun handleClient(socket: Socket, acceptedAt: Long) {
         socket.use { client ->
             try {
-                val request = readRequest(client.getInputStream())
+                val input = client.getInputStream()
+                val head = readHead(input)
+
+                if (!isAuthorized(head.headers["authorization"])) {
+                    writeJson(client, 401, refusalJson("unknown", "UNAUTHORIZED", "Missing or invalid Astur agent token."))
+                    return
+                }
+
+                if (head.contentLength > MAX_BODY_BYTES) {
+                    writeJson(client, 413, refusalJson("unknown", "BAD_REQUEST", "Astur command body is too large."))
+                    return
+                }
+
+                val requestBody = readBody(input, head.contentLength).toString(UTF_8)
                 val body = when {
-                    request.method == "GET" && request.path == "/health" -> {
+                    head.method == "GET" && head.path == "/health" -> {
                         resultToJson(agent.dispatch(AsturCommand(id = "health", method = "agent.ping")), 0L)
                     }
 
-                    request.method == "POST" -> {
-                        val command = parseCommand(request.body)
-                        val startedAt = SystemClock.elapsedRealtime()
-                        val result = agent.dispatch(command)
-                        resultToJson(result, SystemClock.elapsedRealtime() - startedAt)
+                    head.method == "POST" -> {
+                        val command = try {
+                            parseCommand(requestBody)
+                        } catch (error: Exception) {
+                            writeJson(client, 400, refusalJson("unknown", "BAD_REQUEST", error.message ?: "Malformed Astur command."))
+                            return
+                        }
+                        val expiresAt = command.budgetMs?.let { acceptedAt + it }
+
+                        synchronized(dispatchLock) {
+                            if (expiresAt != null && SystemClock.elapsedRealtime() >= expiresAt) {
+                                refusalJson(
+                                    command.command.id,
+                                    "DEADLINE_EXCEEDED",
+                                    "The host's time budget for ${command.command.method} ran out before it started; nothing was done."
+                                )
+                            } else {
+                                val startedAt = SystemClock.elapsedRealtime()
+                                val result = agent.dispatch(command.command, expiresAt)
+                                resultToJson(result, SystemClock.elapsedRealtime() - startedAt)
+                            }
+                        }
                     }
 
                     else -> errorJson(
@@ -93,7 +143,15 @@ class AsturAgentServer(
         }
     }
 
-    private fun parseCommand(body: String): AsturCommand {
+    private fun isAuthorized(authorization: String?): Boolean {
+        // Constant-time, so response timing does not reveal how much matched.
+        return authorization != null
+            && MessageDigest.isEqual(authorization.toByteArray(Charsets.UTF_8), expectedAuthorization)
+    }
+
+    private data class ParsedCommand(val command: AsturCommand, val budgetMs: Long?)
+
+    private fun parseCommand(body: String): ParsedCommand {
         val json = JSONObject(body)
         val id = json.optString("id").takeIf { it.isNotBlank() } ?: "unknown"
         val method = json.optString("method").takeIf { it.isNotBlank() }
@@ -105,10 +163,15 @@ class AsturAgentServer(
             else -> JSONObject()
         }
 
-        return AsturCommand(
-            id = id,
-            method = method,
-            params = paramsRaw.asStringMap()
+        val budgetMs = if (json.has("budgetMs")) json.optLong("budgetMs", -1L).takeIf { it >= 0 } else null
+
+        return ParsedCommand(
+            command = AsturCommand(
+                id = id,
+                method = method,
+                params = paramsRaw.asStringMap()
+            ),
+            budgetMs = budgetMs
         )
     }
 
@@ -116,6 +179,10 @@ class AsturAgentServer(
         val json = JSONObject()
             .put("id", result.id)
             .put("ok", result.ok)
+        if (result.executed != null) {
+            json.put("executed", result.executed)
+        }
+        json
             .put(
                 "timing",
                 JSONObject()
@@ -151,6 +218,11 @@ class AsturAgentServer(
         return json
     }
 
+    /** A refusal made before the command ran: the host may report it without guessing. */
+    private fun refusalJson(id: String, code: String, message: String): JSONObject {
+        return errorJson(id, code, message).put("executed", false)
+    }
+
     private fun errorJson(id: String, code: String, message: String): JSONObject {
         return JSONObject()
             .put("id", id)
@@ -170,7 +242,7 @@ class AsturAgentServer(
             )
     }
 
-    private fun readRequest(input: InputStream): HttpRequest {
+    private fun readHead(input: InputStream): HttpHead {
         val headerBytes = ByteArrayOutputStream()
         var match = 0
 
@@ -178,6 +250,9 @@ class AsturAgentServer(
             val next = input.read()
             if (next < 0) {
                 throw IllegalArgumentException("Unexpected end of HTTP request headers.")
+            }
+            if (headerBytes.size() >= MAX_HEADER_BYTES) {
+                throw IllegalArgumentException("HTTP request headers are too large.")
             }
 
             headerBytes.write(next)
@@ -200,15 +275,13 @@ class AsturAgentServer(
         val requestLine = lines.firstOrNull()?.split(" ") ?: emptyList()
         val method = requestLine.getOrNull(0).orEmpty()
         val path = requestLine.getOrNull(1).orEmpty()
-        val contentLength = lines
-            .firstOrNull { line -> line.lowercase().startsWith("content-length:") }
-            ?.substringAfter(":")
-            ?.trim()
-            ?.toIntOrNull()
-            ?: 0
-        val body = readBody(input, contentLength).toString(UTF_8)
+        val headers = lines
+            .drop(1)
+            .filter { line -> line.contains(':') }
+            .associate { line -> line.substringBefore(':').trim().lowercase() to line.substringAfter(':').trim() }
+        val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
 
-        return HttpRequest(method = method, path = path, body = body)
+        return HttpHead(method = method, path = path, headers = headers, contentLength = contentLength)
     }
 
     private fun readBody(input: InputStream, contentLength: Int): ByteArray {
@@ -233,7 +306,13 @@ class AsturAgentServer(
 
     private fun writeJson(socket: Socket, status: Int, body: JSONObject) {
         val payload = body.toString().toByteArray(UTF_8)
-        val statusText = if (status == 200) "OK" else "Error"
+        val statusText = when (status) {
+            200 -> "OK"
+            400 -> "Bad Request"
+            401 -> "Unauthorized"
+            413 -> "Payload Too Large"
+            else -> "Error"
+        }
         val header = buildString {
             append("HTTP/1.1 ")
             append(status)
@@ -320,13 +399,17 @@ class AsturAgentServer(
         }
     }
 
-    private data class HttpRequest(
+    private data class HttpHead(
         val method: String,
         val path: String,
-        val body: String
+        val headers: Map<String, String>,
+        val contentLength: Int
     )
 
     private companion object {
         private val UTF_8: Charset = Charsets.UTF_8
+        private const val BACKLOG = 50
+        private const val MAX_HEADER_BYTES = 16 * 1024
+        private const val MAX_BODY_BYTES = 8 * 1024 * 1024
     }
 }

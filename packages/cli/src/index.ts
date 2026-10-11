@@ -391,8 +391,7 @@ async function codegen(args: string[]): Promise<void> {
           // without a cold boot.
           await device.close().catch(() => undefined);
         },
-        onListen: (port) => {
-          const url = `http://localhost:${port}`;
+        onListen: (_port, url) => {
           console.log(`\n${colors.bold('device')}   ${selectedDevice.platform} ${selectedDevice.name} (${selectedDevice.id})`);
           console.log(`${colors.bold('ui')}       ${colors.green('live')} ${colors.dim(url)}`);
           console.log(`${colors.bold('ready')}    ${colors.yellow('pending')} ${colors.dim('the mirror becomes live on the first screen frame; the UI tree can finish loading separately')}`);

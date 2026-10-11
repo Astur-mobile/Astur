@@ -168,4 +168,4 @@ Inspector selection uses the cached semantic tree for locator ranking, so clicki
 
 Scroll gestures are rate-limited on both the browser and server side. A fast trackpad scroll is collapsed into bounded native swipes so the device cannot receive an unbounded backlog of gestures.
 
-The inspector server binds to `127.0.0.1` only. It grants full device control over an unauthenticated local connection, so it is intentionally not reachable from other machines on the network. Open the printed `http://localhost:<port>` URL on the same Mac that started the session.
+The inspector server binds to `127.0.0.1` only, so it is not reachable from other machines on the network. Because it grants full device control (taps, text entry, app installs), it also refuses requests that do not come from its own page: each session has an access token, delivered in the printed URL's `#token=` fragment, and requests from other sites or other host names are rejected. Open the printed URL on the same Mac that started the session; a URL without the token will load the page but not connect.

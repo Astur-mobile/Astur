@@ -24,7 +24,9 @@ data class AsturCommandResult(
     val id: String,
     val ok: Boolean,
     val result: Any? = null,
-    val error: AsturCommandError? = null
+    val error: AsturCommandError? = null,
+    /** `false` when the command was refused before it touched the device. */
+    val executed: Boolean? = null
 )
 
 data class AsturCommandError(
@@ -128,6 +130,8 @@ private data class AsturElementSnapshot(
     val enabled: Boolean,
     val visible: Boolean,
     val selected: Boolean? = null,
+    /** Null for a node that cannot be checked, so "unchecked" stays distinct from "not a checkbox". */
+    val checked: Boolean? = null,
     val focused: Boolean? = null,
     val bounds: AsturBounds,
     val children: List<AsturElementSnapshot> = emptyList(),
@@ -144,6 +148,7 @@ private data class AsturElementSnapshot(
             "enabled" to enabled,
             "visible" to visible,
             "selected" to selected,
+            "checked" to checked,
             "focused" to focused,
             "bounds" to bounds.toMap(),
             "children" to children.map { child -> child.toMap() },
@@ -154,6 +159,11 @@ private data class AsturElementSnapshot(
 }
 
 private interface AsturBackend {
+    /**
+     * `SystemClock.elapsedRealtime()` after which the running command must not
+     * start a side effect, or null when the host sent no budget.
+     */
+    var expiresAt: Long?
     fun getTree(): AsturElementSnapshot
     fun findElement(selector: AsturSelector): AsturElementSnapshot?
     fun findElements(selector: AsturSelector): List<AsturElementSnapshot>
@@ -179,7 +189,8 @@ class AsturAgent private constructor(
     constructor() : this(UiAutomatorBackend())
     constructor(instrumentation: Instrumentation) : this(UiAutomatorBackend(instrumentation))
 
-    fun dispatch(command: AsturCommand): AsturCommandResult {
+    fun dispatch(command: AsturCommand, expiresAt: Long? = null): AsturCommandResult {
+        backend.expiresAt = expiresAt
         return try {
             when (command.method) {
                 "agent.ping" -> ok(command.id, agentInfo())
@@ -296,6 +307,7 @@ class AsturAgent private constructor(
             }
         } catch (error: AsturAgentException) {
             error(command.id, error.code, error.message ?: "Unknown agent failure", error.details)
+                .copy(executed = error.executed)
         } catch (error: Throwable) {
             error(
                 command.id,
@@ -303,6 +315,8 @@ class AsturAgent private constructor(
                 "Unhandled Android UIAutomator agent failure.",
                 mapOf("cause" to (error.message ?: error.javaClass.simpleName))
             )
+        } finally {
+            backend.expiresAt = null
         }
     }
 
@@ -539,6 +553,8 @@ private class UiAutomatorBackend(
     private val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation(),
     private val device: UiDevice = UiDevice.getInstance(instrumentation)
 ) : AsturBackend {
+    override var expiresAt: Long? = null
+
     override fun getTree(): AsturElementSnapshot {
         val root = resolveTreeRoot()
         if (root != null) {
@@ -853,15 +869,40 @@ private class UiAutomatorBackend(
     }
 
     private fun resolveElement(selector: AsturSelector, options: AsturElementActionOptions): UiObject2 {
-        val element = waitForObject(selector, options.wait)
-            ?: throw AsturAgentException(
+        // Every element action resolves here and acts right after, so this is
+        // the last point where refusing still means nothing happened. The wait
+        // is capped at what the host will still wait for: once the host has
+        // given up, acting would be a side effect nobody is waiting to see.
+        val wait = expiresAt
+            ?.let { options.wait.copy(timeoutMs = min(options.wait.timeoutMs, remainingBudgetMs())) }
+            ?: options.wait
+        val element = waitForObject(selector, wait)
+        ensureWithinBudget()
+        if (element == null) {
+            throw AsturAgentException(
                 "ELEMENT_NOT_FOUND",
                 "Could not resolve element before action.",
                 locatorFailureDetails(selector, options.wait.state, options.wait.timeoutMs)
             )
+        }
 
         ensureActionable(element, selector, options.actionability)
+        ensureWithinBudget()
         return element
+    }
+
+    private fun remainingBudgetMs(): Long {
+        return max(0L, (expiresAt ?: return Long.MAX_VALUE) - SystemClock.elapsedRealtime())
+    }
+
+    private fun ensureWithinBudget() {
+        if (expiresAt != null && remainingBudgetMs() == 0L) {
+            throw AsturAgentException(
+                "DEADLINE_EXCEEDED",
+                "The host's time budget for this command ran out before the action started; nothing was done.",
+                executed = false
+            )
+        }
     }
 
     private fun ensureActionable(element: UiObject2, selector: AsturSelector, requirements: AsturActionability) {
@@ -1299,6 +1340,8 @@ private class UiAutomatorBackend(
             enabled = runCatching { node.isEnabled }.getOrDefault(false),
             visible = isVisible(node),
             selected = runCatching { node.isSelected }.getOrNull(),
+            // Same rule as the uiautomator XML path: only checkable nodes have a checked state.
+            checked = runCatching { if (node.isCheckable) node.isChecked else null }.getOrNull(),
             focused = runCatching { node.isFocused }.getOrNull(),
             bounds = AsturBounds(
                 x = bounds.left,
@@ -1565,5 +1608,6 @@ private fun Map<String, Any?>.longValue(key: String): Long? {
 private class AsturAgentException(
     val code: String,
     message: String,
-    val details: Any? = null
+    val details: Any? = null,
+    val executed: Boolean? = null
 ) : RuntimeException(message)

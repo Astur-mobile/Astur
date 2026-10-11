@@ -15,6 +15,9 @@ export default defineConfig({
   // Deny-list, not an allow-list — a platform opts out, with a reason, so a
   // newly added spec runs here by default instead of silently never running.
   testIgnore: [
+    // Drives the device browser against pages that only the browser config
+    // serves (its webServer). It runs there; here it could only fail.
+    'browser.test.ts',
     // A Flutter session reads its tree from the Dart VM, which only ever
     // contains the app's own widgets. The system photo picker is a different
     // app's UI, so it is structurally invisible here — no locator can reach it,

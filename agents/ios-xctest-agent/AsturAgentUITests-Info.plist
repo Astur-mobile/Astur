@@ -6,6 +6,8 @@
 	<string>$(ASTUR_AUT_BUNDLE_ID)</string>
 	<key>ASTUR_AUT_LAUNCH</key>
 	<string>$(ASTUR_AUT_LAUNCH)</string>
+	<key>ASTUR_IOS_AGENT_BRIDGE_TOKEN</key>
+	<string>$(ASTUR_IOS_AGENT_BRIDGE_TOKEN)</string>
 	<key>ASTUR_IOS_AGENT_BRIDGE_URL</key>
 	<string>$(ASTUR_IOS_AGENT_BRIDGE_URL)</string>
 	<key>ASTUR_IOS_AGENT_PORT</key>

@@ -594,11 +594,23 @@ function createSession(snapshot: MobileElementSnapshot = tree): PlatformSession 
       keyboard: {
         dismiss: 'auto'
       },
+      automation: {
+        engine: 'auto',
+        transport: 'auto',
+        legacyFallback: 'on-agent-failure',
+        commandTimeoutMs: 10_000,
+        startupTimeoutMs: 15_000,
+        strictLocators: true,
+        snapshot: { mode: 'on-failure', cacheTtlMs: 200 },
+        timings: { enabled: true, slowCommandThresholdMs: 1_000 }
+      },
       agent: {
         mode: 'auto',
         install: true,
         launchTimeout: 15_000,
-        commandTimeout: 10_000
+        commandTimeout: 10_000,
+        legacyFallback: 'on-agent-failure',
+        transport: 'auto'
       }
     },
     deviceInfo: {

@@ -699,22 +699,18 @@ final class AsturAgent {
     }
 
     private func drag(_ gesture: AsturSwipeGesture) throws {
-        let dx = gesture.end.x - gesture.start.x
-        let dy = gesture.end.y - gesture.start.y
-
-        if abs(dy) > 120 && abs(dy) > abs(dx) * 2 {
-            if dy < 0 {
-                app.swipeUp()
-            } else {
-                app.swipeDown()
-            }
-            return
-        }
-
+        // Honour the requested path and speed, as Android does. The speed is what
+        // decides how far a list keeps gliding after the finger lifts, so callers
+        // pick it deliberately: a slow swipe moves a list predictably, a fast one
+        // flings it. (`app.swipeUp()` ignores both, and
+        // `press(forDuration:thenDragTo:)` holds for the duration BEFORE moving,
+        // which reads as a long press rather than a swipe.)
         let start = try coordinate(gesture.start)
         let end = try coordinate(gesture.end)
-        let duration = max(0.01, Double(gesture.durationMs) / 1_000)
-        start.press(forDuration: duration, thenDragTo: end)
+        let distance = hypot(Double(gesture.end.x - gesture.start.x), Double(gesture.end.y - gesture.start.y))
+        let seconds = max(0.05, Double(gesture.durationMs) / 1_000)
+        let velocity = XCUIGestureVelocity(CGFloat(max(1, distance / seconds)))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: velocity, thenHoldForDuration: 0)
     }
 
     private func drag(_ gesture: AsturDragGesture) throws {

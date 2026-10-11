@@ -10,11 +10,13 @@ import {
   type NativeAgentCommandEnvelope,
   type NativeAgentInfo
 } from '@astur-mobile/core';
+import { createFakeAdb, type FakeAdb } from './support/fake-adb.js';
 
 interface AgentRequest {
   id: string;
   method: string;
   params?: unknown;
+  authorization?: string;
 }
 
 interface AgentResponse {
@@ -483,7 +485,7 @@ describe('Android native-agent mode', () => {
       instance: 2
     });
 
-    await expect(session.findElement(selector)).resolves.toEqual(match);
+    await expect(session.findElement!(selector)).resolves.toEqual(match);
 
     const request = server.requests.find((r) => r.method === 'element.find');
     expect(request?.params).toMatchObject({
@@ -620,11 +622,238 @@ describe('Android native-agent mode', () => {
     // part; scroll helpers ask for the viewport on every reveal.
     expect(server.requests.filter((request) => request.method === 'tree.get')).toHaveLength(1);
   });
+  describe('when an action response is lost', () => {
+    const ACTION_AGENT_INFO: NativeAgentInfo = {
+      ...ANDROID_AGENT_INFO,
+      capabilities: ['agent.ping', 'tree.get', 'gesture.tap', 'element.tap', 'element.find', 'element.wait']
+    };
+    const SAVE_BUTTON: MobileElementSnapshot = {
+      type: 'android.widget.Button',
+      text: 'Save',
+      enabled: true,
+      visible: true,
+      bounds: { x: 100, y: 200, width: 80, height: 40 },
+      children: []
+    };
+    const shellInput = (calls: string[]) => calls.filter((call) => / shell (input|uiautomator) /.test(` ${call} `));
+    let adb: FakeAdb;
+
+    beforeEach(() => {
+      adb = createFakeAdb();
+    });
+
+    afterEach(() => {
+      adb.dispose();
+    });
+
+    it('fails an element tap with an unknown outcome instead of tapping again', async () => {
+      const server = await createAgentServer(async (request) => {
+        if (request.method === 'agent.ping') {
+          return { body: ok(request.id, ACTION_AGENT_INFO) };
+        }
+        if (request.method === 'element.tap') {
+          await delay(400);
+        }
+        return { body: ok(request.id, SAVE_BUTTON) };
+      });
+      servers.push(server);
+
+      const session = await createDriver(adb.path).createSession(normalizeCapabilities({
+        platform: 'android',
+        device: { id: ANDROID_DEVICE.id },
+        timeout: 300,
+        agent: { mode: 'required', endpoint: server.endpoint, launchTimeout: 500, commandTimeout: 150 }
+      }));
+
+      await expect(session.tapElement!(by.text('Save'))).rejects.toMatchObject({
+        code: 'ANDROID_AGENT_OUTCOME_UNKNOWN'
+      } satisfies Partial<AsturError>);
+      expect(server.requests.filter((request) => request.method === 'element.tap')).toHaveLength(1);
+      expect(server.requests.filter((request) => request.method === 'gesture.tap')).toHaveLength(0);
+      expect(shellInput(adb.calls())).toEqual([]);
+    });
+
+    it('fails a coordinate tap with an unknown outcome instead of repeating it through adb', async () => {
+      const server = await createAgentServer(async (request) => {
+        if (request.method === 'agent.ping') {
+          return { body: ok(request.id, ACTION_AGENT_INFO) };
+        }
+        if (request.method === 'gesture.tap') {
+          await delay(400);
+        }
+        return { body: ok(request.id, ANDROID_TREE) };
+      });
+      servers.push(server);
+
+      const session = await createDriver(adb.path).createSession(normalizeCapabilities({
+        platform: 'android',
+        device: { id: ANDROID_DEVICE.id },
+        agent: { mode: 'auto', endpoint: server.endpoint, launchTimeout: 500, commandTimeout: 150 }
+      }));
+
+      await expect(session.tap({ x: 10, y: 20 })).rejects.toMatchObject({
+        code: 'ANDROID_AGENT_OUTCOME_UNKNOWN'
+      } satisfies Partial<AsturError>);
+      expect(shellInput(adb.calls())).toEqual([]);
+    });
+
+    it('keeps later commands on the agent when legacy fallback is never', async () => {
+      let treeReads = 0;
+      const server = await createAgentServer(async (request) => {
+        if (request.method === 'agent.ping') {
+          return { body: ok(request.id, ACTION_AGENT_INFO) };
+        }
+        if (request.method === 'tree.get' && ++treeReads === 1) {
+          await delay(400);
+        }
+        return { body: ok(request.id, ANDROID_TREE) };
+      });
+      servers.push(server);
+
+      const session = await createDriver(adb.path).createSession(normalizeCapabilities({
+        platform: 'android',
+        device: { id: ANDROID_DEVICE.id },
+        agent: {
+          mode: 'auto',
+          legacyFallback: 'never',
+          endpoint: server.endpoint,
+          launchTimeout: 500,
+          commandTimeout: 150
+        }
+      }));
+
+      await expect(session.getTree()).rejects.toBeInstanceOf(AsturError);
+      await expect(session.getTree()).resolves.toEqual(ANDROID_TREE);
+      await session.tap({ x: 10, y: 20 });
+
+      expect(server.requests.filter((request) => request.method === 'gesture.tap')).toHaveLength(1);
+      expect(shellInput(adb.calls())).toEqual([]);
+    });
+
+    it('still taps by coordinates through the agent when the agent refuses an element tap', async () => {
+      const server = await createAgentServer((request) => {
+        if (request.method === 'agent.ping') {
+          return { body: ok(request.id, ACTION_AGENT_INFO) };
+        }
+        if (request.method === 'element.tap') {
+          return {
+            body: {
+              id: request.id,
+              ok: false,
+              error: { code: 'ELEMENT_NOT_CLICKABLE', message: 'UiObject2 refused the click' }
+            }
+          };
+        }
+        return { body: ok(request.id, SAVE_BUTTON) };
+      });
+      servers.push(server);
+
+      const session = await createDriver(adb.path).createSession(normalizeCapabilities({
+        platform: 'android',
+        device: { id: ANDROID_DEVICE.id },
+        agent: { mode: 'required', endpoint: server.endpoint, launchTimeout: 500, commandTimeout: 500 }
+      }));
+
+      await session.tapElement!(by.text('Save'));
+
+      expect(server.requests.filter((request) => request.method === 'gesture.tap')).toHaveLength(1);
+      expect(shellInput(adb.calls())).toEqual([]);
+    });
+
+    it('refuses to fall back when the agent rejected the tap before running it', async () => {
+      const server = await createAgentServer((request) => {
+        if (request.method === 'agent.ping') {
+          return { body: ok(request.id, ACTION_AGENT_INFO) };
+        }
+        if (request.method === 'element.tap') {
+          return {
+            body: {
+              id: request.id,
+              ok: false,
+              executed: false,
+              error: { code: 'DEADLINE_EXCEEDED', message: 'The command waited past its budget.' }
+            }
+          };
+        }
+        return { body: ok(request.id, SAVE_BUTTON) };
+      });
+      servers.push(server);
+
+      const session = await createDriver(adb.path).createSession(normalizeCapabilities({
+        platform: 'android',
+        device: { id: ANDROID_DEVICE.id },
+        agent: { mode: 'auto', endpoint: server.endpoint, launchTimeout: 500, commandTimeout: 500 }
+      }));
+
+      await expect(session.tapElement!(by.text('Save'))).rejects.toMatchObject({
+        code: 'ANDROID_AGENT_COMMAND_REJECTED'
+      } satisfies Partial<AsturError>);
+      expect(server.requests.filter((request) => request.method === 'gesture.tap')).toHaveLength(0);
+      expect(shellInput(adb.calls())).toEqual([]);
+
+      // The agent is still trusted: the next command goes to it, not to adb.
+      await session.tap({ x: 1, y: 2 });
+      expect(server.requests.filter((request) => request.method === 'gesture.tap')).toHaveLength(1);
+    });
+  });
+
+  describe('agent authentication', () => {
+    let adb: FakeAdb;
+    let previousHostPort: string | undefined;
+
+    beforeEach(() => {
+      adb = createFakeAdb();
+      previousHostPort = process.env.ASTUR_ANDROID_AGENT_HOST_PORT;
+    });
+
+    afterEach(() => {
+      adb.dispose();
+      if (previousHostPort === undefined) {
+        delete process.env.ASTUR_ANDROID_AGENT_HOST_PORT;
+      } else {
+        process.env.ASTUR_ANDROID_AGENT_HOST_PORT = previousHostPort;
+      }
+    });
+
+    it('starts the bundled agent with a fresh token and presents it on every command', async () => {
+      const server = await createAgentServer((request) => ({
+        body: ok(request.id, request.method === 'agent.ping' ? ANDROID_AGENT_INFO : ANDROID_TREE)
+      }));
+      servers.push(server);
+      process.env.ASTUR_ANDROID_AGENT_HOST_PORT = new URL(server.endpoint).port;
+
+      const tokens: string[] = [];
+      for (let run = 0; run < 2; run += 1) {
+        const session = await createDriver(adb.path).createSession(normalizeCapabilities({
+          platform: 'android',
+          device: { id: ANDROID_DEVICE.id },
+          agent: { mode: 'required', launchTimeout: 10_000, commandTimeout: 2_000 }
+        }));
+        await session.getTree();
+        await session.close();
+
+        const instrument = adb.calls().filter((call) => call.includes(' instrument ')).at(-1) ?? '';
+        const token = /-e asturToken (\S+)/.exec(instrument)?.[1];
+        expect(token, instrument).toMatch(/^[A-Za-z0-9_-]{32,}$/);
+        tokens.push(token!);
+      }
+
+      expect(tokens[0]).not.toBe(tokens[1]);
+      expect(server.requests.length).toBeGreaterThan(0);
+      for (const request of server.requests) {
+        expect([`Bearer ${tokens[0]}`, `Bearer ${tokens[1]}`]).toContain(request.authorization);
+      }
+    });
+  });
 });
 
-function createDriver() {
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createDriver(adbPath = '__missing_adb__') {
   const driver = createAndroidDriver({
-    adbPath: '__missing_adb__',
+    adbPath,
     emulatorPath: '__missing_emulator__'
   });
 
@@ -633,14 +862,19 @@ function createDriver() {
   return driver;
 }
 
-async function createAgentServer(responder: (request: AgentRequest) => AgentResponse): Promise<AgentServer> {
+async function createAgentServer(
+  responder: (request: AgentRequest) => AgentResponse | Promise<AgentResponse>
+): Promise<AgentServer> {
   const requests: AgentRequest[] = [];
 
   const server = createServer(async (request, response) => {
     try {
-      const envelope = await readCommandEnvelope(request);
+      const envelope = {
+        ...await readCommandEnvelope(request),
+        authorization: request.headers.authorization
+      };
       requests.push(envelope);
-      const result = responder(envelope);
+      const result = await responder(envelope);
       writeJson(response, result.status ?? 200, result.body ?? ok(envelope.id, undefined));
     } catch (error) {
       writeJson(response, 500, {

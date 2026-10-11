@@ -1,4 +1,6 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { createReadStream, existsSync, readdirSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import type { ChildProcess } from 'node:child_process';
 import { get as httpGet, request as httpRequest } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
@@ -236,6 +238,47 @@ export class AndroidDriver implements PlatformDriver {
     return parseAdbDevices(output);
   }
 
+  /** The online device `selector` names, found without opening a session on it. */
+  async findDevice(selector: DeviceSelector): Promise<DeviceInfo | undefined> {
+    return this.selectOnlineDevice(await this.listDevices(), selector);
+  }
+
+  /**
+   * The first online device that `selector` names. `adb devices` does not say
+   * which AVD an emulator runs, so an AVD selector asks each emulator; without
+   * that, `avd: 'Pixel_9'` would take whichever emulator happened to be up.
+   */
+  private async selectOnlineDevice(devices: DeviceInfo[], selector: DeviceSelector): Promise<DeviceInfo | undefined> {
+    const candidates = devices.filter((device) => matchesDeviceSelector(device, selector));
+    if (!selector.avd) {
+      return candidates[0];
+    }
+
+    for (const device of candidates) {
+      if (device.kind === 'emulator' && await this.emulatorAvdName(device.id) === selector.avd) {
+        return device;
+      }
+    }
+
+    return undefined;
+  }
+
+  private async emulatorAvdName(serial: string): Promise<string | undefined> {
+    // The emulator console answers on every API level; the property is the
+    // fallback for an emulator whose console is unreachable.
+    const fromConsole = await runText(this.adbPath, ['-s', serial, 'emu', 'avd', 'name'])
+      .then((output) => output.split(/\r?\n/)[0]?.trim())
+      .catch(() => undefined);
+    if (fromConsole && fromConsole !== 'OK') {
+      return fromConsole;
+    }
+
+    const fromProperty = await runText(this.adbPath, ['-s', serial, 'shell', 'getprop', 'ro.boot.qemu.avd_name'])
+      .then((output) => output.trim())
+      .catch(() => undefined);
+    return fromProperty || undefined;
+  }
+
   async listAvds(): Promise<string[]> {
     const output = await runText(this.emulatorPath, ['-list-avds']);
     return output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -252,12 +295,12 @@ export class AndroidDriver implements PlatformDriver {
     }
 
     let devices = await this.listDevices();
-    let device = selectDevice(devices, resolvedCapabilities.device);
+    let device = await this.selectOnlineDevice(devices, resolvedCapabilities.device);
 
     if (!device && shouldAutoBoot(resolvedCapabilities.device)) {
       await this.bootConfiguredEmulator(resolvedCapabilities.device);
       devices = await this.listDevices();
-      device = selectDevice(devices, resolvedCapabilities.device);
+      device = await this.selectOnlineDevice(devices, resolvedCapabilities.device);
     }
 
     if (!device) {
@@ -359,11 +402,13 @@ export class AndroidDriver implements PlatformDriver {
     }
 
     try {
+      // An agent someone else started carries the token they gave it.
       const client = await connectNativeAgentClient({
         endpoint,
         platform: 'android',
         handshakeTimeout: capabilities.agent.launchTimeout,
-        commandTimeout: capabilities.agent.commandTimeout
+        commandTimeout: capabilities.agent.commandTimeout,
+        token: process.env.ASTUR_ANDROID_AGENT_TOKEN
       });
 
       return { client };
@@ -402,6 +447,9 @@ export class AndroidDriver implements PlatformDriver {
     const config = resolveAndroidAgentRuntimeConfig();
     const hostPort = config.hostPort ?? await findFreePort();
     const endpoint = `http://127.0.0.1:${hostPort}`;
+    // Any app on the device can reach the agent's loopback port, so the port
+    // alone proves nothing. A fresh secret per session is what the agent checks.
+    const token = randomBytes(32).toString('base64url');
     const adb = (args: readonly string[]) => run(this.adbPath, ['-s', device.id, ...args]);
     let agentProcess: ChildProcess | undefined;
 
@@ -417,7 +465,7 @@ export class AndroidDriver implements PlatformDriver {
       await adb(['shell', 'am', 'force-stop', config.packageName]).catch(() => undefined);
       await removeStaleAgentForwards(this.adbPath, device.id, config.devicePort);
 
-      if (await shouldInstallAndroidAgent(adb, config)) {
+      if (await shouldInstallAndroidAgent(adb, config, artifacts)) {
         await adb(['install', '-r', artifacts.appApkPath]);
         await adb(['install', '-r', artifacts.testApkPath]);
       }
@@ -434,10 +482,16 @@ export class AndroidDriver implements PlatformDriver {
         '-e',
         'asturPort',
         String(config.devicePort),
+        '-e',
+        'asturToken',
+        token,
         `${config.testPackage}/${config.runnerClass}`
       ]);
+      // Without a listener a failed spawn crashes the process, and Node prints
+      // the spawn arguments, token included, with it.
+      agentProcess.on('error', () => undefined);
 
-      const client = await waitForAndroidAgent(endpoint, capabilities);
+      const client = await waitForAndroidAgent(endpoint, capabilities, token);
 
       return {
         client,
@@ -561,7 +615,7 @@ export class AndroidDriver implements PlatformDriver {
       }
 
       lastDevices = await this.listDevices().catch(() => []);
-      const device = selectDevice(lastDevices, { ...selector, kind: 'emulator' });
+      const device = await this.selectOnlineDevice(lastDevices, { ...selector, kind: 'emulator' });
 
       if (device) {
         const bootCompleted = await runText(this.adbPath, ['-s', device.id, 'shell', 'getprop', 'sys.boot_completed'])
@@ -795,7 +849,33 @@ class AndroidSession implements PlatformSession {
     if (this.flutter) {
       return;
     }
-    await this.adb(['install', '-r', path]);
+
+    try {
+      await this.adb(['install', '-r', path]);
+    } catch (error) {
+      // Typically another flavour of the same app (the React Native and Flutter
+      // demos share a package name): an install over the top is refused, and
+      // only an uninstall, which deletes the app's data, can resolve it. That is
+      // the user's call, so say how rather than guessing.
+      const clash = /INSTALL_FAILED_UPDATE_INCOMPATIBLE.*?Existing package (\S+)/.exec(
+        error instanceof Error ? error.message : ''
+      );
+      if (clash) {
+        throw new AsturError(
+          'ANDROID_APP_SIGNATURE_MISMATCH',
+          `The device already has ${clash[1]} signed with a different key, so ${path} cannot be installed over it. `
+            + 'This usually means another build of the same app is installed. Uninstall it '
+            + `(adb uninstall ${clash[1]}), or set ASTUR_ANDROID_APP_FORCE_INSTALL=1 to have Astur uninstall it first; `
+            + 'either way the app\'s data is cleared.',
+          { path, packageName: clash[1], cause: error }
+        );
+      }
+      throw error;
+    }
+  }
+
+  async isInstalledAppCurrent(identifier: string, path: string): Promise<boolean | undefined> {
+    return installedApkMatches((args) => this.adbText(args), identifier, path);
   }
 
   async isAppInstalled(identifier: string): Promise<boolean> {
@@ -1984,6 +2064,10 @@ class AndroidSession implements PlatformSession {
    * a Text inside a Pressable is not itself clickable — and that must not fail
    * a test when tapping the same pixels would have worked. The fallback still
    * goes through the agent's gesture commands, so this is not a legacy path.
+   *
+   * Only an explicit refusal from the agent qualifies. A lost response surfaces
+   * as ANDROID_AGENT_OUTCOME_UNKNOWN and propagates: the action may already
+   * have happened, and tapping the same pixels again would repeat it.
    */
   private async tryNativeElementAction<M extends NativeAgentMethod>(
     method: M,
@@ -2065,6 +2149,21 @@ class AndroidSession implements PlatformSession {
         );
       }
 
+      if (isAgentRefusedBeforeRunning(error)) {
+        // A known outcome: nothing ran. It is still not a reason to reach for
+        // coordinates or adb, because the agent refused on purpose (bad token,
+        // expired budget, malformed request) and any other route would too.
+        throw new AsturError(
+          'ANDROID_AGENT_COMMAND_REJECTED',
+          `Android native agent refused ${method} before running it: ${(error as AsturError).message}`,
+          {
+            endpoint: this.nativeAgent.endpoint,
+            method,
+            cause: error
+          }
+        );
+      }
+
       if (isAgentCommandFailure(error)) {
         if (allowsLegacyFallback(this.capabilities, 'failure')) {
           return { ok: false };
@@ -2081,12 +2180,34 @@ class AndroidSession implements PlatformSession {
         );
       }
 
-      this.nativeAgent = undefined;
-      if (!allowsLegacyFallback(this.capabilities, 'failure')) {
+      // No clean answer came back: the request may or may not have run on the
+      // device. Only a policy that allows it moves the rest of the session to
+      // the legacy path; otherwise the agent stays in charge and the next
+      // command tries it again instead of quietly switching to adb.
+      const endpoint = this.nativeAgent.endpoint;
+      const fallbackAllowed = allowsLegacyFallback(this.capabilities, 'failure');
+      if (fallbackAllowed) {
+        this.nativeAgent = undefined;
+      }
+
+      if (!READ_ONLY_AGENT_METHODS.has(method)) {
+        throw new AsturError(
+          'ANDROID_AGENT_OUTCOME_UNKNOWN',
+          `Android native agent command ${method} was sent, but no complete response came back, so it may or may not have run. Astur does not repeat it: performing an action twice is worse than failing.`,
+          {
+            endpoint,
+            method,
+            cause: error
+          }
+        );
+      }
+
+      if (!fallbackAllowed) {
         throw new AsturError(
           'ANDROID_AGENT_COMMAND_FAILED',
           `Android native agent command ${method} failed.`,
           {
+            endpoint,
             method,
             cause: error
           }
@@ -2391,30 +2512,28 @@ function readDevtoolsTargets(cdpUrl: string): Promise<DevtoolsTarget[]> {
   });
 }
 
-function selectDevice(devices: DeviceInfo[], selector: DeviceSelector): DeviceInfo | undefined {
-  return devices.find((device) => {
-    if (device.state !== 'online') {
-      return false;
-    }
+function matchesDeviceSelector(device: DeviceInfo, selector: DeviceSelector): boolean {
+  if (device.state !== 'online') {
+    return false;
+  }
 
-    if (selector.id && selector.id !== device.id) {
-      return false;
-    }
+  if (selector.id && selector.id !== device.id) {
+    return false;
+  }
 
-    if (selector.kind && selector.kind !== device.kind) {
-      return false;
-    }
+  if (selector.kind && selector.kind !== device.kind) {
+    return false;
+  }
 
-    if (selector.name instanceof RegExp && !selector.name.test(device.name)) {
-      return false;
-    }
+  if (selector.name instanceof RegExp && !selector.name.test(device.name)) {
+    return false;
+  }
 
-    if (typeof selector.name === 'string' && selector.name !== device.name) {
-      return false;
-    }
+  if (typeof selector.name === 'string' && selector.name !== device.name) {
+    return false;
+  }
 
-    return true;
-  });
+  return true;
 }
 
 function isElementSelectorTarget(target: ElementDragTarget): target is { selector: ElementSelector } {
@@ -2496,30 +2615,93 @@ function resolveAndroidAgentRuntimeConfig(): {
 
 async function shouldInstallAndroidAgent(
   adb: (args: readonly string[]) => Promise<{ stdout: Buffer }>,
-  config: ReturnType<typeof resolveAndroidAgentRuntimeConfig>
+  config: ReturnType<typeof resolveAndroidAgentRuntimeConfig>,
+  artifacts: AndroidNativeAgentArtifacts
 ): Promise<boolean> {
   if (isTruthy(process.env.ASTUR_ANDROID_AGENT_FORCE_INSTALL)) {
     return true;
   }
 
-  const [appInstalled, testInstalled] = await Promise.all([
-    isAndroidPackageInstalled(adb, config.packageName),
-    isAndroidPackageInstalled(adb, config.testPackage)
+  const adbText = (args: readonly string[]) => adb(args).then((result) => result.stdout.toString('utf8'));
+  const [appCurrent, testCurrent] = await Promise.all([
+    installedApkMatches(adbText, config.packageName, artifacts.appApkPath),
+    installedApkMatches(adbText, config.testPackage, artifacts.testApkPath)
   ]);
 
-  return !appInstalled || !testInstalled;
+  // The two APKs are one agent. An agent kept from an older release would
+  // still speak that release's protocol, and its security with it.
+  return appCurrent !== true || testCurrent !== true;
 }
 
-async function isAndroidPackageInstalled(
-  adb: (args: readonly string[]) => Promise<{ stdout: Buffer }>,
-  packageName: string
-): Promise<boolean> {
-  try {
-    const result = await adb(['shell', 'pm', 'path', packageName]);
-    return result.stdout.toString('utf8').trim().startsWith('package:');
-  } catch {
+/**
+ * Whether the device's copy of `packageName` is byte for byte the APK at
+ * `apkPath`.
+ *
+ * `adb install` keeps the APK as given, so the installed base.apk hashes to the
+ * local file (verified on an API 35 emulator). versionCode cannot stand in for
+ * this: two local builds routinely share one. `undefined` means it could not
+ * be established, for a split install or a device without sha256sum, and the
+ * caller must reinstall rather than assume a match.
+ */
+async function installedApkMatches(
+  adbText: (args: readonly string[]) => Promise<string>,
+  packageName: string,
+  apkPath: string
+): Promise<boolean | undefined> {
+  if (!apkPath.toLowerCase().endsWith('.apk')) {
+    return undefined;
+  }
+
+  const installed = (await adbText(['shell', 'pm', 'path', packageName]).catch(() => ''))
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('package:'))
+    .map((line) => line.slice('package:'.length));
+
+  if (installed.length === 0) {
     return false;
   }
+
+  // The path is handed to the device shell, so accept only what pm prints.
+  if (installed.length > 1 || !/^\/[\w.~=+/-]+$/.test(installed[0])) {
+    return undefined;
+  }
+
+  const [local, remote] = await Promise.all([
+    sha256File(apkPath).catch(() => undefined),
+    adbText(['shell', 'sha256sum', installed[0]])
+      .then((output) => output.trim().split(/\s+/)[0])
+      .catch(() => undefined)
+  ]);
+
+  if (!local || !remote || !/^[0-9a-f]{64}$/.test(remote)) {
+    return undefined;
+  }
+
+  return local === remote;
+}
+
+const localApkHashes = new Map<string, { version: string; hash: Promise<string> }>();
+
+/** SHA-256 of a local file, remembered until the file changes. */
+async function sha256File(path: string): Promise<string> {
+  const info = await stat(path);
+  const version = `${info.size}:${info.mtimeMs}`;
+  const cached = localApkHashes.get(path);
+  if (cached?.version === version) {
+    return cached.hash;
+  }
+
+  const hash = new Promise<string>((resolve, reject) => {
+    const digest = createHash('sha256');
+    createReadStream(path)
+      .on('error', reject)
+      .on('data', (chunk) => digest.update(chunk))
+      .on('end', () => resolve(digest.digest('hex')));
+  });
+  localApkHashes.set(path, { version, hash });
+  hash.catch(() => localApkHashes.delete(path));
+  return hash;
 }
 
 function isTruthy(value: string | undefined): boolean {
@@ -2583,7 +2765,8 @@ function findFreePort(): Promise<number> {
 
 async function waitForAndroidAgent(
   endpoint: string,
-  capabilities: NormalizedCapabilities
+  capabilities: NormalizedCapabilities,
+  token: string
 ): Promise<NativeAgentClient> {
   const deadline = Date.now() + capabilities.agent.launchTimeout;
   let lastError: unknown;
@@ -2595,7 +2778,8 @@ async function waitForAndroidAgent(
         endpoint,
         platform: 'android',
         handshakeTimeout: Math.min(1_000, remaining),
-        commandTimeout: capabilities.agent.commandTimeout
+        commandTimeout: capabilities.agent.commandTimeout,
+        token
       });
     } catch (error) {
       lastError = error;
@@ -2799,12 +2983,32 @@ function warnAndroidAgentFallback(message: string): void {
   console.warn(`[astur/android] ${message}`);
 }
 
+/**
+ * Agent commands that only observe. When one of these loses its response it
+ * is safe to ask again, by any route; every other command changes the device
+ * and must never be repeated after an unknown outcome.
+ */
+const READ_ONLY_AGENT_METHODS: ReadonlySet<NativeAgentMethod> = new Set<NativeAgentMethod>([
+  'agent.ping',
+  'tree.get',
+  'element.find',
+  'element.findAll',
+  'element.findMany',
+  'element.wait',
+  'keyboard.state'
+]);
+
 function isAgentCommandUnsupported(error: unknown): boolean {
   if (!(error instanceof AsturError)) {
     return false;
   }
 
   return error.code === 'NOT_IMPLEMENTED' || error.code === 'UNKNOWN_COMMAND';
+}
+
+function isAgentRefusedBeforeRunning(error: unknown): boolean {
+  return error instanceof AsturError
+    && (error.details as { executed?: boolean } | undefined)?.executed === false;
 }
 
 function isAgentCommandFailure(error: unknown): boolean {

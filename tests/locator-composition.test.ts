@@ -75,7 +75,24 @@ function createSession(snapshot: MobileElementSnapshot = catalogue): PlatformSes
       artifactsDir: 'test-results/astur',
       artifacts: {},
       keyboard: { dismiss: 'auto' },
-      agent: { mode: 'auto', install: true, launchTimeout: 15_000, commandTimeout: 10_000 }
+      automation: {
+        engine: 'auto',
+        transport: 'auto',
+        legacyFallback: 'on-agent-failure',
+        commandTimeoutMs: 10_000,
+        startupTimeoutMs: 15_000,
+        strictLocators: true,
+        snapshot: { mode: 'on-failure', cacheTtlMs: 200 },
+        timings: { enabled: true, slowCommandThresholdMs: 1_000 }
+      },
+      agent: {
+        mode: 'auto',
+        install: true,
+        launchTimeout: 15_000,
+        commandTimeout: 10_000,
+        legacyFallback: 'on-agent-failure',
+        transport: 'auto'
+      }
     },
     deviceInfo: { id: 'emulator-5554', name: 'Pixel', platform: 'android', kind: 'emulator', state: 'online' },
     close: vi.fn(),
@@ -225,6 +242,38 @@ describe('and / or', () => {
     expect((await either.first().snapshot()).text).toBe('Sourdough');
   });
 
+  it('or combines two whole locators, so a filter on one side stays on that side', async () => {
+    const session = createSession();
+    const rows = new MobileLocator(session, by.type('android.widget.LinearLayout'));
+    const soldOut = rows.filter({ hasText: 'Sold out' });
+    const available = rows.filter({ hasNotText: 'Sold out' });
+
+    expect(await soldOut.or(available).count()).toBe(3);
+  });
+
+  it('and after or intersects the union, reading left to right', async () => {
+    const session = createSession();
+    const sourdough = new MobileLocator(session, by.text('Sourdough'));
+    const rye = new MobileLocator(session, by.text('Rye'));
+    const textViews = new MobileLocator(session, by.type('android.widget.TextView'));
+
+    // (Sourdough ∪ Rye) ∩ TextView = both; the reverse grouping, applying the
+    // intersection first, would also keep both here, so pin it with Add
+    // buttons, which are not TextViews: (Sourdough ∪ Add) ∩ TextView = 1.
+    expect(await sourdough.or(rye).and(textViews).count()).toBe(2);
+    const add = new MobileLocator(session, by.label('Add'));
+    expect(await sourdough.or(add).and(textViews).count()).toBe(1);
+    expect(await sourdough.and(textViews).or(add).count()).toBe(4);
+  });
+
+  it('position on the left applies before the union, not after it', async () => {
+    const session = createSession();
+    const textViews = new MobileLocator(session, by.type('android.widget.TextView'));
+    const add = new MobileLocator(session, by.label('Add'));
+
+    expect(await textViews.first().or(add).count()).toBe(4);
+  });
+
   it('or does not double-count an element both sides match', async () => {
     const session = createSession();
     const byText = new MobileLocator(session, by.text('Rye'));
@@ -260,6 +309,42 @@ describe('composition and the driver fast path', () => {
     // it must not be used; the tap lands on the resolved element's centre.
     expect(tapElement).not.toHaveBeenCalled();
     expect(tap).toHaveBeenCalledWith({ x: 340, y: 150 });
+  });
+});
+
+describe("by.type('any')", () => {
+  // The native agents match `type` literally, so they find nothing named
+  // "any"; only the host's tree matcher treats it as a wildcard.
+  function agentLike(session: PlatformSession): PlatformSession {
+    return {
+      ...session,
+      findElement: vi.fn(async () => undefined),
+      findElements: vi.fn(async () => []),
+      waitForElement: vi.fn(async () => {
+        throw new AsturError('ELEMENT_NOT_FOUND', 'no element of type any');
+      })
+    } as PlatformSession;
+  }
+
+  it('matches every element, even on a session whose agent cannot', async () => {
+    const session = agentLike(createSession());
+    const everything = new MobileLocator(session, by.type('any'));
+
+    const all = await everything.queryAll();
+
+    expect(all.length).toBeGreaterThan(1);
+    expect(all).toHaveLength(await new MobileLocator(createSession(), by.type('any')).count());
+    await expect(everything.query()).resolves.toBe(catalogue);
+    expect(session.findElements).not.toHaveBeenCalled();
+  });
+
+  it('scopes to every descendant of a parent', async () => {
+    const session = agentLike(createSession());
+    const rows = new MobileLocator(session, by.type('android.widget.LinearLayout'));
+
+    const inside = await rows.first().getByType('any').queryAll();
+
+    expect(inside.length).toBeGreaterThan(0);
   });
 });
 

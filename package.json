@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "build": "tsc -b",
-    "check": "tsc -b --pretty false",
+    "check": "tsc -b --pretty false && tsc -p tests/tsconfig.json --pretty false",
     "docs:dev": "npm run dev -w docs-site",
     "docs:build": "npm run build -w docs-site",
     "docs:preview": "npm run preview -w docs-site",

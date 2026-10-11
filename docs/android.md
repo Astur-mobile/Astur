@@ -120,11 +120,21 @@ Environment override:
 export ASTUR_ANDROID_AGENT_ENDPOINT=tcp:127.0.0.1:8787
 ```
 
+The agent requires a token on every request, because any app on the device can reach its port. Astur generates a fresh one for each session it starts itself. An agent you start by hand must be given one with `-e asturToken <token>` (it refuses to start without it), and Astur needs the same value:
+
+```bash
+export ASTUR_ANDROID_AGENT_TOKEN="$(openssl rand -hex 32)"
+adb shell am instrument -w -e asturPort 8787 -e asturToken "$ASTUR_ANDROID_AGENT_TOKEN" \
+  dev.astur.agent.test/dev.astur.agent.AsturInstrumentationRunner
+```
+
 Use `agent.mode: 'required'` in CI once the Android native-agent command set is stable for your test suite.
 
-By default, Astur starts one Android native-agent session per Playwright worker. It does not reinstall the agent before every spec; the bundled agent APKs are installed only when the agent app or test package is missing. Set `ASTUR_ANDROID_AGENT_FORCE_INSTALL=1` when developing the agent and you intentionally need to refresh the APKs on the device.
+By default, Astur starts one Android native-agent session per Playwright worker. It does not reinstall the agent before every spec: the bundled agent APKs are installed only when the device's copy is missing or is not byte-for-byte the bundled build, which it checks by hashing the installed APK on the device. Set `ASTUR_ANDROID_AGENT_FORCE_INSTALL=1` to reinstall regardless.
 
-With `device.avd`, Astur starts the emulator when no matching online emulator is found. With `app.path`, Astur installs the APK before the test starts. When `aapt` is available from the Android SDK, Astur also infers `packageName` and launch `activity`.
+With `device.avd`, Astur uses the emulator running that AVD, and starts one when none is. It never substitutes a different emulator that happens to be online.
+
+With `app.path`, Astur installs the APK when the device does not already have that exact build, again compared by hash, since two builds often share a versionCode. Set `app.install` to `'always'` to install every session, or `'never'` when the app is managed outside Astur. `ASTUR_ANDROID_APP_FORCE_INSTALL=1` still uninstalls first, which also clears app data. When `aapt` is available from the Android SDK, Astur also infers `packageName` and launch `activity`.
 
 You can still make everything explicit:
 

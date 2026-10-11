@@ -10,6 +10,7 @@ import type {
   DeviceFileEntry,
   DeviceInfo,
   DeviceOrientation,
+  DeviceSelector,
   DoctorCheck,
   DoubleTapOptions,
   DragGesture,
@@ -85,6 +86,11 @@ export interface PlatformDriver {
   readonly platform: PlatformName;
   doctor(): Promise<DoctorCheck[]>;
   listDevices(): Promise<DeviceInfo[]>;
+  /**
+   * The device `createSession` would open for `selector` right now, found
+   * without touching it; `undefined` when none qualifies yet.
+   */
+  findDevice?(selector: DeviceSelector): Promise<DeviceInfo | undefined>;
   createSession(capabilities: NormalizedCapabilities): Promise<PlatformSession>;
 }
 
@@ -93,6 +99,12 @@ export interface PlatformSession {
   readonly deviceInfo: DeviceInfo;
   close(): Promise<void>;
   isAppInstalled?(identifier: string): Promise<boolean>;
+  /**
+   * Whether the installed `identifier` is exactly the build at `path`:
+   * `false` when it differs or is absent, `undefined` when that cannot be
+   * established. Callers must treat `undefined` as "reinstall".
+   */
+  isInstalledAppCurrent?(identifier: string, path: string): Promise<boolean | undefined>;
   installApp(path: string): Promise<void>;
   uninstallApp(identifier: string): Promise<void>;
   launchApp(options?: LaunchOptions): Promise<void>;
@@ -1042,6 +1054,54 @@ function appIdentifier(capabilities: NormalizedCapabilities, target?: string | A
   return identifier;
 }
 
+async function installAppUnderTest(session: PlatformSession, platform: PlatformName): Promise<void> {
+  const app = session.capabilities.app;
+  if (!app?.path || app.install === 'never') {
+    return;
+  }
+
+  const identifier = app.packageName ?? app.bundleId;
+
+  // Kept as it always behaved while it is phased out: a clean install, which
+  // also wipes app data. `install: 'always'` installs over the top instead.
+  if (platform === 'android' && process.env.ASTUR_ANDROID_APP_FORCE_INSTALL === '1') {
+    if (identifier) {
+      try {
+        await session.uninstallApp(identifier);
+      } catch {
+        // The package may not be installed yet; the install below is still
+        // the authoritative operation.
+      }
+    }
+    await session.installApp(app.path);
+    return;
+  }
+
+  if (app.install !== 'always' && identifier && await hasInstalledBuild(session, identifier, app.path)) {
+    return;
+  }
+
+  await session.installApp(app.path);
+}
+
+/**
+ * Whether the device already has the requested build. A driver that can compare
+ * builds decides, and "cannot tell" counts as no: a suite quietly running
+ * against a stale build costs more than a slower start. Drivers that cannot
+ * compare yet fall back to asking whether the package is present at all.
+ */
+async function hasInstalledBuild(session: PlatformSession, identifier: string, path: string): Promise<boolean> {
+  if (session.isInstalledAppCurrent) {
+    return (await session.isInstalledAppCurrent(identifier, path).catch(() => undefined)) === true;
+  }
+
+  if (session.isAppInstalled) {
+    return session.isAppInstalled(identifier).catch(() => false);
+  }
+
+  return false;
+}
+
 export class AsturRuntime {
   private readonly drivers = new Map<PlatformName, PlatformDriver>();
 
@@ -1061,35 +1121,31 @@ export class AsturRuntime {
     return devices.flat();
   }
 
+  /**
+   * The device `createDevice(config)` would open, found without touching it.
+   * Reservation locks this, so two spellings of one device collide.
+   */
+  async findDevice(config: AsturConfig): Promise<DeviceInfo | undefined> {
+    const capabilities = normalizeCapabilities(config);
+    return this.requireDriver(capabilities.platform).findDevice?.(capabilities.device);
+  }
+
   async createDevice(config: AsturConfig): Promise<AsturDevice> {
     const capabilities = await materializeCapabilities(normalizeCapabilities(config));
     const driver = this.requireDriver(capabilities.platform);
     const session = await driver.createSession(capabilities);
 
-    const app = session.capabilities.app;
-    if (app?.path) {
-      const identifier = app.packageName ?? app.bundleId;
-      const forceInstall = capabilities.platform === 'android'
-        && process.env.ASTUR_ANDROID_APP_FORCE_INSTALL === '1';
-
-      if (forceInstall) {
-        if (identifier) {
-          try {
-            await session.uninstallApp(identifier);
-          } catch {
-            // The package may not be installed yet; the install below is still
-            // the authoritative operation.
-          }
-        }
-        await session.installApp(app.path);
-      } else if (identifier && session.isAppInstalled) {
-        const installed = await session.isAppInstalled(identifier).catch(() => false);
-        if (!installed) {
-          await session.installApp(app.path);
-        }
-      } else {
-        await session.installApp(app.path);
+    try {
+      await installAppUnderTest(session, capabilities.platform);
+    } catch (error) {
+      // The session already holds an agent process, port forwards, and a
+      // device; a failed install must not strand them.
+      try {
+        await session.close();
+      } catch {
+        // The install failure is the error worth reporting.
       }
+      throw error;
     }
 
     return new AsturDevice(session);

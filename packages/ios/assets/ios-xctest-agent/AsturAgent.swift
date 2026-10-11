@@ -28,6 +28,10 @@ private struct AsturSelector {
     let value: String
     let exact: Bool
     let name: Any?
+    /// Present only when strategy == "native": the raw NSPredicate format
+    /// string from by.native({ ios, android }) (see @astur-mobile/core).
+    let nativeIos: String?
+    let nativeInstance: Int?
 
     func toDictionary() -> [String: Any] {
         var result: [String: Any] = [
@@ -461,6 +465,10 @@ final class AsturAgent {
                 dismissKeyboard()
                 return ok(command.id)
 
+            case "keyboard.type":
+                try typeIntoFocusedInput(command.params.requiredString("text"))
+                return ok(command.id)
+
             default:
                 return error(command.id, "UNKNOWN_COMMAND", "Unknown Astur agent command: \(command.method)")
             }
@@ -584,10 +592,26 @@ final class AsturAgent {
             return []
         }
 
-        let query = directManyQuery(selectors) ?? findManyCandidateQuery(selectors)
+        // Native selectors are resolved separately (see findElementObjects) and
+        // never fed into directManyQuery/matches() — they carry their own
+        // complete predicate, not one of the shared strategies those optimise
+        // for.
+        let nativeSelectors = selectors.filter { $0.strategy.lowercased() == "native" }
+        let otherSelectors = selectors.filter { $0.strategy.lowercased() != "native" }
 
-        return boundedElements(query, limit: maxFindManyResults)
-            .filter { element in selectors.contains { matches(element, selector: $0) } }
+        var results: [XCUIElement] = []
+
+        if !otherSelectors.isEmpty {
+            let query = directManyQuery(otherSelectors) ?? findManyCandidateQuery(otherSelectors)
+            results += boundedElements(query, limit: maxFindManyResults)
+                .filter { element in otherSelectors.contains { matches(element, selector: $0) } }
+        }
+
+        for selector in nativeSelectors {
+            results += nativeElements(selector)
+        }
+
+        return results
             .prefix(maxFindManyResults)
             .map { snapshot($0, includeChildren: false) }
     }
@@ -675,22 +699,18 @@ final class AsturAgent {
     }
 
     private func drag(_ gesture: AsturSwipeGesture) throws {
-        let dx = gesture.end.x - gesture.start.x
-        let dy = gesture.end.y - gesture.start.y
-
-        if abs(dy) > 120 && abs(dy) > abs(dx) * 2 {
-            if dy < 0 {
-                app.swipeUp()
-            } else {
-                app.swipeDown()
-            }
-            return
-        }
-
+        // Honour the requested path and speed, as Android does. The speed is what
+        // decides how far a list keeps gliding after the finger lifts, so callers
+        // pick it deliberately: a slow swipe moves a list predictably, a fast one
+        // flings it. (`app.swipeUp()` ignores both, and
+        // `press(forDuration:thenDragTo:)` holds for the duration BEFORE moving,
+        // which reads as a long press rather than a swipe.)
         let start = try coordinate(gesture.start)
         let end = try coordinate(gesture.end)
-        let duration = max(0.01, Double(gesture.durationMs) / 1_000)
-        start.press(forDuration: duration, thenDragTo: end)
+        let distance = hypot(Double(gesture.end.x - gesture.start.x), Double(gesture.end.y - gesture.start.y))
+        let seconds = max(0.05, Double(gesture.durationMs) / 1_000)
+        let velocity = XCUIGestureVelocity(CGFloat(max(1, distance / seconds)))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: velocity, thenHoldForDuration: 0)
     }
 
     private func drag(_ gesture: AsturDragGesture) throws {
@@ -737,6 +757,36 @@ final class AsturAgent {
             "visible": true,
             "bounds": bounds(keyboard.frame).toDictionary()
         ]
+    }
+
+    /// Types into whatever currently holds keyboard focus, with no element to target.
+    ///
+    /// This is the escape hatch for controls whose real input is not reachable
+    /// through the accessibility tree — a multi-box OTP field, for example, where
+    /// the visible boxes are plain views and the hidden `UITextField` behind them
+    /// is not exposed to XCUITest. `element.fill` cannot help there because there
+    /// is no element to resolve; the app has already been focused by a tap, and
+    /// all that is left is to send characters at the keyboard.
+    ///
+    /// `XCUIApplication.typeText` routes to the focused responder rather than to a
+    /// specific element, which is exactly that. It requires the keyboard to be up,
+    /// so the absence of one is reported as a clear failure instead of a silent
+    /// no-op — "I typed and nothing happened" is the worst outcome here.
+    private func typeIntoFocusedInput(_ text: String) throws {
+        guard !text.isEmpty else {
+            return
+        }
+
+        guard app.keyboards.firstMatch.waitForExistence(timeout: 5) else {
+            throw AsturAgentFailure(
+                code: "KEYBOARD_NOT_VISIBLE",
+                message: "No iOS keyboard is on screen, so there is nothing focused to type into. "
+                    + "Tap the input first — for a custom control, tap the box that focuses its hidden field.",
+                details: nil
+            )
+        }
+
+        app.typeText(text)
     }
 
     private func dismissKeyboard() {
@@ -987,6 +1037,17 @@ final class AsturAgent {
     }
 
     private func findElementObject(_ selector: AsturSelector) -> XCUIElement? {
+        // Deliberately isolated from the directQuery/matches() machinery below —
+        // a native NSPredicate query is already a complete, self-contained
+        // match; routing it through the generic id/text/role scan-and-filter
+        // paths would risk the broad-scan fallback treating "no predicate
+        // match" as "scan everything", which is wrong for this strategy.
+        if selector.strategy.lowercased() == "native" {
+            let matches = nativeElements(selector)
+            let instance = selector.nativeInstance ?? 0
+            return matches.indices.contains(instance) ? matches[instance] : nil
+        }
+
         let query = directQuery(selector)
 
         if let query {
@@ -1066,6 +1127,10 @@ final class AsturAgent {
     }
 
     private func findElementObjects(_ selector: AsturSelector) -> [XCUIElement] {
+        if selector.strategy.lowercased() == "native" {
+            return nativeElements(selector)
+        }
+
         if let query = directQuery(selector) {
             return boundedElements(query, limit: maxFindAllResults)
                 .filter { matches($0, selector: selector) }
@@ -1088,6 +1153,22 @@ final class AsturAgent {
         default:
             return false
         }
+    }
+
+    /// Resolves a by.native() iOS predicate. `nativeIos` is passed verbatim to
+    /// `NSPredicate(format:)` — XCUITest's own declarative query grammar, the
+    /// same mechanism Apple's own APIs and Appium's `-ios predicate string`
+    /// strategy use — never interpreted as executable code. Kept isolated from
+    /// directQuery/matches() (see the callers in findElementObject/
+    /// findElementObjects) since the predicate is already a complete match on
+    /// its own; nothing else needs to re-filter it.
+    private func nativeElements(_ selector: AsturSelector) -> [XCUIElement] {
+        guard let predicateString = selector.nativeIos, !predicateString.isEmpty else {
+            return []
+        }
+
+        let query = app.descendants(matching: .any).matching(NSPredicate(format: predicateString))
+        return boundedElements(query, limit: maxFindAllResults)
     }
 
     private func directQuery(_ selector: AsturSelector) -> XCUIElementQuery? {
@@ -1792,11 +1873,30 @@ final class AsturAgent {
             throw AsturAgentFailure(code: "INVALID_PARAMS", message: "selector is required and must be an object.")
         }
 
+        let strategy = try raw.requiredString("strategy")
+
+        var nativeIos: String?
+        var nativeInstance: Int?
+        if strategy == "native" {
+            let native = raw.mapValue("native")
+            nativeIos = try native?.stringValue("ios")
+            guard let resolvedIos = nativeIos, !resolvedIos.isEmpty else {
+                throw AsturAgentFailure(
+                    code: "INVALID_SELECTOR",
+                    message: "by.native() selector has no `ios` predicate, but this is the iOS agent. "
+                        + "Provide `ios` in by.native({ ios, android }) to run this selector on iOS."
+                )
+            }
+            nativeInstance = try native?.intValue("instance")
+        }
+
         return AsturSelector(
-            strategy: try raw.requiredString("strategy"),
+            strategy: strategy,
             value: try raw.requiredString("value"),
             exact: try raw.boolValue("exact") ?? true,
-            name: raw["name"]
+            name: raw["name"],
+            nativeIos: nativeIos,
+            nativeInstance: nativeInstance
         )
     }
 
@@ -1955,7 +2055,8 @@ private let supportedCapabilities = [
     "gesture.swipe",
     "gesture.drag",
     "keyboard.state",
-    "keyboard.dismiss"
+    "keyboard.dismiss",
+    "keyboard.type"
 ]
 
 private func elementTypeForRole(_ role: String) -> XCUIElement.ElementType? {

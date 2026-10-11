@@ -120,6 +120,14 @@ agent: {
 export ASTUR_ANDROID_AGENT_ENDPOINT=tcp:127.0.0.1:8787
 ```
 
+يطلب الوكيل رمزاً (token) مع كل طلب، لأن أي تطبيق على الجهاز يستطيع الوصول إلى منفذه. ينشئ Astur رمزاً جديداً لكل جلسة يشغّلها بنفسه. أما الوكيل الذي تشغّله يدوياً فيجب أن تمرّر له رمزاً عبر `-e asturToken <token>` (ولن يبدأ من دونه)، ويحتاج Astur إلى القيمة نفسها:
+
+```bash
+export ASTUR_ANDROID_AGENT_TOKEN="$(openssl rand -hex 32)"
+adb shell am instrument -w -e asturPort 8787 -e asturToken "$ASTUR_ANDROID_AGENT_TOKEN" \
+  dev.astur.agent.test/dev.astur.agent.AsturInstrumentationRunner
+```
+
 بمجرد أن تثبت استقرار مجموعة أوامر الوكيل الأصلي مع اختباراتك، يُفضل استخدام الإعداد `agent.mode: 'required'` في بيئات التكامل المستمر (CI).
 
 كإجراء قياسي، يخصص Astur جلسة وكيل واحدة لكل عامل (Worker) من عمال Playwright ولا يعيد تثبيت الوكيل قبل كل ملف اختبار. يتم تثبيت الوكيل المرفق فقط في حالة غيابه، أو عند غياب تطبيق الاختبار. وإذا كنت تعمل على تطوير الوكيل نفسه وتحتاج لدفع التحديثات للجهاز دورياً، قم بتعيين `ASTUR_ANDROID_AGENT_FORCE_INSTALL=1`.

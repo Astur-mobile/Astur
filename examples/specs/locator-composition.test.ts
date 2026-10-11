@@ -86,17 +86,19 @@ test('a parent does not match itself when scoped into', async ({ app, device }) 
   await expect(app.forms.title).toBeVisible();
 
   const container = app.forms.screen;
-  const containerBounds = await container.bounds();
+  const parent = await container.snapshot();
   const descendants = await container.getByType('any').queryAll();
 
-  // Scoping searches descendants. If the parent were included it would appear
-  // here with exactly its own bounds.
+  // Scoping searches descendants. Bounds alone cannot tell the parent apart:
+  // a full-size child (the content view of a scroll container, typically) has
+  // exactly the same rectangle. So compare what identifies a node.
   const matchedItself = descendants.some(
     (node) =>
-      node.bounds.x === containerBounds.x
-      && node.bounds.y === containerBounds.y
-      && node.bounds.width === containerBounds.width
-      && node.bounds.height === containerBounds.height
+      node.type === parent.type
+      && node.id === parent.id
+      && node.label === parent.label
+      && node.text === parent.text
+      && JSON.stringify(node.bounds) === JSON.stringify(parent.bounds)
   );
 
   expect(matchedItself).toBe(false);
@@ -110,10 +112,17 @@ test('position picks stably, and counts from the end when negative', async ({ ap
   const total = await all.count();
   test.skip(total < 2, 'needs at least two elements on screen to distinguish first from last');
 
-  const first = await all.first().bounds();
-  const zeroth = await all.nth(0).bounds();
-  const last = await all.last().bounds();
-  const negativeOne = await all.nth(-1).bounds();
+  // Compare what identifies a node, not just its rectangle: on iOS the first
+  // element (the app) and the last (a full-screen container closing the
+  // hierarchy) cover exactly the same area.
+  const identity = async (locator: typeof all) => {
+    const { type, id, label, text, bounds } = await locator.snapshot();
+    return { type, id, label, text, bounds };
+  };
+  const first = await identity(all.first());
+  const zeroth = await identity(all.nth(0));
+  const last = await identity(all.last());
+  const negativeOne = await identity(all.nth(-1));
 
   expect(zeroth).toEqual(first);
   expect(negativeOne).toEqual(last);

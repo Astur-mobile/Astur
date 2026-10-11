@@ -1,11 +1,14 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { isFlutterAppBundle } from '../packages/ios/src/flutterDetect.js';
+
+const roots: string[] = [];
 
 async function makeBundle(...dirs: string[]): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'astur-app-'));
+  roots.push(root);
   const app = join(root, 'Runner.app');
   await mkdir(app, { recursive: true });
   for (const dir of dirs) {
@@ -16,6 +19,10 @@ async function makeBundle(...dirs: string[]): Promise<string> {
 }
 
 describe('iOS Flutter bundle detection', () => {
+  afterEach(async () => {
+    await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  });
+
   // This is the only signal there is: XCUITest serves the same native
   // accessibility tree for a Flutter app as for a React Native one, so nothing
   // at runtime distinguishes them. Screenshot baselines depend on getting it

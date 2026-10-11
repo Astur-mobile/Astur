@@ -66,6 +66,8 @@ import {
   type WebEvaluator,
   type WebViewSelector
 } from '@astur-mobile/core';
+import { IosAgentBridge } from './agentBridge.js';
+import { appBundlesMatch } from './appBundle.js';
 import { run, runText, spawnCommand } from './command.js';
 import { attachFlutterNetwork, IOS_NO_NETWORK_CAPABILITIES, type FlutterNetworkAttachment } from './flutterNetwork.js';
 import { isFlutterAppBundle } from './flutterDetect.js';
@@ -414,6 +416,11 @@ export class IosDriver implements PlatformDriver {
     return checks;
   }
 
+  /** The device `createSession` would open for `selector`, found without touching it. */
+  async findDevice(selector: DeviceSelector): Promise<DeviceInfo | undefined> {
+    return selectDevice(await this.listDevicesForSelector(selector), selector);
+  }
+
   async listDevices(): Promise<DeviceInfo[]> {
     const [realDevices, simulators] = await Promise.all([
       this.listConnectedDevices().catch(() => []),
@@ -661,7 +668,8 @@ export class IosDriver implements PlatformDriver {
           '-only-testing:AsturIOSAgentUITests/AsturAgentUITests/testAgentServer',
           `ASTUR_AUT_BUNDLE_ID=${bundleId}`,
           'ASTUR_AUT_LAUNCH=1',
-          `ASTUR_IOS_AGENT_BRIDGE_URL=${endpoint}`
+          `ASTUR_IOS_AGENT_BRIDGE_URL=${endpoint}`,
+          `ASTUR_IOS_AGENT_BRIDGE_TOKEN=${bridge.token}`
         ], {
           stdio: ['ignore', 'pipe', 'pipe'],
           // Own process group so teardown can group-signal xcodebuild together
@@ -672,7 +680,8 @@ export class IosDriver implements PlatformDriver {
             ...process.env,
             ASTUR_AUT_BUNDLE_ID: bundleId,
             ASTUR_AUT_LAUNCH: '1',
-            ASTUR_IOS_AGENT_BRIDGE_URL: endpoint
+            ASTUR_IOS_AGENT_BRIDGE_URL: endpoint,
+            ASTUR_IOS_AGENT_BRIDGE_TOKEN: bridge.token
           }
         });
         trackIosAgentProcess(agentProcess);
@@ -698,7 +707,7 @@ export class IosDriver implements PlatformDriver {
               scheme: config.scheme,
               attempt,
               attempts,
-              xcodebuildOutput: output.text()
+              xcodebuildOutput: redact(output.text(), bridge.token)
             }
           );
         });
@@ -719,7 +728,8 @@ export class IosDriver implements PlatformDriver {
           process: agentProcess
         };
       } catch (error) {
-        const xcodebuildOutput = output.text();
+        // xcodebuild echoes its command-line build settings, token included.
+        const xcodebuildOutput = redact(output.text(), bridge.token);
         lastFailure = {
           error,
           endpoint,
@@ -930,6 +940,26 @@ class IosSession implements PlatformSession {
     } finally {
       await materialized.cleanup?.().catch(() => undefined);
     }
+  }
+
+  async isInstalledAppCurrent(identifier: string, path: string): Promise<boolean | undefined> {
+    // A real device keeps installed apps out of reach, and an .ipa is an
+    // archive, not the bundle that gets installed: neither can be compared,
+    // and "cannot tell" makes the runtime reinstall.
+    if (this.isRealDevice() || !/\.app\/?$/.test(path)) {
+      return undefined;
+    }
+
+    let container: string;
+    try {
+      container = (await this.simctl(['get_app_container', this.deviceInfo.id, identifier, 'app'])).stdout
+        .toString('utf8')
+        .trim();
+    } catch {
+      return false;
+    }
+
+    return appBundlesMatch(path, container).catch(() => undefined);
   }
 
   async isAppInstalled(identifier: string): Promise<boolean> {
@@ -1905,372 +1935,6 @@ class IosSession implements PlatformSession {
   }
 }
 
-interface BridgeCommand {
-  id: string;
-  protocolVersion: string;
-  command: NativeAgentMethod;
-  method: NativeAgentMethod;
-  deadlineMs: number;
-  payload?: unknown;
-  params?: unknown;
-}
-
-interface BridgeResponse {
-  id: string;
-  ok: boolean;
-  result?: unknown;
-  data?: unknown;
-  error?: {
-    code?: string;
-    message?: string;
-    details?: unknown;
-  };
-}
-
-interface CommandPoll {
-  response: ServerResponse;
-  timer: NodeJS.Timeout;
-  onClose(): void;
-}
-
-class IosAgentBridge {
-  readonly endpoint: string;
-  readonly agentEndpoint: string;
-  private readonly traceEnabled = process.env.ASTUR_IOS_AGENT_TRACE === '1';
-  private readonly queue: BridgeCommand[] = [];
-  private readonly commandPolls: CommandPoll[] = [];
-  private readonly pending = new Map<string, {
-    method: NativeAgentMethod;
-    resolve(value: unknown): void;
-    reject(error: unknown): void;
-    timer?: NodeJS.Timeout;
-  }>();
-  private readonly registrationWaiters: Array<{
-    resolve(info: NativeAgentInfo): void;
-    reject(error: unknown): void;
-    timer: NodeJS.Timeout;
-  }> = [];
-  private registration?: NativeAgentInfo;
-
-  private constructor(
-    private readonly server: HttpServer,
-    private readonly commandTimeout: number,
-    private readonly port: number,
-    advertisedHost: string
-  ) {
-    this.endpoint = `http://127.0.0.1:${port}`;
-    this.agentEndpoint = `http://${formatHostForUrl(advertisedHost)}:${port}`;
-  }
-
-  static async start(
-    port: number,
-    commandTimeout: number,
-    options: { bindHost?: string; advertisedHost?: string } = {}
-  ): Promise<IosAgentBridge> {
-    let bridge!: IosAgentBridge;
-    const server = createHttpServer((request, response) => {
-      void bridge.handle(request, response);
-    });
-    const bindHost = options.bindHost ?? '127.0.0.1';
-    const advertisedHost = options.advertisedHost ?? bindHost;
-    bridge = new IosAgentBridge(server, commandTimeout, port, advertisedHost);
-
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(port, bindHost, () => {
-        server.off('error', reject);
-        resolve();
-      });
-    });
-
-    return bridge;
-  }
-
-  createClient(info: NativeAgentInfo): NativeAgentClient {
-    return {
-      endpoint: this.endpoint,
-      platform: 'ios',
-      info,
-      commandTimeout: this.commandTimeout,
-      command: async <M extends NativeAgentMethod>(
-        method: M,
-        params?: NativeAgentCommandParams<M>
-      ): Promise<NativeAgentCommandResponse<M>> => {
-        return this.command(method, params) as Promise<NativeAgentCommandResponse<M>>;
-      }
-    };
-  }
-
-  waitForRegistration(timeoutMs: number): Promise<NativeAgentInfo> {
-    if (this.registration) {
-      return Promise.resolve(this.registration);
-    }
-
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new AsturError(
-          'IOS_XCTEST_AGENT_CONNECT_FAILED',
-          `Timed out waiting for iOS XCUITest agent registration at ${this.endpoint}.`,
-          { endpoint: this.endpoint, timeout: timeoutMs }
-        ));
-      }, timeoutMs);
-
-      this.registrationWaiters.push({ resolve, reject, timer });
-    });
-  }
-
-  async close(): Promise<void> {
-    for (const pending of this.pending.values()) {
-      if (pending.timer) {
-        clearTimeout(pending.timer);
-      }
-      pending.reject(new AsturError(
-        'AGENT_DISCONNECTED',
-        'iOS XCUITest bridge closed before the command completed.',
-        { endpoint: this.endpoint, method: pending.method }
-      ));
-    }
-    this.pending.clear();
-
-    for (const poll of this.commandPolls.splice(0)) {
-      clearTimeout(poll.timer);
-      poll.response.off('close', poll.onClose);
-      if (!poll.response.writableEnded) {
-        poll.response.statusCode = 204;
-        poll.response.end();
-      }
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      this.server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve();
-      });
-    });
-  }
-
-  private command<M extends NativeAgentMethod>(
-    method: M,
-    params?: NativeAgentCommandParams<M>
-  ): Promise<NativeAgentCommandResponse<M>> {
-    const id = randomUUID();
-    const command: BridgeCommand = {
-      id,
-      protocolVersion: '1.0',
-      command: method,
-      method,
-      deadlineMs: Date.now() + this.commandTimeout,
-      payload: params,
-      params
-    };
-
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, {
-        method,
-        resolve: resolve as (value: unknown) => void,
-        reject
-      });
-      this.queue.push(command);
-      this.trace('queue', method, id);
-      this.flushCommandPoll();
-    });
-  }
-
-  private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    try {
-      if (request.method === 'POST' && request.url === '/register') {
-        await this.handleRegister(request, response);
-        return;
-      }
-
-      if (request.method === 'GET' && request.url === '/command') {
-        this.handleCommandPoll(response);
-        return;
-      }
-
-      if (request.method === 'POST' && request.url === '/response') {
-        await this.handleCommandResponse(request, response);
-        return;
-      }
-
-      writeJson(response, 404, {
-        ok: false,
-        error: {
-          code: 'NOT_FOUND',
-          message: `Unknown iOS bridge route: ${request.method ?? 'GET'} ${request.url ?? '/'}`
-        }
-      });
-    } catch (error) {
-      writeJson(response, 500, {
-        ok: false,
-        error: {
-          code: 'BRIDGE_ERROR',
-          message: error instanceof Error ? error.message : String(error)
-        }
-      });
-    }
-  }
-
-  private async handleRegister(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    const body = await readJson(request) as { result?: NativeAgentInfo; data?: NativeAgentInfo };
-    const info = body.result ?? body.data;
-    if (!info || info.platform !== 'ios') {
-      writeJson(response, 400, {
-        ok: false,
-        error: {
-          code: 'INVALID_REGISTRATION',
-          message: 'iOS bridge registration must include iOS native-agent info.'
-        }
-      });
-      return;
-    }
-
-    this.registration = info;
-    for (const waiter of this.registrationWaiters.splice(0)) {
-      clearTimeout(waiter.timer);
-      waiter.resolve(info);
-    }
-
-    writeJson(response, 200, { ok: true });
-  }
-
-  private handleCommandPoll(response: ServerResponse): void {
-    const command = this.queue.shift();
-    if (command) {
-      this.deliverCommand(response, command);
-      return;
-    }
-
-    const longPollMs = 30_000;
-    const timer = setTimeout(() => {
-      cleanup();
-      response.statusCode = 204;
-      response.end();
-    }, longPollMs);
-
-    let poll: CommandPoll;
-    const cleanup = (): void => {
-      clearTimeout(timer);
-      response.off('close', onClose);
-      const index = this.commandPolls.indexOf(poll);
-      if (index !== -1) {
-        this.commandPolls.splice(index, 1);
-      }
-    };
-
-    const onClose = (): void => {
-      cleanup();
-    };
-
-    poll = {
-      response,
-      timer,
-      onClose
-    };
-    response.on('close', onClose);
-    this.commandPolls.push(poll);
-  }
-
-  private flushCommandPoll(): void {
-    while (this.queue.length > 0 && this.commandPolls.length > 0) {
-      const poll = this.commandPolls.shift();
-      const command = this.queue.shift();
-      if (!poll || !command) {
-        return;
-      }
-
-      clearTimeout(poll.timer);
-      poll.response.off('close', poll.onClose);
-      if (!poll.response.writableEnded) {
-        this.deliverCommand(poll.response, command);
-      }
-    }
-  }
-
-  private deliverCommand(response: ServerResponse, command: BridgeCommand): void {
-    this.startCommandTimer(command);
-    this.trace('deliver', command.method, command.id);
-    writeJson(response, 200, command);
-  }
-
-  private startCommandTimer(command: BridgeCommand): void {
-    const pending = this.pending.get(command.id);
-    if (!pending || pending.timer) {
-      return;
-    }
-
-    pending.timer = setTimeout(() => {
-      this.pending.delete(command.id);
-      this.trace('timeout', command.method, command.id);
-      pending.reject(new AsturError(
-        'AGENT_COMMAND_TIMEOUT',
-        `iOS XCUITest agent command ${command.method} timed out.`,
-        { endpoint: this.endpoint, method: command.method, timeout: this.commandTimeout }
-      ));
-    }, this.commandTimeout);
-  }
-
-  private async handleCommandResponse(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    const body = await readJson(request) as BridgeResponse;
-    const pending = this.pending.get(body.id);
-    if (!pending) {
-      this.trace('orphan-response', undefined, body.id);
-      writeJson(response, 200, { ok: true });
-      return;
-    }
-
-    this.pending.delete(body.id);
-    if (pending.timer) {
-      clearTimeout(pending.timer);
-    }
-    this.trace(body.ok ? 'response-ok' : 'response-error', pending.method, body.id);
-
-    if (body.ok) {
-      pending.resolve(body.result ?? body.data);
-    } else {
-      pending.reject(new AsturError(
-        body.error?.code ?? 'AGENT_COMMAND_FAILED',
-        body.error?.message ?? `iOS XCUITest agent command ${pending.method} failed.`,
-        {
-          endpoint: this.endpoint,
-          method: pending.method,
-          error: body.error
-        }
-      ));
-    }
-
-    writeJson(response, 200, { ok: true });
-  }
-
-  private trace(event: string, method: NativeAgentMethod | string | undefined, id: string): void {
-    if (!this.traceEnabled) {
-      return;
-    }
-
-    console.log(`[astur/ios-agent] ${event} ${method ?? 'unknown'} ${id}`);
-  }
-}
-
-async function readJson(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-
-  const body = Buffer.concat(chunks).toString('utf8');
-  return body ? JSON.parse(body) : {};
-}
-
-function writeJson(response: ServerResponse, status: number, body: unknown): void {
-  response.statusCode = status;
-  response.setHeader('content-type', 'application/json');
-  response.end(JSON.stringify(body));
-}
-
 async function ensureIosAppInstalled(session: IosSession, capabilities: NormalizedCapabilities): Promise<void> {
   const app = capabilities.app;
   if (!app) {
@@ -2385,6 +2049,10 @@ function resolveIosAgentRuntimeConfig(): {
     codeSignIdentity: process.env.ASTUR_IOS_CODE_SIGN_IDENTITY,
     allowProvisioningUpdates: process.env.ASTUR_IOS_ALLOW_PROVISIONING_UPDATES === '0' ? false : undefined
   };
+}
+
+function redact(text: string, secret: string): string {
+  return text.split(secret).join('[redacted]');
 }
 
 function resolveIosAgentBridgeHosts(
@@ -2553,10 +2221,6 @@ function normalizeBridgeHost(host: string | undefined): string | undefined {
   }
 
   return host.trim().replace(/^\[(.*)\]$/, '$1') || undefined;
-}
-
-function formatHostForUrl(host: string): string {
-  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 }
 
 function resolveDefaultIosAgentProject(): string {

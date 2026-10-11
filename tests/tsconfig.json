@@ -18,5 +18,5 @@
       "@astur-mobile/test": ["../packages/test/src/index.ts"]
     }
   },
-  "include": ["*.test.ts"]
+  "include": ["*.test.ts", "../packages/test/src/pixelmatch.d.ts"]
 }

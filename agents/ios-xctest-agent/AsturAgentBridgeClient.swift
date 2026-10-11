@@ -3,15 +3,19 @@ import Foundation
 final class AsturAgentBridgeClient {
     private let agent: AsturAgent
     private let bridgeUrl: URL
+    /// The host's per-session secret. The bridge refuses any request without it,
+    /// because on a real device it listens where the whole network can reach it.
+    private let token: String?
 
     /// Long-poll timeout: the agent holds the GET /command request open for up to
     /// this duration on the server side, eliminating the 100ms polling gap.
     /// Falls back to a short retry on network errors so the loop stays resilient.
     private let longPollTimeout: TimeInterval = 30
 
-    init(agent: AsturAgent, bridgeUrl: URL) {
+    init(agent: AsturAgent, bridgeUrl: URL, token: String?) {
         self.agent = agent
         self.bridgeUrl = bridgeUrl
+        self.token = token
     }
 
     func run() {
@@ -116,6 +120,9 @@ final class AsturAgentBridgeClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = timeout
+        if let token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
 
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "content-type")

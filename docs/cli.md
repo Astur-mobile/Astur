@@ -116,6 +116,7 @@ Use `playwright.config.ts` to control native-agent mode and endpoint behavior:
 Platform endpoint environment variables:
 
 - `ASTUR_ANDROID_AGENT_ENDPOINT`
+- `ASTUR_ANDROID_AGENT_TOKEN` (the token a hand-started Android agent was given)
 - `ASTUR_IOS_AGENT_ENDPOINT`
 
 ## `codegen`

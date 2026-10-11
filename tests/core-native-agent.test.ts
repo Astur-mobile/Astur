@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AsturError,
   connectNativeAgentClient,
@@ -11,6 +11,7 @@ import {
 interface AgentRequest {
   id: string;
   method: string;
+  budgetMs?: number;
   params?: unknown;
   protocolVersion?: string;
   command?: string;
@@ -243,6 +244,114 @@ describe('native agent client', () => {
     } satisfies Partial<AsturError>);
   });
 
+  it('applies the command timeout to reading the response body', async () => {
+    const client = await connectNativeAgentClient({
+      endpoint: 'http://127.0.0.1:8787',
+      platform: 'android',
+      commandTimeout: 20,
+      handshakeTimeout: 1_000,
+      fetchImpl: slowBodyFetch(300)
+    });
+    const startedAt = Date.now();
+
+    await expect(client.command('tree.get')).rejects.toMatchObject({
+      code: 'AGENT_COMMAND_TIMEOUT'
+    } satisfies Partial<AsturError>);
+    expect(Date.now() - startedAt).toBeLessThan(200);
+  });
+
+  it('reports a command that gets no response in time as a timeout', async () => {
+    const client = await connectNativeAgentClient({
+      endpoint: 'http://127.0.0.1:8787',
+      platform: 'android',
+      commandTimeout: 20,
+      handshakeTimeout: 1_000,
+      fetchImpl: silentAfterPingFetch()
+    });
+
+    await expect(client.command('tree.get')).rejects.toMatchObject({
+      code: 'AGENT_COMMAND_TIMEOUT'
+    } satisfies Partial<AsturError>);
+  });
+
+  it('leaves no deadline timer running once a command settles', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const client = await connectNativeAgentClient({
+        endpoint: 'http://127.0.0.1:8787',
+        platform: 'android',
+        fetchImpl: buildScriptedFetch({
+          'agent.ping': (request) => ({ body: ok(request.id, PING_INFO) }),
+          'tree.get': () => ({ rawBody: '{not-json}' })
+        })
+      });
+      expect(vi.getTimerCount()).toBe(0);
+
+      await expect(client.command('tree.get')).rejects.toMatchObject({ code: 'AGENT_RESPONSE_INVALID' });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('sends the session token as a bearer credential on every request', async () => {
+    const seen: Array<string | null> = [];
+    const client = await connectNativeAgentClient({
+      endpoint: 'http://127.0.0.1:8787',
+      platform: 'android',
+      token: 'session-secret',
+      fetchImpl: recordingFetch(seen)
+    });
+
+    await client.command('tree.get');
+
+    expect(seen).toEqual(['Bearer session-secret', 'Bearer session-secret']);
+  });
+
+  it('sends the execution budget relative to now, not as a host timestamp', async () => {
+    const budgets: Array<number | undefined> = [];
+    const client = await connectNativeAgentClient({
+      endpoint: 'http://127.0.0.1:8787',
+      platform: 'android',
+      commandTimeout: 4_000,
+      fetchImpl: buildScriptedFetch({
+        'agent.ping': (request) => ({ body: ok(request.id, PING_INFO) }),
+        'tree.get': (request) => {
+          budgets.push(request.budgetMs);
+          return { body: ok(request.id, { type: 'hierarchy', children: [] }) };
+        }
+      })
+    });
+
+    await client.command('tree.get');
+
+    expect(budgets).toEqual([4_000]);
+  });
+
+  it('surfaces a refusal the agent made before running the command under its own code', async () => {
+    const client = await connectNativeAgentClient({
+      endpoint: 'http://127.0.0.1:8787',
+      platform: 'android',
+      fetchImpl: buildScriptedFetch({
+        'agent.ping': (request) => ({ body: ok(request.id, PING_INFO) }),
+        'tree.get': () => ({
+          status: 401,
+          body: {
+            id: 'unknown',
+            ok: false,
+            executed: false,
+            error: { code: 'UNAUTHORIZED', message: 'Missing or invalid agent token.' }
+          }
+        })
+      })
+    });
+
+    await expect(client.command('tree.get')).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+      details: { executed: false }
+    });
+  });
+
   it('surfaces invalid JSON payloads from the agent', async () => {
     const client = await connectNativeAgentClient({
       endpoint: 'http://127.0.0.1:8787',
@@ -354,6 +463,57 @@ async function createAgentServer(responder: (request: AgentRequest) => AgentResp
       });
     }
   };
+}
+
+const PING_INFO: NativeAgentInfo = {
+  id: 'astur-android-uiautomator',
+  platform: 'android',
+  version: '0.1.0-alpha.0',
+  protocolVersion: 1,
+  capabilities: ['agent.ping', 'tree.get']
+};
+
+/** Answers every command successfully and records the authorization header it saw. */
+function recordingFetch(seen: Array<string | null>): typeof fetch {
+  return (async (_input, init) => {
+    const envelope = JSON.parse(String(init?.body ?? '{}')) as AgentRequest;
+    seen.push(new Headers(init?.headers).get('authorization'));
+    const result = envelope.method === 'agent.ping' ? PING_INFO : { type: 'hierarchy', children: [] };
+    return new Response(JSON.stringify(ok(envelope.id, result)));
+  }) as typeof fetch;
+}
+
+/** Answers the handshake, then sends headers at once but trickles the body. */
+function slowBodyFetch(bodyDelayMs: number): typeof fetch {
+  return (async (_input, init) => {
+    const envelope = JSON.parse(String(init?.body ?? '{}')) as AgentRequest;
+    if (envelope.method === 'agent.ping') {
+      return new Response(JSON.stringify(ok(envelope.id, PING_INFO)));
+    }
+
+    const body = JSON.stringify(ok(envelope.id, { type: 'hierarchy', children: [] }));
+    return new Response(new ReadableStream({
+      async start(controller) {
+        await new Promise((resolve) => setTimeout(resolve, bodyDelayMs));
+        controller.enqueue(new TextEncoder().encode(body));
+        controller.close();
+      }
+    }));
+  }) as typeof fetch;
+}
+
+/** Answers the handshake, then never responds, but honours abort like fetch. */
+function silentAfterPingFetch(): typeof fetch {
+  return (async (_input, init) => {
+    const envelope = JSON.parse(String(init?.body ?? '{}')) as AgentRequest;
+    if (envelope.method === 'agent.ping') {
+      return new Response(JSON.stringify(ok(envelope.id, PING_INFO)));
+    }
+
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    });
+  }) as typeof fetch;
 }
 
 function buildScriptedFetch(script: ScriptedFetch): typeof fetch {

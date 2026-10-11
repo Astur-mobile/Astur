@@ -149,6 +149,12 @@ export interface LocatorFilter {
  * refined one is resolved here against a tree snapshot.
  */
 interface LocatorRefinement {
+  /**
+   * Start from everything this locator resolves to, instead of the base
+   * selector. Set by `and` / `or`, which combine whole locators: the receiver's
+   * own filters and position must apply before the combination, not after it.
+   */
+  group?: MobileLocator;
   /** Search only within this locator's matches. */
   within?: MobileLocator;
   filters: LocatorFilter[];
@@ -177,14 +183,19 @@ export class MobileLocator {
   }
 
   /**
-   * True when this locator is nothing but its base selector.
+   * True when this locator can be handed to a driver as its bare selector.
    *
    * Every action checks this before taking a driver's element fast path: those
    * take an {@link ElementSelector}, which cannot carry a refinement, so a
    * refined locator has to resolve here and act on the resulting coordinates.
+   *
+   * `by.type('any')` resolves here too. It is a wildcard only this tree matcher
+   * implements; the native agents read it as a literal type named "any" and
+   * find nothing. It also selects the whole tree, which one tree read answers
+   * more cheaply than an agent serialising every node on its own.
    */
   private get isPlain(): boolean {
-    return this.refinement === undefined;
+    return this.refinement === undefined && !isAnyType(this.selector);
   }
 
   private derive(change: Partial<LocatorRefinement>): MobileLocator {
@@ -247,16 +258,28 @@ export class MobileLocator {
     return this.derive({ filters: [...base.filters, filter] });
   }
 
-  /** Match elements this locator and `other` both match. */
+  /**
+   * Match elements this locator and `other` both match.
+   *
+   * Both sides are taken whole, so `a.filter(f).and(b)` filters only `a`, and
+   * anything chained afterwards applies to the intersection.
+   */
   and(other: MobileLocator): MobileLocator {
-    const base = this.refinement ?? emptyRefinement();
-    return this.derive({ and: [...base.and, other] });
+    return this.combine({ and: [other] });
   }
 
-  /** Match elements either this locator or `other` matches, in document order. */
+  /**
+   * Match elements either this locator or `other` matches, in document order.
+   *
+   * Both sides are taken whole, so `a.filter(f).or(b)` filters only `a`, and
+   * anything chained afterwards applies to the union.
+   */
   or(other: MobileLocator): MobileLocator {
-    const base = this.refinement ?? emptyRefinement();
-    return this.derive({ or: [...base.or, other] });
+    return this.combine({ or: [other] });
+  }
+
+  private combine(change: Partial<Pick<LocatorRefinement, 'and' | 'or'>>): MobileLocator {
+    return new MobileLocator(this.session, this.selector, { ...emptyRefinement(), group: this, ...change });
   }
 
   first(): MobileLocator {
@@ -625,6 +648,20 @@ export class MobileLocator {
     );
   }
 
+  /**
+   * The element this locator resolves to right now, or `undefined` when it is
+   * absent. It never waits, and a failed read throws instead of reading as
+   * "absent": a caller that retries has to be able to tell the two apart.
+   */
+  async query(): Promise<MobileElementSnapshot | undefined> {
+    return this.currentMatch();
+  }
+
+  /** The session default applied when a wait passes no `timeout`. */
+  get defaultTimeout(): number {
+    return this.session.capabilities.timeout;
+  }
+
   async queryAll(): Promise<MobileElementSnapshot[]> {
     if (this.isPlain) {
       return this.session.findElements
@@ -659,7 +696,9 @@ export class MobileLocator {
     }
 
     let matches: MobileElementSnapshot[];
-    if (refinement.within) {
+    if (refinement.group) {
+      matches = refinement.group.resolveAgainst(tree, order);
+    } else if (refinement.within) {
       // Strict descendants: a parent does not contain itself.
       const roots = refinement.within.resolveAgainst(tree, order);
       matches = roots.flatMap((root) => root.children.flatMap((child) => findElements(child, this.selector)));
@@ -842,6 +881,10 @@ export function findElements(
   return matches(root, selector) ? [root, ...descendants] : descendants;
 }
 
+function isAnyType(selector: ElementSelector): boolean {
+  return selector.strategy === 'type' && selector.value.trim().toLowerCase() === 'any';
+}
+
 export function matches(element: MobileElementSnapshot, selector: ElementSelector): boolean {
   switch (selector.strategy) {
     case 'accessibility':
@@ -853,7 +896,7 @@ export function matches(element: MobileElementSnapshot, selector: ElementSelecto
     case 'text':
       return matchValue(element.text, selector) || matchValue(element.label, selector);
     case 'type':
-      if (selector.value.trim().toLowerCase() === 'any') {
+      if (isAnyType(selector)) {
         return true;
       }
       return matchValue(element.type, selector);

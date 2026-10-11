@@ -15,6 +15,13 @@ function readAndroidAgentMode(): 'auto' | 'required' | 'off' | undefined {
 
 export default defineConfig({
   testDir: resolve(repoRoot, 'examples/specs'),
+  // Deny-list, not an allow-list: a platform opts out, with a reason, so a new
+  // spec runs here by default instead of silently never running.
+  testIgnore: [
+    // Drives the device browser against pages that only the browser config
+    // serves (its webServer). It runs there; here it could only fail.
+    'browser.test.ts'
+  ],
   timeout: 240_000,
   fullyParallel: false,
   workers: 1,

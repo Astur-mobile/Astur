@@ -1,4 +1,5 @@
 import { describe, it, vi } from 'vitest';
+import { AsturError } from '@astur-mobile/core';
 import {
   MobileLocator,
   by,
@@ -130,6 +131,116 @@ describe('@astur-mobile/test expect matchers', () => {
   });
 });
 
+describe('negated assertions', () => {
+  const wait = { timeout: 200, interval: 1 };
+  const deviceLost = () => new AsturError('AGENT_TRANSPORT_FAILED', 'device disconnected');
+  const withoutTitle: MobileElementSnapshot = {
+    ...tree,
+    children: tree.children.filter((child) => child.text !== 'Welcome')
+  };
+
+  it.each([
+    ['toBeVisible', (l: MobileLocator) => asturExpect(l).not.toBeVisible(wait)],
+    ['toBeHidden', (l: MobileLocator) => asturExpect(l).not.toBeHidden(wait)],
+    ['toExist', (l: MobileLocator) => asturExpect(l).not.toExist(wait)],
+    ['toBeEnabled', (l: MobileLocator) => asturExpect(l).not.toBeEnabled(wait)],
+    ['toHaveText', (l: MobileLocator) => asturExpect(l).not.toHaveText('Other', wait)],
+    ['toHaveCount', (l: MobileLocator) => asturExpect(l).not.toHaveCount(5, wait)]
+  ])('.not.%s fails when the device cannot be read', async (_name, assertion) => {
+    const session = createSession();
+    session.getTree = vi.fn(async () => {
+      throw deviceLost();
+    });
+    const title = new MobileLocator(session, by.text('Welcome'));
+
+    await asturExpect(assertion(title)).rejects.toThrow(/device disconnected/);
+  });
+
+  it('.not.toBeVisible waits for a visible element to disappear', async () => {
+    const session = createSession();
+    session.getTree = vi.fn()
+      .mockResolvedValueOnce(tree)
+      .mockResolvedValueOnce(tree)
+      .mockResolvedValue(withoutTitle);
+    const title = new MobileLocator(session, by.text('Welcome'));
+
+    await asturExpect(title).not.toBeVisible(wait);
+  });
+
+  it('.not.toBeVisible passes as soon as the element is gone, not after the timeout', async () => {
+    const session = createSession(withoutTitle);
+    const title = new MobileLocator(session, by.text('Welcome'));
+    const startedAt = Date.now();
+
+    await asturExpect(title).not.toBeVisible({ timeout: 2_000, interval: 1 });
+
+    asturExpect(Date.now() - startedAt).toBeLessThan(500);
+  });
+
+  it('.not.toBeHidden waits for a hidden element to appear', async () => {
+    const session = createSession();
+    session.getTree = vi.fn()
+      .mockResolvedValueOnce(withoutTitle)
+      .mockResolvedValueOnce(withoutTitle)
+      .mockResolvedValue(tree);
+    const title = new MobileLocator(session, by.text('Welcome'));
+
+    await asturExpect(title).not.toBeHidden(wait);
+  });
+
+  it('.not.toHaveText fails for a missing element, as Playwright does', async () => {
+    const session = createSession(withoutTitle);
+    const title = new MobileLocator(session, by.text('Welcome'));
+
+    await asturExpect(asturExpect(title).not.toHaveText('Other', wait)).rejects.toThrow(/not found/);
+  });
+
+  it('.not.toHaveCount waits for the count to change', async () => {
+    const session = createSession();
+    session.getTree = vi.fn()
+      .mockResolvedValueOnce(tree)
+      .mockResolvedValueOnce(tree)
+      .mockResolvedValue(withoutTitle);
+    const textViews = new MobileLocator(session, by.type('android.widget.TextView'));
+
+    await asturExpect(textViews).not.toHaveCount(2, wait);
+  });
+
+  it('.not recovers from a transient read error when a clean reading follows', async () => {
+    const session = createSession();
+    session.getTree = vi.fn()
+      .mockRejectedValueOnce(deviceLost())
+      .mockResolvedValue(withoutTitle);
+    const title = new MobileLocator(session, by.text('Welcome'));
+
+    await asturExpect(title).not.toBeVisible(wait);
+  });
+
+  it('.not on a Playwright locator fails when the page cannot be read', async () => {
+    const locator = {
+      waitFor: vi.fn(async () => {
+        throw new Error('Target page, context or browser has been closed');
+      }),
+      isVisible: vi.fn(async () => {
+        throw new Error('Target page, context or browser has been closed');
+      })
+    };
+
+    await asturExpect(asturExpect(locator).not.toBeVisible(wait)).rejects.toThrow(/has been closed/);
+  });
+
+  it('.not on a Playwright locator waits for the element to disappear', async () => {
+    const locator = {
+      waitFor: vi.fn(async () => undefined),
+      isVisible: vi.fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValue(false)
+    };
+
+    await asturExpect(locator).not.toBeVisible(wait);
+  });
+});
+
 function createSession(snapshot: MobileElementSnapshot = tree): PlatformSession {
   return {
     capabilities: {
@@ -141,11 +252,23 @@ function createSession(snapshot: MobileElementSnapshot = tree): PlatformSession 
       keyboard: {
         dismiss: 'auto'
       },
+      automation: {
+        engine: 'auto',
+        transport: 'auto',
+        legacyFallback: 'on-agent-failure',
+        commandTimeoutMs: 10_000,
+        startupTimeoutMs: 15_000,
+        strictLocators: true,
+        snapshot: { mode: 'on-failure', cacheTtlMs: 200 },
+        timings: { enabled: true, slowCommandThresholdMs: 1_000 }
+      },
       agent: {
         mode: 'auto',
         install: true,
         launchTimeout: 15_000,
-        commandTimeout: 10_000
+        commandTimeout: 10_000,
+        legacyFallback: 'on-agent-failure',
+        transport: 'auto'
       }
     },
     deviceInfo: {

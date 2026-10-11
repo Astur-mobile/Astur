@@ -74,6 +74,7 @@ type AsturConfig = {
   };
   app?: string | {
     path?: string;
+    install?: 'always' | 'if-different' | 'never';
     url?: string;
     downloadPath?: string;
     bundleId?: string;
@@ -362,6 +363,7 @@ Do not let two projects select the same device. Also cap every physical-device p
 | --- | --- | --- | --- |
 | `app: './apps/demo.apk'` | Yes | No | Shorthand for a local app path. On Android this points to an APK. |
 | `path` | APK path | `.app` bundle path or simulator-compatible `.ipa` | Local app to install before the session starts. |
+| `install` | Compares builds by hashing the installed APK | Compares the installed `.app` file by file on a simulator; an `.ipa` or a real device cannot be compared, so it reinstalls | When to install `path`. `'if-different'` (default) installs when the device lacks this exact build, or when Astur cannot tell. `'always'` installs over the top every session. `'never'` leaves installs to you. |
 | `url` | APK download URL | Planned | Downloads the app during capability materialization, then installs from `downloadPath`. |
 | `downloadPath` | Optional | Optional | Where Astur saves an app downloaded from `url`. Defaults under Astur's derived native artifact folder. |
 | `packageName` | Android package, for example `com.example` | Accepted as fallback only | Required for launching already-installed Android apps, uninstall, clear data/cache, and explicit lifecycle calls. Inferred from APK when `aapt` is available. |

@@ -42,6 +42,9 @@ export default defineConfig({
   // Deny-list, not an allow-list — see the RN iOS config for why. Reasons for
   // each exclusion are documented in the header comment above.
   testIgnore: [
+    // Drives the device browser against pages that only the browser config
+    // serves (its webServer). It runs there; here it could only fail.
+    'browser.test.ts',
     'media-upload.test.ts',
     'webview.test.ts',
     'drag-and-drop.test.ts'

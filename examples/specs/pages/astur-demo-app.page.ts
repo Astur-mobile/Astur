@@ -533,15 +533,18 @@ export class NativeLabPage {
   /**
    * Brings the lane buttons *and* their readout pills fully on screen.
    *
-   * Targets the pills rather than the buttons: the pills sit below the buttons,
-   * so satisfying them satisfies both. A plain `scrollIntoView` on the pills is
-   * not enough — it stops as soon as they enter the tree, which routinely
-   * leaves them clipped by the bottom nav bar, where `by.native()` (reading the
-   * UiAutomator hierarchy, not the Dart VM snapshot) reports them as not
-   * visible even though the buttons above them are perfectly tappable.
+   * The buttons have no ids, so bracket them: the card's top edge above, the
+   * pills below. The pills alone are not enough — they can land at the very top
+   * of the screen with the buttons above them scrolled out of sight (seen on
+   * iOS Flutter, where the clipped pills still report as visible). A plain
+   * `scrollIntoView` on the pills is not enough either — it stops as soon as
+   * they enter the tree, which routinely leaves them clipped by the bottom nav
+   * bar, where `by.native()` (reading the UiAutomator hierarchy, not the Dart VM
+   * snapshot) reports them as not visible even though the buttons above them
+   * are perfectly tappable.
    */
   async revealLanes(): Promise<void> {
-    await revealFully(this.device, 'native-lab-lane-b-count');
+    await revealFully(this.device, 'native-lab-lane-b-count', { topOf: 'home-native-lab-card' });
   }
 
   async revealRecords(): Promise<void> {
@@ -925,19 +928,25 @@ export class FormsPage {
       );
     }
 
-    // A tap can land mid-layout and be dropped, leaving the picker open with
-    // nothing selected, so re-tap until the picker closes.
+    // Two picker styles are in the wild. The older one returns as soon as a
+    // photo is tapped. The newer one (Android 14+) only ticks it and waits for
+    // "Done" — and tapping the photo again un-ticks it, so a blind re-tap
+    // undoes the selection. Each pass does the one step the screen calls for.
     //
-    // Only tap while a thumbnail is actually on screen. Retrying blind was the
-    // bug: a successful tap closes the picker, and the next iteration then
-    // tapped at a thumbnail that no longer existed and failed the whole test
-    // *after* the selection had already worked.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (!(await asset.isVisible({ timeout: 2_000 }))) {
+    // A tap can also land mid-layout and be dropped, which is why this is a
+    // loop at all. Only tap while the picker is on screen: a successful tap may
+    // already have closed it.
+    const done = this.device.getByText('Done', { exact: true });
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (!(await asset.first().isVisible({ timeout: 2_000 }))) {
         break;
       }
 
-      await asset.tap({ timeout: 10_000 });
+      if (await done.isVisible({ timeout: 1_000 })) {
+        await done.tap({ timeout: 10_000 });
+      } else {
+        await asset.first().tap({ timeout: 10_000 });
+      }
       await delay(500);
     }
 
@@ -1224,6 +1233,13 @@ function numericValueOf(snapshot: MobileElementSnapshot): number {
 interface RevealOptions {
   /** Id of an element that is only visible once we have scrolled PAST the target. */
   overshootId?: string;
+  /**
+   * Id of an element whose TOP EDGE must be on screen too — the upper bracket
+   * for targets with no id of their own between it and `ids`. Typically the
+   * card that contains them: its top plus the targets below means everything
+   * in between is on screen.
+   */
+  topOf?: string;
   /** Horizontal position of the swipe, as a fraction of the viewport width. */
   swipeX?: number;
   maxAttempts?: number;
@@ -1252,7 +1268,7 @@ async function revealFully(
   ids: string | string[],
   options: RevealOptions = {}
 ): Promise<void> {
-  const { overshootId, swipeX = 0.5, maxAttempts = 10 } = options;
+  const { overshootId, topOf, swipeX = 0.5, maxAttempts = 10 } = options;
   const required = Array.isArray(ids) ? ids : [ids];
   const viewport = await device.viewport();
   // Scroll direction, and the previous frame's fingerprint used to notice that
@@ -1265,12 +1281,30 @@ async function revealFully(
   // an element that has no id of its own (the record rows), bracket it by
   // naming the id-bearing elements on either side rather than insetting the
   // window and hoping.
+  //
+  // A frame that starts exactly at the top edge proves nothing: both platforms
+  // report an element scrolled partly off the top with its frame clipped to
+  // the screen, so it reads as "at y=0, a bit shorter" — and still visible.
+  // Only a top edge strictly inside the viewport is really on screen.
+  const topEdgeOnScreen = (node: MobileElementSnapshot | undefined, bottomLimit: number): boolean =>
+    Boolean(node?.visible && node.bounds.y > viewport.y && node.bounds.y < bottomLimit);
+  // Cut off by the top edge, as opposed to nowhere near it. Both report a top
+  // of 0 on iOS Flutter, but an element far off screen has an empty, invisible
+  // frame, while a clipped one is still visible and has height.
+  const clippedAtTop = (node: MobileElementSnapshot | undefined): boolean =>
+    Boolean(node?.visible && node.bounds.height > 0 && node.bounds.y <= viewport.y);
+  const belowWindow = (node: MobileElementSnapshot | undefined, bottomLimit: number): boolean =>
+    Boolean(node?.visible && node.bounds.height > 0 && node.bounds.y > viewport.y
+      && node.bounds.y + node.bounds.height > bottomLimit);
   const positions = (tree: MobileElementSnapshot, bottomLimit: number): number[] | undefined => {
     const found = required.map((id) => findNodeById(tree, id));
-    const ok = found.every((node) => node?.visible
-      && node.bounds.y >= viewport.y
-      && node.bounds.y + node.bounds.height <= bottomLimit);
-    return ok ? found.map((node) => node!.bounds.y) : undefined;
+    const ok = found.every((node) => topEdgeOnScreen(node, bottomLimit)
+      && node!.bounds.y + node!.bounds.height <= bottomLimit);
+    const top = topOf ? findNodeById(tree, topOf) : undefined;
+    if (!ok || (topOf && !topEdgeOnScreen(top, bottomLimit))) {
+      return undefined;
+    }
+    return [...found.map((node) => node!.bounds.y), ...(top ? [top.bounds.y] : [])];
   };
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -1288,18 +1322,26 @@ async function revealFully(
       // failure: the reveal "succeeds", the tap lands on empty space, and the
       // assertion reports a count that never moved. Require the positions to
       // repeat before declaring the scroll finished.
-      await delay(150);
-      const settled = positions(await device.tree(), bottomLimit);
-      // Compare with a tolerance, never for exact equality. Demanding identical
-      // pixels means any lingering animation or sub-pixel drift never matches,
-      // so this branch loops until the attempts run out — with the element
-      // sitting perfectly placed the whole time, which is a maddening failure
-      // to read. A real fling moves hundreds of pixels in 150ms and is still
-      // rejected; 1% of the viewport only absorbs jitter.
-      const jitter = viewport.height * 0.01;
-      if (settled && settled.every((y, index) => Math.abs(y - placed[index]) <= jitter)) {
+      // At rest means two reads in a row agreeing to within a point. Merely
+      // "close" is not enough: a list gliding a few points per frame passes a
+      // loose check, and Flutter treats a tap on a moving list as "stop
+      // scrolling" rather than as a tap, so the tap is silently lost. A list
+      // that is already still passes on the first re-read, as before; one
+      // still creeping after ~0.9s is sub-pixel jitter and is accepted.
+      let previous = placed;
+      let current: number[] | undefined = placed;
+      for (let check = 0; check < 6 && current; check += 1) {
+        await delay(150);
+        current = positions(await device.tree(), bottomLimit);
+        if (current && current.every((y, index) => Math.abs(y - previous[index]) <= 1)) {
+          return;
+        }
+        previous = current ?? previous;
+      }
+      if (current) {
         return;
       }
+      // Glided out of the window while settling: look again and correct.
       continue;
     }
 
@@ -1321,9 +1363,25 @@ async function revealFully(
       // Without this the loop grinds against the end until it runs out of
       // attempts, which is what a "scrolled past everything" start looks like.
       forward = !forward;
-    } else if (first && first.bounds.y < viewport.y) {
+    } else if (clippedAtTop(first)) {
       // Partially on screen above the fold — we are slightly past it.
       forward = false;
+    } else if (topOf && clippedAtTop(findNodeById(tree, topOf))) {
+      // The upper bracket is cut off at the top: scrolled past its top edge.
+      forward = false;
+    } else if (
+      required.some((id) => belowWindow(findNodeById(tree, id), bottomLimit))
+      // The top target is in view but a later one is not: those are listed top
+      // to bottom, so the rest are further down. (A far-off element has no
+      // frame at all on iOS Flutter, above or below alike, so position cannot
+      // say which.)
+      || (first?.visible && first.bounds.height > 0 && first.bounds.y > viewport.y
+        && required.slice(1).some((id) => !findNodeById(tree, id)?.visible))
+    ) {
+      // A target is on screen but not clear of the bottom: keep going. Without
+      // this, one step back (after a drift overshot the top) is never undone,
+      // and the search scrolls away from targets it can see.
+      forward = true;
     }
     lastSignature = signature;
 

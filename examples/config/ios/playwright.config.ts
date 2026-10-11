@@ -51,6 +51,9 @@ export default defineConfig({
   // An allow-list silently drops newly added specs — a new spec then appears to
   // pass on iOS when it never ran at all.
   testIgnore: [
+    // Drives the device browser against pages that only the browser config
+    // serves (its webServer). It runs there; here it could only fail.
+    'browser.test.ts',
     // Native photo picker: system UI outside the app, not automatable here.
     'media-upload.test.ts',
     // WKWebView DOM needs ios-webkit-debug-proxy, which bridges physical

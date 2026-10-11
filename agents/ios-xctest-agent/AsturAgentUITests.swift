@@ -15,6 +15,7 @@ final class AsturAgentUITests: XCTestCase {
         let port = UInt16(runtimeValue("ASTUR_IOS_AGENT_PORT", environment: environment) ?? "8788") ?? 8788
         let shouldLaunch = runtimeValue("ASTUR_AUT_LAUNCH", environment: environment) != "0"
         let bridgeUrl = runtimeValue("ASTUR_IOS_AGENT_BRIDGE_URL", environment: environment).flatMap(URL.init(string:))
+        let bridgeToken = runtimeValue("ASTUR_IOS_AGENT_BRIDGE_TOKEN", environment: environment)
 
         let agent = AsturAgent(bundleIdentifier: bundleIdentifier)
         if shouldLaunch {
@@ -22,7 +23,7 @@ final class AsturAgentUITests: XCTestCase {
         }
 
         if let bridgeUrl {
-            AsturAgentBridgeClient(agent: agent, bridgeUrl: bridgeUrl).run()
+            AsturAgentBridgeClient(agent: agent, bridgeUrl: bridgeUrl, token: bridgeToken).run()
             return
         }
 

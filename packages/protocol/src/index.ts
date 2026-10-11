@@ -119,8 +119,18 @@ export interface CloudDeviceSelector {
   accessKeyEnv?: string;
 }
 
+/**
+ * When session setup installs `app.path`:
+ * - `if-different` (default): only when the device lacks this exact build,
+ *   or the driver cannot tell which build it has.
+ * - `always`: every session, installed over the top (app data kept).
+ * - `never`: the app is managed outside Astur.
+ */
+export type AppInstallPolicy = 'always' | 'if-different' | 'never';
+
 export interface AppUnderTest {
   path?: string;
+  install?: AppInstallPolicy;
   url?: string;
   downloadPath?: string;
   bundleId?: string;
@@ -710,7 +720,14 @@ export interface AgentCommandEnvelope<TPayload = unknown> {
   id: string;
   protocolVersion: string;
   command: string;
+  /** Host wall-clock deadline. Informational: device clocks drift from the host's. */
   deadlineMs: number;
+  /**
+   * Milliseconds the host will still wait for this command, as of sending it.
+   * An agent measures it from when the request arrived, on its own monotonic
+   * clock, and refuses to start a command whose budget ran out while it waited.
+   */
+  budgetMs?: number;
   payload?: TPayload;
   trace?: AgentTraceContext;
 }
@@ -777,6 +794,12 @@ export interface AgentCommandErrorResponse {
 export interface CommandResult<TResult = unknown> {
   id: string;
   ok: boolean;
+  /**
+   * `false` when the agent refused the command before running any of it
+   * (unauthorized, expired, malformed). Such a refusal is a known outcome: the
+   * command can be reported without guessing whether it touched the device.
+   */
+  executed?: boolean;
   result?: TResult;
   data?: TResult;
   timing?: CommandTiming;

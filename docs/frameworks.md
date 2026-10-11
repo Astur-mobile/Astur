@@ -161,7 +161,21 @@ A search loop built on fast swipes cannot converge — it flings to the bottom,
 detects it went too far, flings back to the top, and repeats until it runs out
 of attempts. On screen this looks like the app scrolling up and down forever.
 Use a slow drag (`durationMs: 1_200`) for any swipe whose distance you need to
-reason about. Fast swipes are fine only when you genuinely want a fling.
+reason about. Fast swipes are fine only when you genuinely want a fling. Both
+platforms honour `durationMs` the same way: a swipe moves at its distance divided
+by its duration, so the same call scrolls the same amount on Android and iOS.
+
+Even a slow drag can leave a list gliding for a moment after the finger lifts,
+and a tap on a moving list only stops it; the tap never reaches the element.
+Wait until positions stop changing between two reads before acting on what a
+scroll revealed.
+
+On **iOS Flutter**, the accessibility tree reports elements differently from
+the Dart VM tree: an element scrolled off screen is still present but has an
+empty frame and `visible: false`, and one partly scrolled off the top reports
+its frame clipped to the screen, at `y = 0` with a reduced height, while still
+`visible`. A reveal helper should therefore treat a top edge *at* the screen
+edge as cut off rather than on screen.
 
 #### Only on-screen widgets exist
 

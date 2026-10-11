@@ -124,6 +124,14 @@ Sobrescritura por entorno:
 export ASTUR_ANDROID_AGENT_ENDPOINT=tcp:127.0.0.1:8787
 ```
 
+El agente exige un token en cada petición, porque cualquier app del dispositivo puede alcanzar su puerto. Astur genera uno nuevo en cada sesión que inicia él mismo. A un agente que inicies a mano debes darle uno con `-e asturToken <token>` (sin él no arranca), y Astur necesita el mismo valor:
+
+```bash
+export ASTUR_ANDROID_AGENT_TOKEN="$(openssl rand -hex 32)"
+adb shell am instrument -w -e asturPort 8787 -e asturToken "$ASTUR_ANDROID_AGENT_TOKEN" \
+  dev.astur.agent.test/dev.astur.agent.AsturInstrumentationRunner
+```
+
 Usa `agent.mode: 'required'` en CI en cuanto el conjunto de comandos del agente nativo de Android sea estable para tu suite.
 
 Por defecto, Astur arranca una sesión de agente nativo de Android por worker de Playwright. No reinstala el agente antes de cada spec: los APK incluidos se instalan solo cuando falta la app del agente o el paquete de tests. Define `ASTUR_ANDROID_AGENT_FORCE_INSTALL=1` cuando estés desarrollando el agente y quieras refrescar los APK del dispositivo a propósito.

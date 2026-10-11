@@ -77,6 +77,81 @@ describe('AsturRuntime', () => {
     expect(driver.session.installApp).toHaveBeenCalledWith('./react-native.apk');
   });
 
+  it('closes the platform session when app installation fails', async () => {
+    const driver = createDriver('android', 'emulator-5554');
+    const failure = new AsturError('COMMAND_FAILED', 'INSTALL_FAILED_INSUFFICIENT_STORAGE');
+    driver.session.installApp = vi.fn(async () => {
+      throw failure;
+    });
+    const runtime = new AsturRuntime().register(driver);
+
+    await expect(runtime.createDevice({
+      platform: 'android',
+      app: { path: './demo.apk', packageName: 'dev.astur.demo' }
+    })).rejects.toBe(failure);
+    expect(driver.session.close).toHaveBeenCalledOnce();
+  });
+
+  describe('app install policy', () => {
+    const app = { path: './demo.apk', packageName: 'dev.astur.demo' };
+
+    it('reinstalls when the installed app is a different build of the same package', async () => {
+      const driver = createDriver('android', 'emulator-5554');
+      driver.session.isAppInstalled = vi.fn(async () => true);
+      driver.session.isInstalledAppCurrent = vi.fn(async () => false);
+      const runtime = new AsturRuntime().register(driver);
+
+      await runtime.createDevice({ platform: 'android', app });
+
+      expect(driver.session.isInstalledAppCurrent).toHaveBeenCalledWith('dev.astur.demo', './demo.apk');
+      expect(driver.session.installApp).toHaveBeenCalledWith('./demo.apk');
+      expect(driver.session.uninstallApp).not.toHaveBeenCalled();
+    });
+
+    it('skips installing when the installed app is the requested build', async () => {
+      const driver = createDriver('android', 'emulator-5554');
+      driver.session.isInstalledAppCurrent = vi.fn(async () => true);
+      const runtime = new AsturRuntime().register(driver);
+
+      await runtime.createDevice({ platform: 'android', app });
+
+      expect(driver.session.installApp).not.toHaveBeenCalled();
+    });
+
+    it('reinstalls when it cannot tell which build is installed', async () => {
+      const driver = createDriver('android', 'emulator-5554');
+      driver.session.isAppInstalled = vi.fn(async () => true);
+      driver.session.isInstalledAppCurrent = vi.fn(async () => undefined);
+      const runtime = new AsturRuntime().register(driver);
+
+      await runtime.createDevice({ platform: 'android', app });
+
+      expect(driver.session.installApp).toHaveBeenCalledWith('./demo.apk');
+    });
+
+    it('never installs when told the app is managed elsewhere', async () => {
+      const driver = createDriver('android', 'emulator-5554');
+      driver.session.isInstalledAppCurrent = vi.fn(async () => false);
+      const runtime = new AsturRuntime().register(driver);
+
+      await runtime.createDevice({ platform: 'android', app: { ...app, install: 'never' } });
+
+      expect(driver.session.isInstalledAppCurrent).not.toHaveBeenCalled();
+      expect(driver.session.installApp).not.toHaveBeenCalled();
+    });
+
+    it('always installs, over the top, when asked to', async () => {
+      const driver = createDriver('android', 'emulator-5554');
+      driver.session.isInstalledAppCurrent = vi.fn(async () => true);
+      const runtime = new AsturRuntime().register(driver);
+
+      await runtime.createDevice({ platform: 'android', app: { ...app, install: 'always' } });
+
+      expect(driver.session.installApp).toHaveBeenCalledWith('./demo.apk');
+      expect(driver.session.uninstallApp).not.toHaveBeenCalled();
+    });
+  });
+
   it('exposes app and device management helpers on the device', async () => {
     const driver = createDriver('android', 'emulator-5554');
     const runtime = new AsturRuntime().register(driver);
@@ -323,11 +398,23 @@ function createDriver(platform: 'android' | 'ios', id: string): PlatformDriver &
       keyboard: {
         dismiss: 'auto'
       },
+      automation: {
+        engine: 'auto',
+        transport: 'auto',
+        legacyFallback: 'on-agent-failure',
+        commandTimeoutMs: 10_000,
+        startupTimeoutMs: 15_000,
+        strictLocators: true,
+        snapshot: { mode: 'on-failure', cacheTtlMs: 200 },
+        timings: { enabled: true, slowCommandThresholdMs: 1_000 }
+      },
       agent: {
         mode: 'auto',
         install: true,
         launchTimeout: 15_000,
-        commandTimeout: 10_000
+        commandTimeout: 10_000,
+        legacyFallback: 'on-agent-failure',
+        transport: 'auto'
       }
     },
     deviceInfo: device,

@@ -35,6 +35,7 @@ import {
   type WebViewSelector
 } from '@astur-mobile/core';
 import { createIosDriver } from '@astur-mobile/ios';
+import { acquireDeviceReservation, pathSafeName } from './reservation.js';
 import {
   comparePng,
   describeDifference,
@@ -145,6 +146,7 @@ export const test = base.extend<AsturTestFixtures, AsturWorkerFixtures>({
 
       try {
         device = await asturRuntime.createDevice(withDefaultWorkerArtifactsDir(reservation.config, workerInfo));
+        await reservation.claimDevice(device.deviceInfo.id);
         await use(device);
       } finally {
         try {
@@ -347,8 +349,17 @@ function matchesText(actual: string, expected: string | RegExp): boolean {
 }
 
 export const expect = baseExpect.extend({
-  async toBeVisible(actual: unknown, options?: { timeout?: number }) {
+  async toBeVisible(actual: unknown, options?: WaitOptions) {
     if (isPlaywrightLocator(actual)) {
+      if (this.isNot) {
+        return runNegatedAssertion(
+          () => actual.isVisible(),
+          options,
+          PLAYWRIGHT_ASSERTION_TIMEOUT,
+          'Expected Playwright locator not to be visible.'
+        );
+      }
+
       return runPlaywrightAssertion(
         'Expected Playwright locator to be visible.',
         () => actual.waitFor({ state: 'visible', timeout: options?.timeout })
@@ -360,6 +371,15 @@ export const expect = baseExpect.extend({
         pass: false,
         message: () => 'Expected a Playwright Locator or Astur MobileLocator.'
       };
+    }
+
+    if (this.isNot) {
+      return runNegatedAssertion(
+        async () => (await actual.query())?.visible === true,
+        options,
+        actual.defaultTimeout,
+        `Expected ${actual.toString()} not to be visible.`
+      );
     }
 
     const pass = await actual.isVisible({ timeout: options?.timeout });
@@ -375,6 +395,15 @@ export const expect = baseExpect.extend({
 
   async toBeHidden(actual: unknown, options?: WaitOptions): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
+      if (this.isNot) {
+        return runNegatedAssertion(
+          () => actual.isHidden(),
+          options,
+          PLAYWRIGHT_ASSERTION_TIMEOUT,
+          'Expected Playwright locator not to be hidden.'
+        );
+      }
+
       return runPlaywrightAssertion(
         'Expected Playwright locator to be hidden.',
         () => actual.waitFor({ state: 'hidden', timeout: options?.timeout })
@@ -383,6 +412,18 @@ export const expect = baseExpect.extend({
 
     if (!(actual instanceof MobileLocator)) {
       return unsupportedActual('toBeHidden');
+    }
+
+    if (this.isNot) {
+      return runNegatedAssertion(
+        async () => {
+          const match = await actual.query();
+          return !match || !match.visible;
+        },
+        options,
+        actual.defaultTimeout,
+        `Expected ${actual.toString()} not to be hidden.`
+      );
     }
 
     return runMobileAssertion(
@@ -395,6 +436,15 @@ export const expect = baseExpect.extend({
 
   async toExist(actual: unknown, options?: WaitOptions): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
+      if (this.isNot) {
+        return runNegatedAssertion(
+          async () => (await actual.count()) > 0,
+          options,
+          PLAYWRIGHT_ASSERTION_TIMEOUT,
+          'Expected Playwright locator not to be attached.'
+        );
+      }
+
       return runPlaywrightAssertion(
         'Expected Playwright locator to be attached.',
         () => actual.waitFor({ state: 'attached', timeout: options?.timeout })
@@ -405,7 +455,17 @@ export const expect = baseExpect.extend({
       return unsupportedActual('toExist');
     }
 
+    if (this.isNot) {
+      return runNegatedAssertion(
+        async () => (await actual.query()) !== undefined,
+        options,
+        actual.defaultTimeout,
+        `Expected ${actual.toString()} not to exist.`
+      );
+    }
+
     return runMobileSnapshotAssertion(
+      this.isNot,
       actual,
       () => true,
       options,
@@ -417,6 +477,7 @@ export const expect = baseExpect.extend({
   async toBeEnabled(actual: unknown, options?: WaitOptions): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
       return runPlaywrightPredicateAssertion(
+        this.isNot,
         () => actual.isEnabled({ timeout: 1_000 }),
         options,
         'Expected Playwright locator to be enabled.',
@@ -429,6 +490,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileSnapshotAssertion(
+      this.isNot,
       actual,
       (snapshot) => snapshot.enabled,
       options,
@@ -440,6 +502,7 @@ export const expect = baseExpect.extend({
   async toBeDisabled(actual: unknown, options?: WaitOptions): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
       return runPlaywrightPredicateAssertion(
+        this.isNot,
         () => actual.isDisabled({ timeout: 1_000 }),
         options,
         'Expected Playwright locator to be disabled.',
@@ -452,6 +515,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileSnapshotAssertion(
+      this.isNot,
       actual,
       (snapshot) => !snapshot.enabled,
       options,
@@ -466,6 +530,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileSnapshotAssertion(
+      this.isNot,
       actual,
       (snapshot) => snapshot.selected === true,
       options,
@@ -477,6 +542,7 @@ export const expect = baseExpect.extend({
   async toBeFocused(actual: unknown, options?: WaitOptions): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
       return runPlaywrightPredicateAssertion(
+        this.isNot,
         () => actual.evaluate((element) => element === element.ownerDocument.activeElement, { timeout: 1_000 }),
         options,
         'Expected Playwright locator to be focused.',
@@ -489,6 +555,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileSnapshotAssertion(
+      this.isNot,
       actual,
       (snapshot) => snapshot.focused === true,
       options,
@@ -500,6 +567,7 @@ export const expect = baseExpect.extend({
   async toBeChecked(actual: unknown, options?: WaitOptions): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
       return runPlaywrightPredicateAssertion(
+        this.isNot,
         () => actual.isChecked({ timeout: 1_000 }),
         options,
         'Expected Playwright locator to be checked.',
@@ -512,6 +580,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileSnapshotAssertion(
+      this.isNot,
       actual,
       (snapshot) => checkedStateOf(snapshot) === true,
       options,
@@ -523,6 +592,7 @@ export const expect = baseExpect.extend({
   async toBeEmpty(actual: unknown, options?: WaitOptions): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
       return runPlaywrightPredicateAssertion(
+        this.isNot,
         async () => ((await actual.textContent({ timeout: 1_000 })) ?? '').trim().length === 0,
         options,
         'Expected Playwright locator to be empty.',
@@ -535,6 +605,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileSnapshotAssertion(
+      this.isNot,
       actual,
       (snapshot) => subtreeText(snapshot).trim().length === 0,
       options,
@@ -550,6 +621,7 @@ export const expect = baseExpect.extend({
   ): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
       return runPlaywrightValueAssertion(
+        this.isNot,
         actual,
         'text',
         expected,
@@ -564,6 +636,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileValueAssertion(
+      this.isNot,
       actual,
       'text',
       expected,
@@ -580,6 +653,7 @@ export const expect = baseExpect.extend({
   ): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
       return runPlaywrightValueAssertion(
+        this.isNot,
         actual,
         'text',
         expected,
@@ -594,6 +668,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileValueAssertion(
+      this.isNot,
       actual,
       'text',
       expected,
@@ -610,6 +685,7 @@ export const expect = baseExpect.extend({
   ): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
       return runPlaywrightValueAssertion(
+        this.isNot,
         actual,
         'value',
         expected,
@@ -624,6 +700,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileValueAssertion(
+      this.isNot,
       actual,
       'value',
       expected,
@@ -643,6 +720,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileValueAssertion(
+      this.isNot,
       actual,
       'label',
       expected,
@@ -662,6 +740,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileValueAssertion(
+      this.isNot,
       actual,
       'type',
       expected,
@@ -681,6 +760,7 @@ export const expect = baseExpect.extend({
     }
 
     return runMobileSnapshotAssertion(
+      this.isNot,
       actual,
       (snapshot) => matchesBounds(snapshot.bounds, expected),
       options,
@@ -691,6 +771,15 @@ export const expect = baseExpect.extend({
 
   async toHaveCount(actual: unknown, expected: number, options?: WaitOptions): AsturMatcherResult {
     if (isPlaywrightLocator(actual)) {
+      if (this.isNot) {
+        return runNegatedAssertion(
+          async () => (await actual.count()) === expected,
+          options,
+          PLAYWRIGHT_ASSERTION_TIMEOUT,
+          `Expected Playwright locator not to have count ${expected}.`
+        );
+      }
+
       return runPlaywrightAssertion(
         `Expected Playwright locator to have count ${expected}.`,
         () => baseExpect(actual).toHaveCount(expected, { timeout: options?.timeout })
@@ -699,6 +788,15 @@ export const expect = baseExpect.extend({
 
     if (!(actual instanceof MobileLocator)) {
       return unsupportedActual('toHaveCount');
+    }
+
+    if (this.isNot) {
+      return runNegatedAssertion(
+        async () => (await actual.count()) === expected,
+        options,
+        actual.defaultTimeout,
+        `Expected ${actual.toString()} not to have count ${expected}.`
+      );
     }
 
     let lastCount: number | undefined;
@@ -912,11 +1010,16 @@ async function runPlaywrightAssertion(
 }
 
 async function runPlaywrightPredicateAssertion(
+  isNot: boolean,
   predicate: () => Promise<boolean>,
   options: WaitOptions | undefined,
   failureMessage: string,
   negatedMessage: string
 ): AsturMatcherResult {
+  if (isNot) {
+    return runNegatedAssertion(predicate, options, PLAYWRIGHT_ASSERTION_TIMEOUT, negatedMessage);
+  }
+
   return runPlaywrightAssertion(
     failureMessage,
     () => waitFor(
@@ -932,6 +1035,7 @@ async function runPlaywrightPredicateAssertion(
 }
 
 async function runPlaywrightValueAssertion(
+  isNot: boolean,
   locator: Locator,
   field: 'text' | 'value',
   expected: AsturExpectedText,
@@ -939,16 +1043,23 @@ async function runPlaywrightValueAssertion(
   failureMessage: string,
   negatedMessage: string
 ): AsturMatcherResult {
+  const read = async () => field === 'value'
+    ? await readPlaywrightValue(locator)
+    : await locator.textContent({ timeout: 1_000 });
+
+  if (isNot) {
+    return runNegatedAssertion(
+      async () => matchesExpectedText((await read()) ?? undefined, expected, options),
+      options,
+      PLAYWRIGHT_ASSERTION_TIMEOUT,
+      negatedMessage
+    );
+  }
+
   return runPlaywrightAssertion(
     failureMessage,
     () => waitFor(
-      async () => {
-        const actual = field === 'value'
-          ? await readPlaywrightValue(locator)
-          : await locator.textContent({ timeout: 1_000 });
-
-        return matchesExpectedText(actual ?? undefined, expected, options);
-      },
+      async () => matchesExpectedText((await read()) ?? undefined, expected, options),
       {
         timeout: options?.timeout,
         interval: options?.interval,
@@ -985,12 +1096,25 @@ async function runMobileAssertion(
 }
 
 async function runMobileSnapshotAssertion(
+  isNot: boolean,
   locator: MobileLocator,
   predicate: (snapshot: MobileElementSnapshot) => boolean,
   options: WaitOptions | undefined,
   failureMessage: string,
   negatedMessage: string
 ): AsturMatcherResult {
+  if (isNot) {
+    return runNegatedAssertion(
+      async () => {
+        const match = await locator.query();
+        return match ? predicate(match) : ABSENT;
+      },
+      options,
+      locator.defaultTimeout,
+      negatedMessage
+    );
+  }
+
   return runMobileAssertion(
     locator,
     () => locator.waitForSnapshot(predicate, options),
@@ -1000,6 +1124,7 @@ async function runMobileSnapshotAssertion(
 }
 
 async function runMobileValueAssertion(
+  isNot: boolean,
   locator: MobileLocator,
   field: 'label' | 'text' | 'type' | 'value',
   expected: AsturExpectedText,
@@ -1008,12 +1133,78 @@ async function runMobileValueAssertion(
   negatedMessage: string
 ): AsturMatcherResult {
   return runMobileSnapshotAssertion(
+    isNot,
     locator,
     (snapshot) => matchesExpectedText(snapshot[field], expected, options),
     options,
     failureMessage,
     negatedMessage
   );
+}
+
+/** A reading taken while the element was not on screen at all. */
+const ABSENT = Symbol('absent');
+
+/** Default for `.not` on a Playwright locator, matching the positive predicate path. */
+const PLAYWRIGHT_ASSERTION_TIMEOUT = 10_000;
+
+type NegatedReading = { value: boolean | typeof ABSENT } | { error: unknown };
+
+/**
+ * The `.not` side of a retrying assertion.
+ *
+ * Negation has to change what is polled for, "until the condition is false",
+ * not invert the outcome of waiting for it to become true. Inverting reads a
+ * timeout as success: `.not.toBeVisible()` would fail at once for an element
+ * that was about to disappear, pass only after the full timeout, and pass
+ * outright when the device had stopped answering.
+ *
+ * Only a clean reading can pass. A probe that throws (the device or page could
+ * not be read) is retried, and if the deadline arrives on an error the
+ * assertion fails whichever way it was written. An absent element satisfies
+ * neither side of an attribute assertion, as in Playwright; matchers where
+ * absence has a meaning (visible, hidden, exist) answer the probe themselves.
+ *
+ * Returns the result Playwright expects under `.not`: `pass: false` succeeds.
+ */
+async function runNegatedAssertion(
+  probe: () => Promise<boolean | typeof ABSENT>,
+  options: WaitOptions | undefined,
+  defaultTimeout: number,
+  negatedMessage: string
+): AsturMatcherResult {
+  const timeout = options?.timeout ?? defaultTimeout;
+  const interval = options?.interval ?? 250;
+  const startedAt = Date.now();
+  let last: NegatedReading | undefined;
+
+  while (Date.now() - startedAt <= timeout) {
+    try {
+      const value = await probe();
+      if (value === false) {
+        return { pass: false, message: () => negatedMessage };
+      }
+      last = { value };
+    } catch (error) {
+      last = { error };
+    }
+
+    await delay(interval);
+  }
+
+  return { pass: true, message: () => describeNegatedFailure(negatedMessage, last) };
+}
+
+function describeNegatedFailure(negatedMessage: string, last: NegatedReading | undefined): string {
+  if (last && 'error' in last) {
+    return `${negatedMessage} The last read failed: ${formatAssertionFailure(last.error, 'unknown error')}`;
+  }
+
+  if (last?.value === ABSENT) {
+    return `${negatedMessage} The element was not found.`;
+  }
+
+  return negatedMessage;
 }
 
 function unsupportedActual(matcherName: string): { pass: false; message: () => string } {
@@ -1100,179 +1291,6 @@ function withDefaultWorkerArtifactsDir(astur: AsturConfig, workerInfo: WorkerInf
   };
 }
 
-function pathSafeName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
-}
-
-interface DeviceReservation {
-  config: AsturConfig;
-  release(): Promise<void>;
-}
-
-async function acquireDeviceReservation(
-  astur: AsturConfig,
-  asturRuntime: AsturRuntime,
-  workerInfo: WorkerInfo
-): Promise<DeviceReservation> {
-  const candidates = await deviceReservationCandidates(astur, asturRuntime, workerInfo);
-  const blockedKeys: string[] = [];
-
-  for (const candidate of candidates) {
-    const release = await tryAcquireDeviceReservation(candidate, workerInfo);
-    if (release) {
-      return {
-        config: candidate,
-        release
-      };
-    }
-
-    blockedKeys.push(deviceReservationKey(candidate));
-  }
-
-  const keyList = blockedKeys.length > 0 ? blockedKeys.join(', ') : deviceReservationKey(astur);
-  throw new Error(
-    [
-      `Astur could not reserve an available mobile device for ${astur.platform}.`,
-      `Checked: ${keyList}.`,
-      'Native mobile devices can run only one active app automation session at a time.',
-      'Use one Playwright project per physical device, or leave device.id unset so Astur can choose a free matching device from the pool.',
-      `Current project: ${workerInfo.project.name || 'default'}, worker: ${workerInfo.workerIndex}.`
-    ].join(' ')
-  );
-}
-
-async function tryAcquireDeviceReservation(astur: AsturConfig, workerInfo: WorkerInfo): Promise<(() => Promise<void>) | undefined> {
-  const key = deviceReservationKey(astur);
-  const root = join(tmpdir(), 'astur-device-locks');
-  const lockDir = join(root, pathSafeName(key));
-  const ownerPath = join(lockDir, 'owner.json');
-
-  await mkdir(root, { recursive: true });
-
-  try {
-    await mkdir(lockDir);
-  } catch (error) {
-    if (!isAlreadyExistsError(error)) {
-      throw error;
-    }
-
-    const owner = await readReservationOwner(ownerPath);
-    if (owner?.pid && !isProcessAlive(owner.pid)) {
-      await rm(lockDir, { recursive: true, force: true });
-      await mkdir(lockDir);
-    } else {
-      return undefined;
-    }
-  }
-
-  await writeFile(ownerPath, JSON.stringify({
-    key,
-    pid: process.pid,
-    projectName: workerInfo.project.name || 'default',
-    workerIndex: workerInfo.workerIndex,
-    createdAt: new Date().toISOString()
-  }, null, 2));
-
-  return async () => {
-    await rm(lockDir, { recursive: true, force: true });
-  };
-}
-
-async function deviceReservationCandidates(
-  astur: AsturConfig,
-  asturRuntime: AsturRuntime,
-  workerInfo: WorkerInfo
-): Promise<AsturConfig[]> {
-  if (!usesLooseDeviceSelector(astur.device)) {
-    return [astur];
-  }
-
-  const devices = (await asturRuntime.listDevices(astur.platform))
-    .filter((device) => matchesDeviceSelector(device, astur.device))
-    .filter(isReservableDevice)
-    .sort(compareDeviceInfo);
-
-  if (devices.length === 0) {
-    return [astur];
-  }
-
-  const start = workerInfo.workerIndex % devices.length;
-  const ordered = [...devices.slice(start), ...devices.slice(0, start)];
-
-  return ordered.map((device) => ({
-    ...astur,
-    device: {
-      ...astur.device,
-      id: device.id,
-      kind: device.kind
-    }
-  }));
-}
-
-function usesLooseDeviceSelector(selector: DeviceSelector | undefined): boolean {
-  return !selector?.id && !selector?.name && !selector?.avd && !selector?.cloud;
-}
-
-function matchesDeviceSelector(device: DeviceInfo, selector: DeviceSelector | undefined): boolean {
-  if (selector?.kind && device.kind !== selector.kind) {
-    return false;
-  }
-
-  return true;
-}
-
-function isReservableDevice(device: DeviceInfo): boolean {
-  return device.state === 'online' || device.state === 'booted';
-}
-
-function compareDeviceInfo(left: DeviceInfo, right: DeviceInfo): number {
-  return `${left.platform}:${left.kind}:${left.name}:${left.id}`
-    .localeCompare(`${right.platform}:${right.kind}:${right.name}:${right.id}`);
-}
-
-function deviceReservationKey(astur: AsturConfig): string {
-  const device = astur.device ?? {};
-  const selector = device.id
-    ? `id=${device.id}`
-    : device.avd
-      ? `avd=${device.avd}`
-      : device.name
-        ? `name=${String(device.name)}`
-        : device.kind
-          ? `kind=${device.kind}`
-          : 'auto';
-
-  return `${astur.platform}:${selector}`;
-}
-
-async function readReservationOwner(path: string): Promise<{
-  pid?: number;
-  projectName?: string;
-  workerIndex?: number;
-} | undefined> {
-  try {
-    return JSON.parse(await readFile(path, 'utf8')) as {
-      pid?: number;
-      projectName?: string;
-      workerIndex?: number;
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function isAlreadyExistsError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST';
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function shouldAttachVideo(mode: NonNullable<AsturConfig['artifacts']>['video'], failed: boolean): boolean {
   return mode === 'on' || (mode === 'retain-on-failure' && failed);

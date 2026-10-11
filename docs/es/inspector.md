@@ -168,4 +168,4 @@ La selección en el Inspector usa el árbol semántico en caché para ordenar lo
 
 Los gestos de scroll están limitados por tasa tanto en el navegador como en el servidor. Un scroll rápido de trackpad se agrupa en swipes nativos acotados, para que el dispositivo no reciba una cola ilimitada de gestos.
 
-El servidor del Inspector escucha solo en `127.0.0.1`. Concede control total del dispositivo sobre una conexión local sin autenticar, así que deliberadamente no es alcanzable desde otras máquinas de la red. Abre la URL `http://localhost:<puerto>` que se imprime en el mismo Mac que arrancó la sesión.
+El servidor del Inspector escucha solo en `127.0.0.1`, así que no es alcanzable desde otras máquinas de la red. Como concede control total del dispositivo (toques, texto, instalación de apps), además rechaza las peticiones que no vienen de su propia página: cada sesión tiene un token de acceso, que llega en el fragmento `#token=` de la URL impresa, y se rechazan las peticiones de otros sitios o con otros nombres de host. Abre la URL impresa en el mismo Mac que arrancó la sesión; una URL sin el token carga la página pero no se conecta.

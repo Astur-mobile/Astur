@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { constants, readFileSync } from 'node:fs';
 import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -150,8 +150,11 @@ export interface InspectorServerOptions {
   frameIntervalMs?: number;
   /** How often to poll the UI tree (ms). Default 500. */
   treeIntervalMs?: number;
-  /** Callback when the server starts. Receives the actual port. */
-  onListen?: (port: number) => void;
+  /**
+   * Callback when the server starts, with the actual port and the page URL to
+   * open. Only that URL works: it carries the session's access token.
+   */
+  onListen?: (port: number, url: string) => void;
   /** Capture screenshot for a device. */
   captureScreenshot: () => Promise<Buffer | undefined>;
   /** Perform a device action from the inspector UI. */
@@ -186,6 +189,8 @@ export interface InspectorServerOptions {
 
 export interface InspectorServerHandle {
   port: number;
+  /** The page URL, including the access token in its fragment. */
+  url: string;
   close(): void;
 }
 
@@ -227,6 +232,11 @@ export function startInspectorServer(
     let gestureCommandInFlight = false;
     let lastGestureCommandAt = 0;
     const bundleUploads = new Map<string, string>();
+    // Every tap, fill, and app install the inspector can do is one request
+    // away, and loopback alone does not stop a web page in the user's browser
+    // from sending that request. The page gets this token in its URL fragment,
+    // which browsers never transmit, and must present it on the socket and API.
+    const accessToken = randomBytes(24).toString('base64url');
 
     // ── WebView DOM probe ──────────────────────────────────────────────────────
     // Pulling a WebView's DOM means opening a remote-debugging transport, which is
@@ -300,6 +310,13 @@ export function startInspectorServer(
     // ── HTTP server ────────────────────────────────────────────────────────
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
       const url = req.url ?? '/';
+
+      const access = checkInspectorAccess(req, listeningPort(), accessToken, url.startsWith('/api/'));
+      if (access !== 'allowed') {
+        res.writeHead(access === 'forbidden' ? 403 : 401);
+        res.end();
+        return;
+      }
 
       if (url === '/' || url === '/index.html') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -540,7 +557,17 @@ export function startInspectorServer(
     }
 
     // ── WebSocket server ───────────────────────────────────────────────────
-    const wss = new WebSocketServer({ server });
+    const wss = new WebSocketServer({
+      server,
+      maxPayload: MAX_INSPECTOR_MESSAGE_BYTES,
+      verifyClient: ({ req }: { req: IncomingMessage }) =>
+        checkInspectorAccess(req, listeningPort(), accessToken, true) === 'allowed'
+    });
+
+    function listeningPort(): number {
+      const address = server.address();
+      return typeof address === 'object' && address ? address.port : 0;
+    }
     const clients = new Set<WebSocket>();
     let lastFrameDataUri: string | undefined;
     let lastFrameTimestamp = 0;
@@ -1301,8 +1328,8 @@ export function startInspectorServer(
 
     // ── Startup ────────────────────────────────────────────────────────────
     // Bind to loopback only: the inspector grants full device control (tap,
-    // fill, swipe, app install) over an unauthenticated socket and must never be
-    // reachable from other hosts on the network.
+    // fill, swipe, app install) and must never be reachable from other hosts on
+    // the network. checkInspectorAccess covers what loopback cannot.
     server.listen(options.port ?? 0, '127.0.0.1', () => {
       const addr = server.address();
       const port = typeof addr === 'object' && addr ? addr.port : 0;
@@ -1312,9 +1339,11 @@ export function startInspectorServer(
       scheduleTree();
       void syncInspectorState();
 
-      options.onListen?.(port);
+      const url = `http://localhost:${port}/#token=${accessToken}`;
+      options.onListen?.(port, url);
       resolveHandle({
         port,
+        url,
         close() {
           clearTimeout(frameTimer);
           clearTimeout(treeTimer);
@@ -1338,6 +1367,53 @@ export function startInspectorServer(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** UI commands are small; anything larger is not from the inspector page. */
+const MAX_INSPECTOR_MESSAGE_BYTES = 1024 * 1024;
+
+/**
+ * Whether a request may reach the inspector.
+ *
+ * - `Host` must name loopback on this port. A DNS-rebinding page reaches
+ *   127.0.0.1 under its own host name, so this is what stops it.
+ * - `Origin`, when a browser sends one, must be the inspector page itself.
+ *   That turns away cross-site sockets and form posts.
+ * - The access token proves the caller was handed the page URL. `Origin`
+ *   is only a browser convention and any other client can set it.
+ */
+function checkInspectorAccess(
+  req: IncomingMessage,
+  port: number,
+  token: string,
+  requireToken: boolean
+): 'allowed' | 'forbidden' | 'unauthorized' {
+  const origins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
+  const hosts = [`localhost:${port}`, `127.0.0.1:${port}`];
+
+  if (!hosts.includes(req.headers.host ?? '')) {
+    return 'forbidden';
+  }
+
+  const origin = req.headers.origin;
+  if (origin !== undefined && !origins.includes(origin)) {
+    return 'forbidden';
+  }
+
+  if (!requireToken) {
+    return 'allowed';
+  }
+
+  const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+  const header = req.headers['x-astur-inspector-token'];
+  const presented = query.get('token') ?? (typeof header === 'string' ? header : '');
+  return tokensMatch(presented, token) ? 'allowed' : 'unauthorized';
+}
+
+function tokensMatch(presented: string, expected: string): boolean {
+  const a = Buffer.from(presented);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 /**
  * Back off a polling interval the longer the device stays idle, capped at
@@ -2885,10 +2961,24 @@ const rightSplitter = $('right-splitter');
 let deviceStatusTimer;
 let pendingInstallSelection = null;
 
+// ── Access token ───────────────────────────────────────────────────────────
+// Arrives in the URL fragment, which is never sent to a server or leaked in a
+// Referer. Kept for this tab so a reload still works, then cleared from view.
+const inspectorToken = (() => {
+  const fromUrl = new URLSearchParams(location.hash.slice(1)).get('token');
+  if (fromUrl) {
+    try { sessionStorage.setItem('asturInspectorToken', fromUrl); } catch (_) {}
+    history.replaceState(null, '', location.pathname + location.search);
+    return fromUrl;
+  }
+  try { return sessionStorage.getItem('asturInspectorToken') || ''; } catch (_) { return ''; }
+})();
+const tokenHeaders = { 'x-astur-inspector-token': inspectorToken };
+
 // ── WebSocket ──────────────────────────────────────────────────────────────
 let ws;
 function connectWs() {
-  ws = new WebSocket('ws://' + location.host);
+  ws = new WebSocket('ws://' + location.host + '/?token=' + encodeURIComponent(inspectorToken));
   ws.onopen = () => {
     socketConnected = true;
     updateDeviceReadiness();
@@ -3406,6 +3496,7 @@ async function uploadInstallSelection(selection) {
     for (const entry of selection.files) {
       const response = await fetch('/api/upload-app-file?uploadId=' + encodeURIComponent(uploadId) + '&relativePath=' + encodeURIComponent(entry.relativePath), {
         method: 'POST',
+        headers: tokenHeaders,
         body: entry.file
       });
       if (!response.ok) {
@@ -3414,7 +3505,8 @@ async function uploadInstallSelection(selection) {
     }
 
     const finalize = await fetch('/api/upload-app-bundle?uploadId=' + encodeURIComponent(uploadId) + '&rootName=' + encodeURIComponent(selection.rootName), {
-      method: 'POST'
+      method: 'POST',
+      headers: tokenHeaders
     });
     if (!finalize.ok) {
       throw new Error(await finalize.text());
@@ -3424,6 +3516,7 @@ async function uploadInstallSelection(selection) {
 
   const response = await fetch('/api/upload-app?filename=' + encodeURIComponent(selection.file.name), {
     method: 'POST',
+    headers: tokenHeaders,
     body: selection.file
   });
   if (!response.ok) {

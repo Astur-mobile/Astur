@@ -263,7 +263,7 @@ describe('iOS native-agent mode', () => {
     }));
     const selector = { strategy: 'id' as const, value: 'login-submit-button' };
 
-    await expect(session.waitForElement(selector, { state: 'visible' })).resolves.toEqual(IOS_ELEMENT);
+    await expect(session.waitForElement!(selector, { state: 'visible' })).resolves.toEqual(IOS_ELEMENT);
     await expect(session.tapElement?.(selector)).resolves.toBeUndefined();
 
     expect(server.requests.find((request) => request.method === 'element.wait')?.params).toMatchObject({
@@ -498,7 +498,7 @@ describe('iOS native-agent mode', () => {
       instance: 0
     });
 
-    await expect(session.findElement(selector)).resolves.toEqual(IOS_ELEMENT);
+    await expect(session.findElement!(selector)).resolves.toEqual(IOS_ELEMENT);
 
     const request = server.requests.find((r) => r.method === 'element.find');
     expect(request?.params).toMatchObject({
