@@ -15,7 +15,7 @@ await row.getByRole('button', { name: 'Add' }).tap();
 
 **Al actualizar:** un agente de Android que inicies a mano necesita `-e asturToken <token>` y el mismo valor en `ASTUR_ANDROID_AGENT_TOKEN`. Abre el inspector desde la URL que imprime: esa URL lleva su token.
 
-La documentación ya está disponible también en español, en [/es/](https://astur-mobile.github.io/Astur/es/). El [registro de cambios](https://github.com/Astur-mobile/Astur/blob/main/CHANGELOG.md) detalla cada corrección.
+Astur funciona ahora sobre Playwright 1.64. La documentación ya está disponible también en español, en [/es/](https://astur-mobile.github.io/Astur/es/). El [registro de cambios](https://github.com/Astur-mobile/Astur/blob/main/CHANGELOG.md) detalla cada corrección.
 
 ## 0.6.0-beta
 

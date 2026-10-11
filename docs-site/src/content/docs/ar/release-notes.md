@@ -19,7 +19,7 @@ await row.getByRole('button', { name: 'Add' }).tap();
 
 **عند الترقية:** وكيل Android الذي تشغّله يدوياً يحتاج إلى `-e asturToken <token>` وإلى القيمة نفسها في `ASTUR_ANDROID_AGENT_TOKEN`. وافتح المفتش من الرابط الذي يطبعه — فهذا الرابط يحمل رمزه.
 
-أصبح التوثيق متاحاً بالإسبانية أيضاً، على المسار [/es/](https://astur-mobile.github.io/Astur/es/). ويسرد [سجل التغييرات](https://github.com/Astur-mobile/Astur/blob/main/CHANGELOG.md) كل الإصلاحات.
+يعمل Astur الآن على Playwright 1.64. وأصبح التوثيق متاحاً بالإسبانية أيضاً، على المسار [/es/](https://astur-mobile.github.io/Astur/es/). ويسرد [سجل التغييرات](https://github.com/Astur-mobile/Astur/blob/main/CHANGELOG.md) كل الإصلاحات.
 
 ## 0.6.0-beta
 

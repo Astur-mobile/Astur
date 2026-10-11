@@ -159,6 +159,12 @@ describe('--update-snapshots modes', () => {
     expect(resolveSnapshotAction(true, 'missing', false)).toBe('compare');
   });
 
+  it("treats Playwright 1.64's 'default' mode like 'missing': write absent baselines, compare the rest", () => {
+    expect(resolveSnapshotAction(false, 'default', false)).toBe('write-missing');
+    expect(resolveSnapshotAction(true, 'default', false)).toBe('compare');
+    expect(resolveSnapshotAction(true, 'default', true)).toBe('compare');
+  });
+
   it('never rewrites an existing baseline in none mode', () => {
     expect(resolveSnapshotAction(true, 'none', false)).toBe('compare');
   });

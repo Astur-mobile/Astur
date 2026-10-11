@@ -23,7 +23,7 @@
     "sync:sponsors": "node ./scripts/sync-sponsors.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.64.0",
     "@types/node": "^26.1.1",
     "@vitest/coverage-v8": "^4.1.10",
     "astur-mobile": "0.7.0-beta",

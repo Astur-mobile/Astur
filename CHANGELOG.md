@@ -116,6 +116,8 @@ All notable changes to Astur are documented here. Versions follow the
 
 ### Changed
 
+- **Playwright 1.64.** Its new default `updateSnapshots` mode (`'default'`) works with
+  `toHaveScreenshot()`, and behaves like `missing`.
 - `npm run check` also typechecks the test suite.
 
 ## 0.6.0-beta

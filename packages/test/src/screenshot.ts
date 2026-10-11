@@ -21,7 +21,7 @@ export type ScreenshotCompareResult =
 export const DEFAULT_THRESHOLD = 0.2;
 
 /** Playwright's `--update-snapshots` modes, as they reach `config.updateSnapshots`. */
-export type SnapshotUpdateMode = 'all' | 'changed' | 'missing' | 'none';
+export type SnapshotUpdateMode = 'all' | 'changed' | 'missing' | 'none' | 'default';
 
 export type SnapshotAction =
   /** No baseline, and this mode may write one — write it, but do not pass. */
@@ -43,7 +43,10 @@ export type SnapshotAction =
  *
  * - `all` — rewrite every baseline, matching or not.
  * - `changed` — rewrite only the ones that differ. The bare-flag default.
- * - `missing` — write only absent baselines. The default with no flag.
+ * - `missing` — write only absent baselines.
+ * - `default` — the default with no flag since Playwright 1.64: write absent
+ *   baselines but fail the test that wrote them. Astur fails a test that wrote
+ *   a baseline in every mode, so this behaves exactly like `missing`.
  * - `none` — never write; an absent baseline is a failure.
  */
 export function resolveSnapshotAction(
