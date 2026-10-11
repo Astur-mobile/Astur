@@ -1,6 +1,6 @@
 {
   "name": "@astur-mobile/protocol",
-  "version": "0.6.0-beta",
+  "version": "0.7.0-beta",
   "description": "Shared Astur protocol and data types.",
   "keywords": [
     "astur",

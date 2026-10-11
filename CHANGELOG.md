@@ -3,7 +3,7 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
-## Unreleased
+## 0.7.0-beta
 
 ### Added
 
@@ -63,6 +63,60 @@ All notable changes to Astur are documented here. Versions follow the
   guide, and a framework support table covering .NET MAUI, NativeScript,
   Cordova/Capacitor, Kotlin Multiplatform, and why game engines cannot work.
   Both in English and Arabic.
+
+- **`app.install: 'always' | 'if-different' | 'never'`.** The default,
+  `if-different`, compares the installed build with the requested one byte for
+  byte (an APK hashed on the device; a simulator `.app` file by file) and
+  reinstalls when they differ or cannot be compared. `versionCode` was not
+  enough: two local builds routinely share one.
+
+- **Documentation in Spanish**, at [/es/](https://astur-mobile.github.io/Astur/es/).
+
+### Security
+
+- **The Android agent needs a per-session token** and listens on loopback only.
+  Loopback alone does not stop other apps on the same device, and the agent
+  drives every app. The token is checked before the request body is read. An
+  agent you start by hand needs `-e asturToken <token>`, with the same value in
+  `ASTUR_ANDROID_AGENT_TOKEN`.
+- **The iOS agent bridge needs a per-session token.** On a real device it
+  listens where the whole network can reach it.
+- **The inspector refuses other sites and host names**, and requires a
+  per-session token on its socket and API, including app upload. Open the
+  printed URL, which carries the token in its fragment.
+
+### Fixed
+
+- **`.not` assertions could pass on a disconnected device**, and did not wait:
+  they failed at once on an element about to disappear and passed only after the
+  full timeout. They now wait for the condition to be false, and fail when the
+  device cannot be read.
+- **An action whose response was lost could run twice.** Android retried it by
+  coordinates or adb; it now fails with `ANDROID_AGENT_OUTCOME_UNKNOWN`. A lost
+  connection no longer moves the session to adb unless `legacyFallback` allows it.
+- **A command timeout did not cover reading the response.** One deadline now
+  covers the whole exchange, reported as `AGENT_COMMAND_TIMEOUT`.
+- **The Android agent ran commands concurrently.** It now runs one at a time and
+  refuses to start one the host has already given up on.
+- **`device.avd` used whichever emulator was online**, and two spellings of one
+  device (`id`, `avd`, `name`) could both reserve it. Selection matches the AVD;
+  reservations lock the device serial.
+- **A failed app install left the session open.**
+- **iOS swipes ignored their path and speed** for vertical swipes, flinging
+  instead. `durationMs` now sets the speed on both platforms.
+- **`getByType('any')` matched nothing on Android**, `a.filter(f).or(b)` also
+  filtered `b`, and `a.or(b).and(c)` grouped as `(a ∩ c) ∪ b`. `and`/`or` now
+  combine whole locators, read left to right.
+- **`toBeChecked()` never passed on Android**: the agent did not report checked
+  state.
+- **The published iOS agent lacked `keyboard.type` and `by.native()`**: its copy
+  had drifted from the development project. A test now guards the two copies.
+- **A signature clash on install** (another build of the same app) reports what
+  to do instead of the raw adb failure.
+
+### Changed
+
+- `npm run check` also typechecks the test suite.
 
 ## 0.6.0-beta
 

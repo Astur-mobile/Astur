@@ -2,6 +2,21 @@
 
 What's new in each Astur release.
 
+## 0.7.0-beta
+
+**Composable locators.** Narrow a screen of look-alike rows to the one you mean: scope with any `getBy*` on a locator, `filter({ hasText, has, … })`, combine with `and()` / `or()`, and pick with `first()`, `last()`, `nth()`. Also new: `getByPlaceholder()`, `toBeChecked()`, `toBeEmpty()`, `device.app.list()`, `device.orientation.get()`, and `astur screenshot`.
+
+```ts
+const row = device.getByType('Cell').filter({ hasText: 'Rye' });
+await row.getByRole('button', { name: 'Add' }).tap();
+```
+
+**Hardened for unattended runs.** The Android agent, the iOS agent bridge, and the inspector now require a per-session token, so other apps, other machines on the network, and other websites cannot drive your device. Results you can trust: `.not` assertions no longer pass on a disconnected device, an action whose response is lost fails instead of running twice, and command timeouts cover the whole response. Installs compare the actual build on the device, so a stale app is replaced — choose with `app.install`. `device.avd` now selects that exact AVD, and iOS swipes honour `durationMs`.
+
+**Upgrading:** an Android agent you start by hand needs `-e asturToken <token>` and the same value in `ASTUR_ANDROID_AGENT_TOKEN`. Open the inspector from the URL it prints — that URL carries its token.
+
+The documentation is now also available in Spanish, at [/es/](https://astur-mobile.github.io/Astur/es/). The [changelog](https://github.com/Astur-mobile/Astur/blob/main/CHANGELOG.md) lists every fix.
+
 ## 0.6.0-beta
 
 **Test a website in the device's own browser.** `device.browser` drives Chrome on Android and Safari on iOS, on the same emulator, simulator or real device the native suite already runs on — so a responsive site and a native app can be covered in one run and one report.

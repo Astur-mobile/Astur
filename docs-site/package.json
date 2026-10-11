@@ -1,6 +1,6 @@
 {
   "name": "@astur-mobile/docs-site",
-  "version": "0.6.0-beta",
+  "version": "0.7.0-beta",
   "private": true,
   "description": "Astur documentation site built with Astro Starlight.",
   "license": "Apache-2.0",

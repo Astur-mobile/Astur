@@ -2,6 +2,21 @@
 
 Qué trae cada versión de Astur.
 
+## 0.7.0-beta
+
+**Localizadores componibles.** Reduce una pantalla de filas parecidas a la que buscas: acota con cualquier `getBy*` sobre un localizador, filtra con `filter({ hasText, has, … })`, combina con `and()` / `or()` y elige con `first()`, `last()` y `nth()`. También nuevo: `getByPlaceholder()`, `toBeChecked()`, `toBeEmpty()`, `device.app.list()`, `device.orientation.get()` y `astur screenshot`.
+
+```ts
+const row = device.getByType('Cell').filter({ hasText: 'Rye' });
+await row.getByRole('button', { name: 'Add' }).tap();
+```
+
+**Reforzado para ejecuciones desatendidas.** El agente de Android, el puente del agente de iOS y el inspector exigen ahora un token por sesión, así que ni otras apps, ni otras máquinas de la red, ni otros sitios web pueden manejar tu dispositivo. Resultados fiables: las aserciones `.not` ya no pasan con un dispositivo desconectado, una acción cuya respuesta se pierde falla en lugar de ejecutarse dos veces, y el tiempo límite de un comando cubre la respuesta completa. La instalación compara la compilación que hay realmente en el dispositivo, así que una app obsoleta se reemplaza — elígelo con `app.install`. `device.avd` selecciona ahora exactamente ese AVD, y los deslizamientos en iOS respetan `durationMs`.
+
+**Al actualizar:** un agente de Android que inicies a mano necesita `-e asturToken <token>` y el mismo valor en `ASTUR_ANDROID_AGENT_TOKEN`. Abre el inspector desde la URL que imprime: esa URL lleva su token.
+
+La documentación ya está disponible también en español, en [/es/](https://astur-mobile.github.io/Astur/es/). El [registro de cambios](https://github.com/Astur-mobile/Astur/blob/main/CHANGELOG.md) detalla cada corrección.
+
 ## 0.6.0-beta
 
 **Prueba un sitio web en el navegador del propio dispositivo.** `device.browser` maneja Chrome en Android y Safari en iOS, en el mismo emulador, simulador o dispositivo real donde ya corre tu suite nativa — así que un sitio adaptable y una app nativa se cubren en una misma ejecución y un mismo informe.

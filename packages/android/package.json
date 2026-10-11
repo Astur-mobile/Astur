@@ -1,6 +1,6 @@
 {
   "name": "@astur-mobile/android",
-  "version": "0.6.0-beta",
+  "version": "0.7.0-beta",
   "description": "Android driver for Astur using ADB and UIAutomator.",
   "keywords": [
     "astur",
@@ -43,8 +43,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/core": "0.6.0-beta",
-    "@astur-mobile/protocol": "0.6.0-beta"
+    "@astur-mobile/core": "0.7.0-beta",
+    "@astur-mobile/protocol": "0.7.0-beta"
   },
   "repository": {
     "type": "git",
