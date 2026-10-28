@@ -1,64 +1,60 @@
-/* The astrolabe drawn by src/lib/astrolabe.mjs, as a notebook study in ink.
-   Shared by the landing hero and the social card, which is rendered from the
-   same markup and styles. */
+/* The astrolabe drawn by src/lib/astrolabe.mjs, as an engraving: hairlines in
+   steel for the fixed parts, brass for the parts that turn. Shared by the
+   landing page and the social card, which is rendered from the same markup and
+   styles. */
 
 .astrolabe {
   --astro-night: #06101d;
-  --astro-plate: #0d1b2f;
-  --astro-ink: #eadfc4;
-  --astro-brass: #d2ad58;
-  --astro-hand: 'IM Fell English', 'Iowan Old Style', Georgia, serif;
+  --astro-plate: #0a1524;
+  --astro-line: #8ea2bb;
+  --astro-brass: #c4a35a;
+  --astro-type: 'Mona Sans', 'Inter', system-ui, sans-serif;
   display: block;
   width: 100%;
   height: auto;
   overflow: visible;
 }
 
-/* Ink: parchment-coloured lines at full strength. */
-.astrolabe .astro-ink { fill: none; stroke: var(--astro-ink); stroke-width: 1.6; stroke-linecap: round; }
-.astrolabe .astro-ink--heavy { stroke-width: 2.6; }
-.astrolabe .astro-ink--fine { stroke-width: 1; }
-/* The second pass of the pen: lighter, never quite on the first. */
-.astrolabe .astro-retrace { stroke-width: 0.8; opacity: 0.55; }
-
+.astrolabe .astro-line { fill: none; stroke: var(--astro-line); stroke-width: 1; }
+.astrolabe .astro-line--rim { stroke-width: 1.6; }
+.astrolabe .astro-line--fine { stroke-width: 0.6; opacity: 0.7; }
 .astrolabe .astro-mater { fill: var(--astro-plate); }
-.astrolabe .astro-throne { fill: var(--astro-plate); stroke: var(--astro-ink); stroke-width: 2; }
-.astrolabe .astro-pin { fill: var(--astro-ink); }
-.astrolabe .astro-tick { stroke: var(--astro-ink); stroke-width: 1; stroke-linecap: round; opacity: 0.8; }
-.astrolabe .astro-tick--major { stroke-width: 1.6; opacity: 1; }
+.astrolabe .astro-throne { fill: var(--astro-plate); stroke: var(--astro-line); stroke-width: 1.2; }
+.astrolabe .astro-pin { fill: var(--astro-line); }
+
+.astrolabe .astro-tick { stroke: var(--astro-line); stroke-width: 0.5; opacity: 0.7; }
+.astrolabe .astro-tick--major { stroke-width: 0.9; opacity: 1; }
 .astrolabe .astro-numeral {
-  fill: var(--astro-ink);
-  font: italic 15px var(--astro-hand);
+  fill: var(--astro-line);
+  font: 500 10.5px var(--astro-type);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
   text-anchor: middle;
   dominant-baseline: middle;
 }
-.astrolabe .astro-plate-line { fill: none; stroke: var(--astro-ink); stroke-width: 1; opacity: 0.62; }
-.astrolabe .astro-plate-line--faint { opacity: 0.38; }
 
-.astrolabe .astro-construction { fill: none; stroke: var(--astro-ink); stroke-width: 0.7; opacity: 0.22; }
-.astrolabe .astro-hatch-line { stroke: var(--astro-ink); stroke-width: 0.8; }
-.astrolabe .astro-hatch-line--dark { stroke: var(--astro-night); stroke-width: 1; }
-.astrolabe .astro-shade { stroke: none; opacity: 0.55; }
-.astrolabe .astro-shade--brass { opacity: 0.55; }
+.astrolabe .astro-plate { fill: none; stroke: var(--astro-line); stroke-width: 0.7; opacity: 0.55; }
+.astrolabe .astro-plate--faint { stroke-width: 0.5; opacity: 0.3; }
 
-/* Brass: the parts that move. */
-.astrolabe .astro-brass { fill: none; stroke: var(--astro-brass); stroke-width: 1.4; stroke-linecap: round; }
-.astrolabe .astro-brass--heavy { stroke-width: 2.6; }
+.astrolabe .astro-brass { fill: none; stroke: var(--astro-brass); stroke-width: 1.1; }
+.astrolabe .astro-brass--fine { stroke-width: 0.6; }
 .astrolabe .astro-pointer,
-.astrolabe .astro-rule { fill: var(--astro-brass); stroke: var(--astro-brass); stroke-width: 0.8; stroke-linejoin: round; }
+.astrolabe .astro-rule { fill: var(--astro-brass); stroke: none; }
+.astrolabe .astro-rule { opacity: 0.6; }
+.astrolabe .astro-boss { fill: var(--astro-plate); stroke: var(--astro-brass); stroke-width: 1; }
+.astrolabe .astro-boss--hub { stroke-width: 1.4; }
 .astrolabe .astro-pin-hole { fill: var(--astro-night); }
-.astrolabe .astro-star { fill: none; stroke: #fff3cf; stroke-width: 1.3; stroke-linecap: round; }
 
 .astrolabe .astro-label {
-  fill: var(--astro-ink);
-  font: italic 19px var(--astro-hand);
+  fill: #b3c1d4;
+  font: 500 12px var(--astro-type);
+  letter-spacing: 0.03em;
   /* A halo in the plate colour, so engraved lines never cut through a name. */
   paint-order: stroke;
   stroke: var(--astro-plate);
-  stroke-width: 6px;
+  stroke-width: 5px;
   stroke-linejoin: round;
 }
-.astrolabe .astro-note { fill: var(--astro-ink); font: italic 17px var(--astro-hand); opacity: 0.55; }
 
 /* Groups turn about the centre of the instrument, not of their own box. */
 .astrolabe .astro-rete,
@@ -66,4 +62,4 @@
   transform-box: view-box;
   transform-origin: 300px 340px;
 }
-.astrolabe .astro-alidade { transform: rotate(-32deg); }
+.astrolabe .astro-alidade { transform: rotate(72deg); }

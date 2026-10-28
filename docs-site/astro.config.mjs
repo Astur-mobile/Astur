@@ -63,7 +63,7 @@ export default defineConfig({
           tag: 'link',
           attrs: {
             rel: 'stylesheet',
-            href: 'https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Outfit:wght@400;500;600;700&display=swap'
+            href: 'https://fonts.googleapis.com/css2?family=Mona+Sans:wght@400..700&family=Outfit:wght@400;500;600;700&display=swap'
           }
         },
         {
