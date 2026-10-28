@@ -832,7 +832,11 @@ describe('Android native-agent mode', () => {
         await session.getTree();
         await session.close();
 
-        const instrument = adb.calls().filter((call) => call.includes(' instrument ')).at(-1) ?? '';
+        // The instrumentation is launched in the background, so its line lands
+        // in the log when that process gets to run, not when the session opens.
+        const launches = () => adb.calls().filter((call) => call.includes(' instrument '));
+        await expect.poll(() => launches().length, { timeout: 5_000 }).toBe(run + 1);
+        const instrument = launches().at(-1) ?? '';
         const token = /-e asturToken (\S+)/.exec(instrument)?.[1];
         expect(token, instrument).toMatch(/^[A-Za-z0-9_-]{32,}$/);
         tokens.push(token!);
