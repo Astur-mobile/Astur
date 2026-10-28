@@ -13,6 +13,8 @@ Documentation and package pages only; no runtime changes.
 - **A social card** for link previews and the README, rendered from the same drawing
   (`npm run social -w docs-site`).
 - **Package pages on npm**: new READMEs, descriptions and keywords, and a `funding` field.
+- **`@astur-mobile/cli` is 5 MB lighter** (6.3 MB to 1.1 MB unpacked): it no longer ships brand
+  images nothing uses.
 
 ### Fixed
 
