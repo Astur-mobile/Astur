@@ -24,11 +24,11 @@ Es la herramienta equivocada para afirmar comportamiento. Prefiere una aserción
 
 Cuando una comparación falla, las imágenes esperada, real y de diferencias se adjuntan al informe HTML de Playwright, que las muestra como una comparación visual:
 
-![El informe HTML de Playwright mostrando una discrepancia de imagen para home-hero-card.png. La pestaña Diff está seleccionada y el botón «Open menu» aparece resaltado en rojo, mientras el resto de la tarjeta se atenúa.](./images/visual-comparison-diff.png)
+![El informe HTML de Playwright mostrando una discrepancia de imagen para home-hero-card.png. La pestaña Diff está seleccionada y el botón «Open menu» aparece resaltado en rojo, mientras el resto de la tarjeta se atenúa.](../images/visual-comparison-diff.png)
 
 La pestaña **Diff** atenúa todo lo que coincidió y resalta lo que se movió: aquí, solo el botón principal cambió de color. **Side by side** muestra las dos imágenes juntas, que suele ser la forma más rápida de juzgar si el cambio era intencionado:
 
-![El mismo informe en la pestaña Side by side, con la tarjeta esperada de botón turquesa junto a la real de botón azul marino.](./images/visual-comparison-side-by-side.png)
+![El mismo informe en la pestaña Side by side, con la tarjeta esperada de botón turquesa junto a la real de botón azul marino.](../images/visual-comparison-side-by-side.png)
 
 El mensaje de fallo indica la magnitud de la diferencia para que sea útil desde el log de CI, sin abrir el informe:
 

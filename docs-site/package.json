@@ -1,12 +1,13 @@
 {
   "name": "@astur-mobile/docs-site",
-  "version": "0.7.0-beta",
+  "version": "0.7.1-beta",
   "private": true,
   "description": "Astur documentation site built with Astro Starlight.",
   "license": "Apache-2.0",
   "author": "Amr Salem",
   "type": "module",
   "scripts": {
+    "social": "node ./scripts/render-social.mjs",
     "sync": "node ./scripts/sync-docs.mjs",
     "dev": "npm run sync && ASTRO_TELEMETRY_DISABLED=1 astro dev --host 127.0.0.1",
     "build": "npm run sync && ASTRO_TELEMETRY_DISABLED=1 astro build && node ./scripts/check-links.mjs",

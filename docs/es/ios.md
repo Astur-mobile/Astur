@@ -11,7 +11,7 @@ Astur arranca el agente incluido automáticamente. No deberías compilarlo ni in
 
 Cuando todo está en su sitio, `codegen` transmite un espejo del dispositivo en vivo, el árbol de interfaz completo y localizadores listos para pegar:
 
-![El Inspector de Astur contra un simulador de iOS: espejo del dispositivo en el centro, árbol de XCUITest a la derecha y localizadores generados a la izquierda.](./images/inspector-ios-simulator.png)
+![El Inspector de Astur contra un simulador de iOS: espejo del dispositivo en el centro, árbol de XCUITest a la derecha y localizadores generados a la izquierda.](../images/inspector-ios-simulator.png)
 
 ## Requisitos de un vistazo
 

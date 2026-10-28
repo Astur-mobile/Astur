@@ -1,24 +1,42 @@
 {
   "name": "@astur-mobile/protocol",
-  "version": "0.7.0-beta",
-  "description": "Shared Astur protocol and data types.",
+  "version": "0.7.1-beta",
+  "description": "Shared selectors, commands and types for Astur, Playwright-style mobile testing for Android and iOS.",
   "keywords": [
     "astur",
-    "mobile",
-    "mobile-automation",
     "mobile-testing",
-    "android",
-    "ios",
-    "playwright",
-    "appium",
-    "automation",
-    "testing",
+    "mobile-automation",
+    "mobile-test-automation",
     "test-automation",
     "e2e",
-    "end-to-end",
+    "e2e-testing",
+    "end-to-end-testing",
+    "testing",
     "qa",
-    "quality-assurance",
-    "protocol"
+    "playwright",
+    "playwright-test",
+    "android",
+    "ios",
+    "android-testing",
+    "ios-testing",
+    "react-native",
+    "react-native-testing",
+    "expo",
+    "flutter",
+    "flutter-testing",
+    "uiautomator",
+    "xcuitest",
+    "emulator",
+    "simulator",
+    "real-device",
+    "webview",
+    "appium",
+    "appium-alternative",
+    "detox-alternative",
+    "maestro-alternative",
+    "typescript",
+    "protocol",
+    "types"
   ],
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -48,5 +66,15 @@
   "homepage": "https://astur-mobile.github.io/Astur/",
   "bugs": {
     "url": "https://github.com/Astur-mobile/Astur/issues"
-  }
+  },
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/Astur-mobile"
+    },
+    {
+      "type": "ko-fi",
+      "url": "https://ko-fi.com/asturmobile"
+    }
+  ]
 }

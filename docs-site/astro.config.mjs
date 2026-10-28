@@ -9,6 +9,8 @@ const base = process.env.DOCS_BASE ?? (process.env.GITHUB_ACTIONS && !isOrgPages
   ? `/${repositoryName}`
   : '/');
 const site = process.env.DOCS_SITE ?? 'https://astur-mobile.github.io';
+// The card link previews show (rendered by scripts/render-social.mjs).
+const socialImage = new URL(`${base.replace(/\/?$/, '/')}brand/social.png`, site).href;
 
 export default defineConfig({
   site,
@@ -48,6 +50,22 @@ export default defineConfig({
         }
       ],
       head: [
+        { tag: 'meta', attrs: { property: 'og:image', content: socialImage } },
+        { tag: 'meta', attrs: { property: 'og:image:width', content: '1280' } },
+        { tag: 'meta', attrs: { property: 'og:image:height', content: '640' } },
+        { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Astur: mobile apps, Playwright API. Open-source mobile test automation for Android and iOS.' } },
+        { tag: 'meta', attrs: { name: 'twitter:image', content: socialImage } },
+        // Outfit is the display face of the landing page; its geometric shapes
+        // match the Astur wordmark.
+        { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
+        { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: true } },
+        {
+          tag: 'link',
+          attrs: {
+            rel: 'stylesheet',
+            href: 'https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Outfit:wght@400;500;600;700&display=swap'
+          }
+        },
         {
           // Google Search Console site verification (URL-prefix property:
           // https://astur-mobile.github.io/Astur/).

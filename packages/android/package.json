@@ -1,25 +1,43 @@
 {
   "name": "@astur-mobile/android",
-  "version": "0.7.0-beta",
-  "description": "Android driver for Astur using ADB and UIAutomator.",
+  "version": "0.7.1-beta",
+  "description": "Android driver for Astur: a UIAutomator native agent and ADB lifecycle for Playwright-style Android testing on emulators and devices.",
   "keywords": [
     "astur",
-    "mobile",
-    "mobile-automation",
     "mobile-testing",
-    "android",
-    "ios",
-    "playwright",
-    "appium",
-    "automation",
-    "testing",
+    "mobile-automation",
+    "mobile-test-automation",
     "test-automation",
     "e2e",
-    "end-to-end",
+    "e2e-testing",
+    "end-to-end-testing",
+    "testing",
     "qa",
-    "quality-assurance",
+    "playwright",
+    "playwright-test",
+    "android",
+    "ios",
+    "android-testing",
+    "ios-testing",
+    "react-native",
+    "react-native-testing",
+    "expo",
+    "flutter",
+    "flutter-testing",
     "uiautomator",
-    "adb"
+    "xcuitest",
+    "emulator",
+    "simulator",
+    "real-device",
+    "webview",
+    "appium",
+    "appium-alternative",
+    "detox-alternative",
+    "maestro-alternative",
+    "typescript",
+    "adb",
+    "android-emulator",
+    "uiautomator2"
   ],
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -43,8 +61,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/core": "0.7.0-beta",
-    "@astur-mobile/protocol": "0.7.0-beta"
+    "@astur-mobile/core": "0.7.1-beta",
+    "@astur-mobile/protocol": "0.7.1-beta"
   },
   "repository": {
     "type": "git",
@@ -54,5 +72,15 @@
   "homepage": "https://astur-mobile.github.io/Astur/",
   "bugs": {
     "url": "https://github.com/Astur-mobile/Astur/issues"
-  }
+  },
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/Astur-mobile"
+    },
+    {
+      "type": "ko-fi",
+      "url": "https://ko-fi.com/asturmobile"
+    }
+  ]
 }

@@ -6,6 +6,10 @@ sidebar:
 ---
 Qué trae cada versión de Astur.
 
+## 0.7.1-beta
+
+Una nueva página de inicio, dibujada en torno al astrolabio que da nombre a Astur, y páginas de paquete renovadas en npm. Sin cambios en el runtime.
+
 ## 0.7.0-beta
 
 **Localizadores componibles.** Reduce una pantalla de filas parecidas a la que buscas: acota con cualquier `getBy*` sobre un localizador, filtra con `filter({ hasText, has, … })`, combina con `and()` / `or()` y elige con `first()`, `last()` y `nth()`. También nuevo: `getByPlaceholder()`, `toBeChecked()`, `toBeEmpty()`, `device.app.list()`, `device.orientation.get()` y `astur screenshot`.

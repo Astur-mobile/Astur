@@ -24,7 +24,7 @@ El resultado es un ciclo de escritura más ágil: inspeccionar, interactuar, gra
   </div>
 </div>
 
-![El Inspector de Astur: el espejo del dispositivo en el centro, el árbol de interfaz en vivo a la derecha y los localizadores ordenados con los detalles del elemento a la izquierda.](./images/inspector-ios-simulator.png)
+![El Inspector de Astur: el espejo del dispositivo en el centro, el árbol de interfaz en vivo a la derecha y los localizadores ordenados con los detalles del elemento a la izquierda.](../images/inspector-ios-simulator.png)
 
 Arráncalo con:
 
@@ -50,7 +50,7 @@ La cabecera tiene dos controles: la etiqueta del dispositivo actual y el botón 
 
 La etiqueta del dispositivo muestra el dispositivo activo. Haz clic para abrir la lista y cambiar a otro sin reiniciar el Inspector, incluso entre tipos y plataformas: un emulador de Android, un dispositivo Android real, un simulador de iOS o un dispositivo iOS real.
 
-![El selector de dispositivos: la etiqueta del dispositivo activo y una lista de dispositivos Android e iOS disponibles, cada uno con su tipo.](./images/inspector-device-switcher.png)
+![El selector de dispositivos: la etiqueta del dispositivo activo y una lista de dispositivos Android e iOS disponibles, cada uno con su tipo.](../images/inspector-device-switcher.png)
 
 Al cambiar, Astur cierra por completo la sesión actual **antes** de conectarse a la siguiente, de modo que nunca hay dos sesiones nativas a la vez (algo que si no duplicaría la memoria: dos runners de XCUITest, cada uno reteniendo un simulador, o dos agentes de Android). El espejo muestra brevemente `Preparing device…` mientras se conecta el nuevo dispositivo.
 
@@ -77,7 +77,7 @@ El botón `Controls` reúne acciones de dispositivo, de app y de sesión:
 - rotar, refrescar, bloquear y desbloquear, ocultar el teclado y acciones de navegación de Android
 - **terminar la sesión** (fila Session, más abajo)
 
-![El panel Controls: arranque e instalación de la app, permisos, datos y caché, la fila de acciones del dispositivo y la sección Session con Terminate.](./images/inspector-controls.png)
+![El panel Controls: arranque e instalación de la app, permisos, datos y caché, la fila de acciones del dispositivo y la sección Session con Terminate.](../images/inspector-controls.png)
 
 Lanzar una app de iOS desde `Controls` reenlaza además el agente XCUITest al bundle id introducido, con lo que el árbol de interfaz y las interacciones nativas empiezan a funcionar para esa app.
 
@@ -103,11 +103,11 @@ Pulsa `Record` y luego interactúa con la pantalla reflejada.
 
 Cada interacción aparece en la pestaña **Recording Steps** como una fila editable de acción y localizador:
 
-![La pestaña Recording Steps con los toques grabados y sus localizadores generados.](./images/inspector-recording-steps.png)
+![La pestaña Recording Steps con los toques grabados y sus localizadores generados.](../images/inspector-recording-steps.png)
 
 La pestaña **Code** convierte esos pasos en un spec de `@astur-mobile/test` listo para ejecutar (elige TypeScript o JavaScript y copia):
 
-![La pestaña Code mostrando el spec de @astur-mobile/test generado a partir de los pasos grabados.](./images/inspector-generated-code.png)
+![La pestaña Code mostrando el spec de @astur-mobile/test generado a partir de los pasos grabados.](../images/inspector-generated-code.png)
 
 El código exportado es deliberadamente sencillo:
 

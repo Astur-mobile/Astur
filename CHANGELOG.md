@@ -3,6 +3,21 @@
 All notable changes to Astur are documented here. Versions follow the
 `@astur-mobile/*` + `astur-mobile` workspace release line.
 
+## 0.7.1-beta
+
+Documentation and package pages only; no runtime changes.
+
+### Changed
+
+- **A new home page**, built around a hand-drawn astrolabe, in English, Arabic and Spanish.
+- **A social card** for link previews and the README, rendered from the same drawing
+  (`npm run social -w docs-site`).
+- **Package pages on npm**: new READMEs, descriptions and keywords, and a `funding` field.
+
+### Fixed
+
+- Images in the Arabic and Spanish guides now also show when the pages are read on GitHub.
+
 ## 0.7.0-beta
 
 ### Added

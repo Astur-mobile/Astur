@@ -1,26 +1,44 @@
 {
   "name": "@astur-mobile/ios",
-  "version": "0.7.0-beta",
-  "description": "iOS driver for Astur using simctl, devicectl, and an XCUITest agent boundary.",
+  "version": "0.7.1-beta",
+  "description": "iOS driver for Astur: an XCUITest native agent for Playwright-style iOS testing on simulators and real devices.",
   "keywords": [
     "astur",
-    "mobile",
-    "mobile-automation",
     "mobile-testing",
-    "android",
-    "ios",
-    "playwright",
-    "appium",
-    "automation",
-    "testing",
+    "mobile-automation",
+    "mobile-test-automation",
     "test-automation",
     "e2e",
-    "end-to-end",
+    "e2e-testing",
+    "end-to-end-testing",
+    "testing",
     "qa",
-    "quality-assurance",
+    "playwright",
+    "playwright-test",
+    "android",
+    "ios",
+    "android-testing",
+    "ios-testing",
+    "react-native",
+    "react-native-testing",
+    "expo",
+    "flutter",
+    "flutter-testing",
+    "uiautomator",
     "xcuitest",
+    "emulator",
     "simulator",
-    "simctl"
+    "real-device",
+    "webview",
+    "appium",
+    "appium-alternative",
+    "detox-alternative",
+    "maestro-alternative",
+    "typescript",
+    "ios-simulator",
+    "simctl",
+    "devicectl",
+    "xcode"
   ],
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -44,8 +62,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/core": "0.7.0-beta",
-    "@astur-mobile/protocol": "0.7.0-beta"
+    "@astur-mobile/core": "0.7.1-beta",
+    "@astur-mobile/protocol": "0.7.1-beta"
   },
   "repository": {
     "type": "git",
@@ -55,5 +73,15 @@
   "homepage": "https://astur-mobile.github.io/Astur/",
   "bugs": {
     "url": "https://github.com/Astur-mobile/Astur/issues"
-  }
+  },
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/Astur-mobile"
+    },
+    {
+      "type": "ko-fi",
+      "url": "https://ko-fi.com/asturmobile"
+    }
+  ]
 }

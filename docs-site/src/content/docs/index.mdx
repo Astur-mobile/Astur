@@ -1,255 +1,58 @@
 ---
-title: Astur Docs
-description: Device-native mobile automation with Playwright ergonomics.
+title: Playwright-style mobile testing for Android and iOS
+description: Open-source mobile test automation with the Playwright API. Native agents (UIAutomator, XCUITest), no Appium server. Native, React Native, Flutter and WebView apps on emulators, simulators and real devices.
 template: splash
 ---
 
-<header class="futuristic-hero">
-  {/* Glowing astrolabe background effect */}
-  <div class="astrolabe-orbits" aria-hidden="true">
-    <div class="orbit-ring orbit-outer">
-      <div class="orbit-marker"></div>
-    </div>
-    <div class="orbit-ring orbit-middle">
-      <div class="orbit-marker"></div>
-    </div>
-    <div class="orbit-ring orbit-inner">
-      <div class="orbit-marker"></div>
-    </div>
-  </div>
+import Landing from '../../components/Landing.astro';
 
-  <div class="futuristic-hero-content">
-    <div class="badge-row">
-      <span class="cyber-badge">✦ NATIVE RUNTIME</span>
-      <span class="cyber-badge">✦ 0% APPIUM OVERHEAD</span>
-      <span class="cyber-badge">✦ PLAYWRIGHT ERGONOMICS</span>
-    </div>
-    
-    <h1 class="gradient-headline">Fast, native mobile automation without the Appium server.</h1>
-    
-    <div class="futuristic-tagline">
-      Astur bypasses the WebDriver proxy layer using high-speed native agents on Android and iOS. 
-      Inspect layout trees in real-time, record gestures instantly, and author tests with clean Playwright ergonomics.
-    </div>
-    
-    <div class="hero-cta-buttons">
-      <a href="./getting-started/" class="cta-button primary">
-        Get Started
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="arrow-icon"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-      </a>
-      <a href="./inspector/" class="cta-button secondary">
-        Open Inspector
-      </a>
-    </div>
-  </div>
-</header>
-
-<section class="astur-video-card astur-video-card--featured" aria-labelledby="astur-teaser-title">
-  <div class="astur-video-copy">
-    <span class="astur-video-kicker">PRODUCT TEASER</span>
-    <h2 id="astur-teaser-title">See the complete Astur workflow in motion.</h2>
-    <p>Take a quick tour through Astur's inspection, authoring, native interaction, and cross-platform execution capabilities.</p>
-    <a class="astur-video-link" href="https://youtu.be/X0PW4jQOj58" target="_blank" rel="noreferrer">Watch on YouTube <span aria-hidden="true">↗</span></a>
-  </div>
-  <div class="astur-video-frame">
-    <iframe
-      src="https://www.youtube-nocookie.com/embed/X0PW4jQOj58"
-      title="Astur mobile automation capabilities teaser"
-      loading="lazy"
-      referrerpolicy="strict-origin-when-cross-origin"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      allowfullscreen
-    ></iframe>
-  </div>
-</section>
-
-<section class="platform-band" aria-label="Supported platforms and frameworks">
-  <div class="platform-band-head">
-    <div class="section-badge">PLATFORMS &amp; FRAMEWORKS</div>
-    <h2 class="section-headline">One test API for native, Flutter, and React Native.</h2>
-    <p class="section-description">
-      Astur drives the real app on Android and iOS — built with native SDKs, Flutter, or React Native —
-      through fast native agents, the Dart VM service for deep Flutter widget-tree inspection on Android,
-      and DOM-level control of in-app WebViews from the same test API.
-    </p>
-  </div>
-
-  <div class="platform-grid">
-    <div class="platform-card">
-      <div class="platform-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="#3DDC84"><path d="M17.6 9.48l1.84-3.18a.38.38 0 00-.66-.38l-1.86 3.22a11.43 11.43 0 00-9.84 0L5.22 5.92a.38.38 0 10-.66.38L6.4 9.48A10.81 10.81 0 001 18h22a10.81 10.81 0 00-5.4-8.52zM7 15.25A1.25 1.25 0 117 12.75a1.25 1.25 0 010 2.5zm10 0a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5z"/></svg>
-      </div>
-      <div class="platform-name">Android</div>
-      <div class="platform-note">Emulators &amp; devices · UIAutomator agent</div>
-    </div>
-
-    <div class="platform-card">
-      <div class="platform-icon platform-icon--mono" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.43c0 1.13-.46 2.22-1.18 3.05-.78.93-2.04 1.65-3.07 1.57a3.5 3.5 0 01-.04-.4c0-1.1.55-2.27 1.22-2.99.78-.86 2.1-1.5 3.02-1.55.03.1.05.21.05.32zM20.9 17.1c-.03.08-.47 1.6-1.55 3.16-.93 1.35-1.9 2.69-3.42 2.72-1.5.03-1.98-.89-3.69-.89-1.71 0-2.24.86-3.66.92-1.47.05-2.59-1.46-3.53-2.8-1.92-2.76-3.39-7.8-1.42-11.2a5.27 5.27 0 014.45-2.71c1.45-.03 2.81.97 3.69.97.88 0 2.54-1.2 4.28-1.03.73.03 2.78.3 4.1 2.22-.11.07-2.45 1.43-2.42 4.26.03 3.39 2.96 4.51 3 4.53z"/></svg>
-      </div>
-      <div class="platform-name">iOS</div>
-      <div class="platform-note">Simulators &amp; devices · XCUITest agent</div>
-    </div>
-
-    <div class="platform-card">
-      <div class="platform-icon" aria-hidden="true">
-        <svg viewBox="0 0 256 317"><path fill="#47C5FB" d="M157.7 0L0 157.7l48.8 48.8L255.3 0z"/><path fill="#47C5FB" d="M156.6 145.4l-83.3 83.2 48.9 49.1 48.8-48.9 85.2-85.2z"/><path fill="#00569E" d="M121.3 277.6l37.2 37.3h96.8l-85.2-85.2z"/><path fill="#00B5F8" d="M72.2 228.8l48.9-48.8 35.5 35.5-48.8 48.9z"/><path fill="#00569E" fill-opacity=".8" d="M121.3 277.6l40.5-13.5 4-31z"/></svg>
-      </div>
-      <div class="platform-name">Flutter</div>
-      <div class="platform-note">Dart VM widget tree (Android) · XCUITest tree (iOS)</div>
-    </div>
-
-    <div class="platform-card">
-      <div class="platform-icon" aria-hidden="true">
-        <svg viewBox="-11.5 -10.23 23 20.46"><circle r="2.05" fill="#61DAFB"/><g stroke="#61DAFB" stroke-width="1" fill="none"><ellipse rx="11" ry="4.2"/><ellipse rx="11" ry="4.2" transform="rotate(60)"/><ellipse rx="11" ry="4.2" transform="rotate(120)"/></g></svg>
-      </div>
-      <div class="platform-name">React Native</div>
-      <div class="platform-note">Native views via testID / accessibility</div>
-    </div>
-  </div>
-</section>
-
-<section class="control-deck-section" aria-label="Control Deck Overview">
-  <div class="control-deck-intro">
-    <div class="section-badge">NATIVE MOBILE RUNTIME</div>
-    <h2 class="section-headline">Inspect, author, and ship mobile tests in one fast loop.</h2>
-    <p class="section-description">
-      Astur keeps the authoring surface tight: stream the device, inspect the semantic tree,
-      record the flow, and export reusable <span class="cyber-inline-code">@astur-mobile/test</span> code without adding an Appium or WebDriver layer.
-    </p>
-    
-    <div class="tech-specs-grid">
-      <div class="spec-platforms">
-        <span>Android emulators & devices</span>
-        <span>iOS simulators & devices</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="control-deck-wrapper">
-    {/* Right side: Sleek Glassmorphic Terminal/Console */}
-    <div class="cyber-terminal-mock">
-      <div class="terminal-header">
-        <div class="terminal-controls">
-          <span class="dot red"></span>
-          <span class="dot yellow"></span>
-          <span class="dot green"></span>
-        </div>
-        <div class="terminal-tab">astur-fast-loop</div>
-        <div class="terminal-status">
-          <span class="status-pulse"></span>
-          <span class="status-text">READY</span>
-        </div>
-      </div>
-      <div class="terminal-body workflow-terminal-body">
-        <pre><code><span class="t-line t-stage-row"><span class="t-stage">01 INSTALL</span></span><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npm</span> <span class="t-method">install</span> <span class="t-flag">-D</span> <span class="t-pkg">@astur-mobile/test</span> <span class="t-pkg">astur-mobile</span></span>
-<span class="t-line t-stage-row"><span class="t-stage">02 INSPECT</span></span><span class="t-line t-highlight"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">inspector</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// semantic tree mirrored, gestures visible, locators ranked</span>
-<span class="t-line t-stage-row"><span class="t-stage">03 AUTHOR</span></span><span class="t-line t-highlight"><span class="t-prompt">$</span> <span class="t-command">npx</span> <span class="t-pkg">astur-mobile</span> <span class="t-method">codegen</span> <span class="t-flag">--android</span> <span class="t-flag">--device</span> <span class="t-val">emulator-5554</span></span><span class="t-line t-comment">// export Playwright-style flows you can keep and refine</span>
-<span class="t-line t-stage-row"><span class="t-stage">04 SHIP</span></span><span class="t-line"><span class="t-prompt">$</span> <span class="t-command">npm</span> <span class="t-method">test</span></span><span class="t-line"><span class="t-cursor"></span></span></code></pre>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="quantum-feature-grid" aria-label="Astur Key Features">
-  <article class="quantum-feature-card">
-    <div class="card-glow-bg"></div>
-    <div class="card-header">
-      <div class="quantum-index-badge">
-        <span>01</span>
-        <div class="badge-ring animate-pulse"></div>
-      </div>
-    </div>
-    <h3>Playwright-style authoring</h3>
-    <p>Use fixtures, locators, assertions, retries, and reports that already feel completely natural to Playwright users.</p>
-  </article>
-
-  <article class="quantum-feature-card">
-    <div class="card-glow-bg"></div>
-    <div class="card-header">
-      <div class="quantum-index-badge">
-        <span>02</span>
-        <div class="badge-ring animate-pulse"></div>
-      </div>
-    </div>
-    <h3>Native platform agents</h3>
-    <p>Android runs through UIAutomator and iOS through XCUITest. Flutter apps add deep widget-tree inspection through the Dart VM service on Android, and React Native rides the native agents directly.</p>
-  </article>
-
-  <article class="quantum-feature-card">
-    <div class="card-glow-bg"></div>
-    <div class="card-header">
-      <div class="quantum-index-badge">
-        <span>03</span>
-        <div class="badge-ring animate-pulse"></div>
-      </div>
-    </div>
-    <h3>Live inspector and codegen</h3>
-    <p>Mirror the physical device, rank semantic locators, record actions, and export starter flows without leaving the docs workflow.</p>
-  </article>
-
-  <article class="quantum-feature-card">
-    <div class="card-glow-bg"></div>
-    <div class="card-header">
-      <div class="quantum-index-badge">
-        <span>04</span>
-        <div class="badge-ring animate-pulse"></div>
-      </div>
-    </div>
-    <h3>One repository, one system</h3>
-    <p>Drivers, agents, test API, CLI, examples, and docs evolve together inside a single monorepo instead of splitting across disconnected tooling.</p>
-  </article>
-</section>
-
-<section class="quantum-summary-paragraph">
-  Astur keeps tests small while the runtime and native agents absorb device selection, waits, gestures, screenshots, diagnostics, and inspector state.
-</section>
-
-<section class="quantum-why-section">
-  <div class="why-accent-line"></div>
-  <div class="why-content">
-    <div class="section-badge">THE PHILOSOPHY</div>
-    <h2 class="section-headline">Why Astur?</h2>
-    <p>
-      Astur is named after the <strong>astrolabe</strong>: a portable, historic astronomical instrument that compressed complex calculations and sky observations into something small enough to hold.
-    </p>
-    <p>
-      Astur brings that same philosophy to handheld-device automation: a compact, high-performance test API backed by a lightning-fast native runtime that handles device lifecycle, network orchestration, and screenshot-diagnostics under the hood.
-    </p>
-  </div>
-</section>
-
-<section class="quantum-code-section" aria-label="Generated Test Example">
-  <div class="quantum-code-intro">
-    <div class="section-badge">GENERATED STARTER</div>
-    <h2 class="section-headline">Take the recorded flow and keep the real spec.</h2>
-    <p class="section-description">
-      Codegen gets you to a working test quickly. After that, keep the exported Playwright-style spec in source control and extend it with fixtures, helpers, and stronger assertions.
-    </p>
-  </div>
-
-  <div class="generated-code-card">
-    <div class="generated-code-header">
-      <div class="terminal-controls">
-        <span class="dot red"></span>
-        <span class="dot yellow"></span>
-        <span class="dot green"></span>
-      </div>
-      <div class="generated-code-meta">
-        <span class="generated-code-filename">tests/login.spec.ts</span>
-        <span class="generated-code-badge">generated spec</span>
-      </div>
-    </div>
-    <pre class="generated-code-body"><code><span class="t-line"><span class="t-keyword">import</span> &#123; <span class="t-obj">expect</span>, <span class="t-obj">test</span> &#125; <span class="t-keyword">from</span> <span class="t-str">'@astur-mobile/test'</span>;</span>
-<span class="t-line"><span class="t-call">test</span>(<span class="t-str">'login'</span>, <span class="t-keyword">async</span> (&#123; <span class="t-obj">device</span> &#125;) =&gt; &#123;</span>
-<span class="t-line">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Email'</span>).<span class="t-method">fill</span>(<span class="t-str">'qa@example.com'</span>);</span>
-<span class="t-line">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByLabel</span>(<span class="t-str">'Password'</span>).<span class="t-method">fill</span>(<span class="t-str">'secret'</span>);</span>
-<span class="t-line t-highlight">  <span class="t-keyword">await</span> <span class="t-obj">device</span>.<span class="t-method">getByRole</span>(<span class="t-str">'button'</span>, &#123; <span class="t-prop">name</span>: <span class="t-str">'Login'</span> &#125;).<span class="t-method">tap</span>();</span>
-<span class="t-line t-highlight">  <span class="t-keyword">await</span> <span class="t-call">expect</span>(<span class="t-obj">device</span>.<span class="t-method">getByText</span>(<span class="t-str">'Welcome'</span>)).<span class="t-method">toBeVisible</span>();</span>
-<span class="t-line">&#125;);</span></code></pre>
-  </div>
-</section>
-
-<footer class="quantum-footer">
-  Start with <a href="./getting-started/" class="text-glow-link">Getting Started</a> or open <a href="./inspector/" class="text-glow-link">Inspector And Codegen</a> to generate your first test from a running device.
-</footer>
+<Landing
+  t={{
+    release: 'New in 0.7: composable locators and per-session agent tokens',
+    title: 'Playwright-style tests for real Android and iOS apps.',
+    lede: 'Astur drives your app through native agents, UIAutomator on Android and XCUITest on iOS, with no Appium server in between. Native, React Native and Flutter apps, on emulators, simulators and real devices.',
+    copy: 'Copy',
+    copied: 'Copied',
+    start: 'Get started',
+    star: 'Star on GitHub',
+    astroTitle: 'An astrolabe whose star pointers mark Android, iOS, Flutter, React Native and WebView',
+    flowTitle: 'One test, from your editor to the device.',
+    flowLede: 'You write the spec with the Playwright Test API you already know. Astur carries it the rest of the way.',
+    steps: [
+      { name: 'Your spec', note: 'Playwright Test: fixtures, projects, retries, the HTML report, the VS Code play button.' },
+      { name: 'The Astur runtime', note: 'Auto-waiting actions, retrying assertions, screenshots and video on failure.' },
+      { name: 'A native agent', note: 'UIAutomator on Android, XCUITest on iOS. No Appium server, no WebDriver bridge.' },
+      { name: 'The device', note: 'An emulator, a simulator, or the phone on your desk.' }
+    ],
+    reachTitle: 'Works with whatever your app is built in.',
+    reach: [
+      { name: 'Android', note: 'Emulators and real devices, through a UIAutomator agent.' },
+      { name: 'iOS', note: 'Simulators and real devices, through an XCUITest agent.' },
+      { name: 'React Native and Expo', note: 'testID and accessibility labels, read natively.' },
+      { name: 'Flutter', note: 'The live widget tree on Android; the accessibility tree on iOS.' },
+      { name: 'Compose and SwiftUI', note: 'Anything that renders native views, including .NET MAUI.' },
+      { name: 'WebViews and mobile web', note: 'Real DOM control inside the app, and Chrome or Safari on the device.' }
+    ],
+    featuresTitle: 'Everything a mobile suite needs, in one package.',
+    features: [
+      { name: 'Inspector and codegen', note: 'Mirror the device, browse the live tree, and record taps into a spec you keep.' },
+      { name: 'Composable locators', note: 'getByRole, filter, and/or, nth: pin the one row you mean in a list of look-alikes.' },
+      { name: 'Assertions you can trust', note: 'They wait for the condition and fail when the device cannot be read. A lost action is never repeated.' },
+      { name: 'Network observation', note: 'Assert on the HTTP calls your app makes, not only on what it renders.' },
+      { name: 'Visual comparison', note: 'toHaveScreenshot with per-device baselines and masked regions.' },
+      { name: 'Secure by default', note: 'Every agent and the inspector require a per-session token.' }
+    ],
+    filmTitle: 'See it run.',
+    filmLede: 'Inspection, authoring and a cross-platform run, in one short walkthrough.',
+    filmFrameTitle: 'Astur product tour',
+    nameTitle: 'Named after an instrument you could hold.',
+    nameBody: [
+      'The astrolabe was an analog computer small enough to carry: turn the rete, sight a star along the alidade, and read the answer off the limb. In tenth-century Aleppo, <a href="https://en.wikipedia.org/wiki/Mariam_al-Asturlabi">Mariam al-Asturlabiya</a> was known for building them.',
+      'Astur is the same idea for mobile testing: a small native runtime you can hold in one test, in place of a server stack.'
+    ],
+    ctaTitle: 'Your first test is one command away.',
+    ctaLede: 'The scaffolder asks what you target and writes a working config and a first test.',
+    docs: 'Read the guide',
+    inspector: 'Open the inspector'
+  }}
+/>

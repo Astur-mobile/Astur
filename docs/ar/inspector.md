@@ -24,7 +24,7 @@
   </div>
 </div>
 
-![‏Astur Inspector: مرآة الجهاز في الوسط، وشجرة الواجهة الحيّة على اليمين، والمحدِّدات المرتّبة مع تفاصيل العنصر على اليسار.](./images/inspector-ios-simulator.png)
+![‏Astur Inspector: مرآة الجهاز في الوسط، وشجرة الواجهة الحيّة على اليمين، والمحدِّدات المرتّبة مع تفاصيل العنصر على اليسار.](../images/inspector-ios-simulator.png)
 
 شغّله بـ:
 
@@ -50,7 +50,7 @@ npx astur-mobile codegen --ios --real --device <device-udid> --app ./MyApp.ipa -
 
 تعرض شارة الجهاز الجهازَ النشط. انقرها لفتح قائمة الأجهزة والانتقال إلى جهاز آخر دون إعادة تشغيل الـ Inspector — عبر الأنواع والمنصات: محاكي Android، أو جهاز Android حقيقي، أو محاكي iOS، أو جهاز iOS حقيقي.
 
-![مبدّل الأجهزة: شارة الجهاز النشط وقائمة بأجهزة Android و iOS القابلة للتبديل، كلٌّ موسوم بنوعه.](./images/inspector-device-switcher.png)
+![مبدّل الأجهزة: شارة الجهاز النشط وقائمة بأجهزة Android و iOS القابلة للتبديل، كلٌّ موسوم بنوعه.](../images/inspector-device-switcher.png)
 
 عند التبديل، يفكّك Astur جلسة الجهاز الحالية بالكامل **قبل** الاتصال بالتالي، فلا تعمل جلستان أصليتان في الوقت نفسه أبدًا (وإلا تضاعفت الذاكرة — مشغّلا XCUITest، كلٌّ يحجز محاكيًا، أو وكيلا Android). وتعرض المرآة لوهلة `Preparing device…` ريثما يتصل الجهاز الجديد.
 
@@ -77,7 +77,7 @@ npx astur-mobile codegen --ios --real --device <device-udid> --app ./MyApp.ipa -
 - التدوير والتحديث والقفل وفتح القفل وإخفاء لوحة المفاتيح وإجراءات التنقّل في Android
 - **إنهاء الجلسة** (صف Session — انظر أدناه)
 
-![لوحة Controls: تشغيل التطبيق وتثبيته، والأذونات، والبيانات والذاكرة، وصف إجراءات الجهاز، وقسم Session مع زر Terminate.](./images/inspector-controls.png)
+![لوحة Controls: تشغيل التطبيق وتثبيته، والأذونات، والبيانات والذاكرة، وصف إجراءات الجهاز، وقسم Session مع زر Terminate.](../images/inspector-controls.png)
 
 كما يعيد تشغيل تطبيق iOS من `Controls` ربطَ وكيل XCUITest بمعرّف الحزمة المُدخَل، فتبدأ شجرة الواجهة والتفاعلات الأصلية بالعمل مع ذلك التطبيق.
 
@@ -103,11 +103,11 @@ npx astur-mobile codegen --ios --real --device <device-udid> --app ./MyApp.ipa -
 
 وتظهر كل عملية تفاعل في تبويب **Recording Steps** كصفّ إجراء + محدِّد قابل للتحرير:
 
-![تبويب Recording Steps يسرد إجراءات النقر المسجّلة مع محدِّداتها المولَّدة.](./images/inspector-recording-steps.png)
+![تبويب Recording Steps يسرد إجراءات النقر المسجّلة مع محدِّداتها المولَّدة.](../images/inspector-recording-steps.png)
 
 ويحوّل تبويب **Code** تلك الخطوات إلى ملف اختبار `@astur-mobile/test` جاهز للتشغيل (بدّل بين TypeScript و JavaScript ثم انسخ):
 
-![تبويب Code يعرض ملف @astur-mobile/test المصدَّر والمولَّد من الخطوات المسجّلة.](./images/inspector-generated-code.png)
+![تبويب Code يعرض ملف @astur-mobile/test المصدَّر والمولَّد من الخطوات المسجّلة.](../images/inspector-generated-code.png)
 
 والكود المصدَّر بسيط عن قصد:
 

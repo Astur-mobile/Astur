@@ -1,27 +1,48 @@
 {
   "name": "@astur-mobile/test",
-  "version": "0.7.0-beta",
-  "description": "Playwright Test integration for Astur.",
+  "version": "0.7.1-beta",
+  "description": "Playwright-style mobile testing for real Android and iOS apps: Playwright Test fixtures, expect and composable locators, on native agents with no Appium server. Native, React Native, Flutter and WebView apps.",
   "keywords": [
     "astur",
-    "mobile",
-    "mobile-automation",
     "mobile-testing",
-    "android",
-    "ios",
-    "playwright",
-    "appium",
-    "automation",
-    "testing",
+    "mobile-automation",
+    "mobile-test-automation",
     "test-automation",
     "e2e",
-    "end-to-end",
+    "e2e-testing",
+    "end-to-end-testing",
+    "testing",
     "qa",
-    "quality-assurance",
+    "playwright",
     "playwright-test",
+    "android",
+    "ios",
+    "android-testing",
+    "ios-testing",
+    "react-native",
+    "react-native-testing",
+    "expo",
+    "flutter",
+    "flutter-testing",
+    "uiautomator",
+    "xcuitest",
+    "emulator",
+    "simulator",
+    "real-device",
+    "webview",
+    "appium",
+    "appium-alternative",
+    "detox-alternative",
+    "maestro-alternative",
+    "typescript",
     "fixtures",
     "expect",
-    "locators"
+    "locators",
+    "assertions",
+    "auto-waiting",
+    "visual-testing",
+    "screenshot-testing",
+    "network-testing"
   ],
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -44,10 +65,10 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/android": "0.7.0-beta",
-    "@astur-mobile/core": "0.7.0-beta",
-    "@astur-mobile/ios": "0.7.0-beta",
-    "@astur-mobile/protocol": "0.7.0-beta",
+    "@astur-mobile/android": "0.7.1-beta",
+    "@astur-mobile/core": "0.7.1-beta",
+    "@astur-mobile/ios": "0.7.1-beta",
+    "@astur-mobile/protocol": "0.7.1-beta",
     "pixelmatch": "^6.0.0",
     "pngjs": "^7.0.0"
   },
@@ -65,5 +86,15 @@
   "homepage": "https://astur-mobile.github.io/Astur/",
   "bugs": {
     "url": "https://github.com/Astur-mobile/Astur/issues"
-  }
+  },
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/Astur-mobile"
+    },
+    {
+      "type": "ko-fi",
+      "url": "https://ko-fi.com/asturmobile"
+    }
+  ]
 }

@@ -1,0 +1,485 @@
+---
+// The landing page, shared by every locale. Each locale's index.mdx passes its
+// own strings; structure, styles and the instrument stay identical.
+import { astrolabeSvg } from '../lib/astrolabe.mjs';
+import '../styles/astrolabe.css';
+
+interface Item { name: string; note: string }
+
+interface Props {
+  t: {
+    release: string;
+    title: string;
+    lede: string;
+    copy: string;
+    copied: string;
+    start: string;
+    star: string;
+    astroTitle: string;
+    flowTitle: string;
+    flowLede: string;
+    steps: Item[];
+    reachTitle: string;
+    reach: Item[];
+    featuresTitle: string;
+    features: Item[];
+    filmTitle: string;
+    filmLede: string;
+    filmFrameTitle: string;
+    nameTitle: string;
+    nameBody: string[];
+    ctaTitle: string;
+    ctaLede: string;
+    docs: string;
+    inspector: string;
+  };
+}
+
+const { t } = Astro.props;
+const repo = 'https://github.com/Astur-mobile/Astur';
+const install = 'npm create astur@latest';
+
+// Highlighted by hand: Expressive Code only processes markdown fences, and this
+// block lives inside a component.
+const code = [
+  `<span class="lp-k">import</span> { test, expect } <span class="lp-k">from</span> <span class="lp-s">'@astur-mobile/test'</span>;`,
+  ``,
+  `<span class="lp-f">test</span>(<span class="lp-s">'sign in'</span>, <span class="lp-k">async</span> ({ device }) =&gt; {`,
+  `  <span class="lp-k">await</span> device.<span class="lp-f">getByLabel</span>(<span class="lp-s">'Email'</span>).<span class="lp-f">fill</span>(<span class="lp-s">'qa@example.com'</span>);`,
+  `  <span class="lp-k">await</span> device.<span class="lp-f">getByRole</span>(<span class="lp-s">'button'</span>, { name: <span class="lp-s">'Sign in'</span> }).<span class="lp-f">tap</span>();`,
+  `  <span class="lp-k">await</span> <span class="lp-f">expect</span>(device.<span class="lp-f">getByText</span>(<span class="lp-s">'Welcome'</span>)).<span class="lp-f">toBeVisible</span>();`,
+  `});`
+].join('\n');
+---
+
+<div class="lp not-content">
+  <section class="lp-hero">
+    <div class="lp-hero-inner">
+      <div class="lp-hero-copy">
+        <a class="lp-release" href="./release-notes/">{t.release}</a>
+        <h1 class="lp-title">{t.title}</h1>
+        <p class="lp-lede">{t.lede}</p>
+        <div class="lp-install" dir="ltr">
+          <code><span class="lp-prompt" aria-hidden="true">$</span> {install}</code>
+          <button class="lp-copy" type="button" data-copy={install} data-done={t.copied}>{t.copy}</button>
+        </div>
+        <div class="lp-actions">
+          <a class="lp-btn lp-btn--primary" href="./getting-started/">{t.start}</a>
+          <a class="lp-btn lp-btn--ghost" href={repo}>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+            {t.star}
+          </a>
+        </div>
+      </div>
+      <div class="lp-hero-art" dir="ltr">
+        <Fragment set:html={astrolabeSvg({ id: 'lp-astrolabe', title: t.astroTitle })} />
+      </div>
+    </div>
+  </section>
+
+  <section class="lp-band lp-flow">
+    <div class="lp-flow-copy">
+      <h2>{t.flowTitle}</h2>
+      <p class="lp-section-lede">{t.flowLede}</p>
+      <ol class="lp-path">
+        {t.steps.map((step) => (
+          <li>
+            <strong>{step.name}</strong>
+            <span>{step.note}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+    <figure class="lp-code" dir="ltr">
+      <figcaption>tests/sign-in.spec.ts</figcaption>
+      <pre><code set:html={code} /></pre>
+    </figure>
+  </section>
+
+  <section class="lp-band lp-reach">
+    <h2>{t.reachTitle}</h2>
+    <ul class="lp-reach-list">
+      {t.reach.map((item) => (
+        <li>
+          <strong>{item.name}</strong>
+          <span>{item.note}</span>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="lp-band lp-features">
+    <h2>{t.featuresTitle}</h2>
+    <dl class="lp-feature-list">
+      {t.features.map((item) => (
+        <div>
+          <dt>{item.name}</dt>
+          <dd>{item.note}</dd>
+        </div>
+      ))}
+    </dl>
+  </section>
+
+  <section class="lp-band lp-film">
+    <div class="lp-film-copy">
+      <h2>{t.filmTitle}</h2>
+      <p class="lp-section-lede">{t.filmLede}</p>
+    </div>
+    <div class="lp-film-frame">
+      <iframe
+        src="https://www.youtube-nocookie.com/embed/X0PW4jQOj58"
+        title={t.filmFrameTitle}
+        loading="lazy"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen
+      ></iframe>
+    </div>
+  </section>
+
+  <section class="lp-band lp-name">
+    <h2>{t.nameTitle}</h2>
+    {t.nameBody.map((paragraph) => <p set:html={paragraph} />)}
+  </section>
+
+  <section class="lp-cta">
+    <div class="lp-cta-inner">
+      <h2>{t.ctaTitle}</h2>
+      <p>{t.ctaLede}</p>
+      <div class="lp-install" dir="ltr">
+        <code><span class="lp-prompt" aria-hidden="true">$</span> {install}</code>
+        <button class="lp-copy" type="button" data-copy={install} data-done={t.copied}>{t.copy}</button>
+      </div>
+      <div class="lp-actions">
+        <a class="lp-btn lp-btn--primary" href="./getting-started/">{t.docs}</a>
+        <a class="lp-btn lp-btn--ghost" href="./inspector/">{t.inspector}</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.lp-copy')) {
+    const label = button.textContent ?? '';
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy ?? '');
+        button.textContent = button.dataset.done ?? label;
+        setTimeout(() => { button.textContent = label; }, 1600);
+      } catch {
+        // Clipboard access can be refused; the command stays selectable.
+      }
+    });
+  }
+</script>
+
+<style is:global>
+  .lp {
+    --lp-night: #06101d;
+    --lp-plate: #0c1a2e;
+    --lp-verdigris: #2bc4b4;
+    --lp-brass: #c9a54e;
+    --lp-starlight: #e6edf5;
+    --lp-display: Outfit, var(--sl-font);
+    --lp-text: var(--sl-color-white);
+    --lp-muted: var(--sl-color-gray-2);
+    --lp-rule: var(--sl-color-hairline);
+    --lp-accent: var(--sl-color-text-accent);
+    --lp-tick: var(--lp-brass);
+    /* Full width, like the hero, whatever the page column is. Symmetric margins
+       centre it under LTR and RTL alike. */
+    width: 100vw;
+    margin-inline: calc(50% - 50vw);
+    margin-top: -1.5rem;
+    color: var(--lp-text);
+  }
+  :root[data-theme='light'] .lp { --lp-tick: #a8842f; --lp-muted: #43566f; }
+
+  .lp h1, .lp h2 {
+    font-family: var(--lp-display);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    color: inherit;
+    margin: 0;
+  }
+  .lp h2 { font-size: clamp(1.75rem, 3vw, 2.5rem); line-height: 1.1; max-width: 22ch; text-wrap: balance; }
+  .lp p { margin: 0; }
+  .lp .lp-section-lede { margin-top: 1rem; color: var(--lp-muted); font-size: 1.125rem; line-height: 1.6; max-width: 60ch; }
+
+  /* ── Hero: always night, whatever the theme ─────────────────────────── */
+  .lp-hero {
+    color: var(--lp-starlight);
+    background:
+      radial-gradient(48rem 34rem at 74% 50%, rgb(43 196 180 / 0.1), transparent 62%),
+      radial-gradient(30rem 22rem at 82% 30%, rgb(201 165 78 / 0.07), transparent 60%),
+      var(--lp-night);
+    border-bottom: 1px solid rgb(201 165 78 / 0.18);
+  }
+  .lp-hero-inner {
+    max-width: 76rem;
+    margin-inline: auto;
+    padding: clamp(3rem, 7vw, 6rem) clamp(1.25rem, 4vw, 3rem);
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    align-items: center;
+    gap: clamp(2rem, 5vw, 5rem);
+  }
+  .lp-release {
+    display: inline-block;
+    padding: 0.35rem 0.85rem;
+    border: 1px solid rgb(201 165 78 / 0.45);
+    border-radius: 999px;
+    color: #f0dca4;
+    font-size: 0.875rem;
+    text-decoration: none;
+  }
+  .lp-release:hover { border-color: var(--lp-brass); color: #fff4d6; }
+  .lp-title {
+    margin-top: 1.5rem !important;
+    font-size: clamp(2.5rem, 4.6vw, 4rem);
+    line-height: 1.03;
+    max-width: 17ch;
+    text-wrap: balance;
+  }
+  /* The site styles markdown headings for the light theme; the night bands keep
+     their own colour whichever theme the reader picked. */
+  :root[data-theme] .lp :is(.lp-hero, .lp-cta) :is(h1, h2) { color: var(--lp-starlight) !important; }
+  .lp-lede {
+    margin-top: 1.5rem !important;
+    max-width: 52ch;
+    font-size: clamp(1.05rem, 1.4vw, 1.2rem);
+    line-height: 1.6;
+    color: rgb(230 237 245 / 0.78);
+  }
+  .lp-install {
+    margin-top: 2rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 1rem;
+    max-width: 100%;
+    padding: 0.5rem 0.5rem 0.5rem 1.1rem;
+    background: var(--lp-plate);
+    border: 1px solid rgb(43 196 180 / 0.28);
+    border-radius: 0.75rem;
+  }
+  .lp-install code {
+    font: 0.98rem/1.4 var(--__sl-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    color: var(--lp-starlight);
+    background: none;
+    padding: 0;
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+  .lp-prompt { color: var(--lp-verdigris); }
+  .lp-copy {
+    flex: none;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid rgb(230 237 245 / 0.2);
+    border-radius: 0.5rem;
+    background: transparent;
+    color: var(--lp-starlight);
+    font: 500 0.85rem var(--sl-font);
+    cursor: pointer;
+  }
+  .lp-copy:hover { border-color: var(--lp-verdigris); }
+  .lp-actions { margin-top: 1.5rem; display: flex; flex-wrap: wrap; gap: 0.75rem; }
+  .lp-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.3rem;
+    border-radius: 0.65rem;
+    font-weight: 600;
+    text-decoration: none;
+    line-height: 1;
+  }
+  .lp-btn--primary { background: var(--lp-verdigris); color: var(--lp-night); }
+  .lp-btn--primary:hover { background: #4fd8c9; color: var(--lp-night); }
+  .lp-btn--ghost { border: 1px solid rgb(230 237 245 / 0.28); color: var(--lp-starlight); }
+  .lp-btn--ghost:hover { border-color: var(--lp-brass); color: #fff; }
+  .lp-btn--ghost svg { color: var(--lp-brass); }
+  .lp :is(.lp-btn, .lp-copy, .lp-release):focus-visible {
+    outline: 2px solid var(--lp-brass);
+    outline-offset: 3px;
+  }
+  .lp-hero-art { max-width: 34rem; justify-self: center; width: 100%; }
+
+  /* The one moment of motion: the rete turns into place and the alidade
+     comes to rest on its sighting, the way the instrument is used. */
+  .lp-hero .astro-rete { animation: lp-rete 2.4s cubic-bezier(0.16, 0.84, 0.24, 1) 0.15s both; }
+  .lp-hero .astro-alidade { animation: lp-alidade 2.8s cubic-bezier(0.16, 0.84, 0.24, 1) 0.15s both; }
+  .lp-hero .astro-label { animation: lp-fade 0.6s ease 2.1s both; }
+  @keyframes lp-rete { from { transform: rotate(-72deg); opacity: 0; } 25% { opacity: 1; } to { transform: rotate(0deg); } }
+  @keyframes lp-alidade { from { transform: rotate(48deg); } to { transform: rotate(-32deg); } }
+  @keyframes lp-fade { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .lp-hero :is(.astro-rete, .astro-alidade, .astro-label) { animation: none; }
+  }
+
+  /* ── Bands: follow the reader's theme ───────────────────────────────── */
+  .lp-band {
+    max-width: 76rem;
+    margin-inline: auto;
+    padding: clamp(3.5rem, 7vw, 6rem) clamp(1.25rem, 4vw, 3rem) 0;
+  }
+
+  .lp-flow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: clamp(2rem, 5vw, 4.5rem);
+    align-items: center;
+  }
+  /* A real sequence, so it is drawn as a path: spec to device. */
+  .lp-path { list-style: none; margin: 2rem 0 0; padding: 0; }
+  .lp-path li {
+    position: relative;
+    padding-inline-start: 1.75rem;
+    padding-bottom: 1.25rem;
+    display: grid;
+    gap: 0.2rem;
+  }
+  .lp-path li::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0.28rem;
+    top: 0.55rem;
+    bottom: -0.45rem;
+    width: 1px;
+    background: var(--lp-tick);
+    opacity: 0.5;
+  }
+  .lp-path li:last-child::before { display: none; }
+  .lp-path li::after {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0.35rem;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    border: 1.5px solid var(--lp-tick);
+    background: var(--sl-color-bg);
+  }
+  .lp-path li:last-child::after { background: var(--lp-tick); }
+  .lp-path strong { font-weight: 600; }
+  .lp-path span { color: var(--lp-muted); line-height: 1.5; }
+
+  .lp-code {
+    margin: 0;
+    background: var(--lp-night);
+    border: 1px solid rgb(201 165 78 / 0.25);
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 30px 60px -30px rgb(6 16 29 / 0.55);
+  }
+  .lp-code figcaption {
+    padding: 0.8rem 1.25rem;
+    border-bottom: 1px solid rgb(230 237 245 / 0.08);
+    color: rgb(230 237 245 / 0.6);
+    font-size: 0.85rem;
+  }
+  .lp-code pre {
+    margin: 0;
+    padding: 1.25rem;
+    overflow-x: auto;
+    background: none;
+    border: 0;
+  }
+  .lp-code code {
+    font: 0.92rem/1.75 var(--__sl-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    color: var(--lp-starlight);
+    background: none;
+    padding: 0;
+  }
+  .lp-code .lp-k { color: #c9a54e; }
+  .lp-code .lp-s { color: #7fe3d6; }
+  .lp-code .lp-f { color: #9ec5ff; }
+
+  .lp-reach-list {
+    list-style: none;
+    margin: 2rem 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    border-top: 1px solid var(--lp-rule);
+  }
+  .lp-reach-list li {
+    display: grid;
+    align-content: start;
+    gap: 0.3rem;
+    padding: 1.25rem 1.5rem 1.25rem 0;
+    border-bottom: 1px solid var(--lp-rule);
+  }
+  .lp-reach-list strong {
+    font-family: var(--lp-display);
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+  .lp-reach-list span { color: var(--lp-muted); line-height: 1.5; }
+
+  .lp-feature-list {
+    margin: 2rem 0 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+    gap: 2rem 3.5rem;
+  }
+  .lp-feature-list > div {
+    position: relative;
+    padding-inline-start: 1.5rem;
+  }
+  /* A degree tick from the limb, marking each entry. */
+  .lp-feature-list > div::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0.35rem;
+    width: 0.75rem;
+    height: 2px;
+    background: var(--lp-tick);
+  }
+  .lp-feature-list dt { font-weight: 600; font-size: 1.05rem; }
+  .lp-feature-list dd { margin: 0.35rem 0 0; color: var(--lp-muted); line-height: 1.6; }
+
+  .lp-film {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: clamp(2rem, 5vw, 4rem);
+    align-items: center;
+  }
+  .lp-film-frame {
+    aspect-ratio: 16 / 9;
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid var(--lp-rule);
+    background: var(--lp-night);
+  }
+  .lp-film-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+  .lp-name { max-width: 46rem; }
+  .lp .lp-name p { margin-top: 1rem; font-size: 1.125rem; line-height: 1.7; color: var(--lp-muted); }
+  .lp-name a { color: var(--lp-accent); }
+
+  .lp-cta {
+    margin-top: clamp(4rem, 8vw, 7rem);
+    color: var(--lp-starlight);
+    background:
+      radial-gradient(40rem 20rem at 50% 0%, rgb(43 196 180 / 0.12), transparent 70%),
+      var(--lp-night);
+    border-top: 1px solid rgb(201 165 78 / 0.18);
+  }
+  .lp-cta-inner {
+    max-width: 44rem;
+    margin-inline: auto;
+    padding: clamp(3.5rem, 7vw, 5.5rem) clamp(1.25rem, 4vw, 3rem);
+    text-align: center;
+  }
+  .lp-cta h2 { margin-inline: auto; }
+  .lp .lp-cta p { margin-top: 1rem; color: rgb(230 237 245 / 0.75); font-size: 1.125rem; line-height: 1.6; }
+  .lp-cta .lp-actions { justify-content: center; }
+
+  @media (max-width: 56rem) {
+    .lp-hero-inner, .lp-flow, .lp-film { grid-template-columns: minmax(0, 1fr); }
+    .lp-hero-art { max-width: 24rem; order: -1; }
+    .lp-title { max-width: none; }
+  }
+</style>

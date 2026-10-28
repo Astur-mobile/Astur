@@ -1,25 +1,43 @@
 {
   "name": "@astur-mobile/core",
-  "version": "0.7.0-beta",
-  "description": "Core Astur runtime, sessions, locators, and auto-waiting.",
+  "version": "0.7.1-beta",
+  "description": "Astur core runtime: sessions, composable locators, auto-waiting and assertions for Playwright-style Android and iOS testing.",
   "keywords": [
     "astur",
-    "mobile",
-    "mobile-automation",
     "mobile-testing",
-    "android",
-    "ios",
-    "playwright",
-    "appium",
-    "automation",
-    "testing",
+    "mobile-automation",
+    "mobile-test-automation",
     "test-automation",
     "e2e",
-    "end-to-end",
+    "e2e-testing",
+    "end-to-end-testing",
+    "testing",
     "qa",
-    "quality-assurance",
+    "playwright",
+    "playwright-test",
+    "android",
+    "ios",
+    "android-testing",
+    "ios-testing",
+    "react-native",
+    "react-native-testing",
+    "expo",
+    "flutter",
+    "flutter-testing",
+    "uiautomator",
+    "xcuitest",
+    "emulator",
+    "simulator",
+    "real-device",
+    "webview",
+    "appium",
+    "appium-alternative",
+    "detox-alternative",
+    "maestro-alternative",
+    "typescript",
     "locators",
-    "auto-waiting"
+    "auto-waiting",
+    "runtime"
   ],
   "license": "Apache-2.0",
   "author": "Amr Salem",
@@ -42,7 +60,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/protocol": "0.7.0-beta",
+    "@astur-mobile/protocol": "0.7.1-beta",
     "pngjs": "^7.0.0"
   },
   "repository": {
@@ -54,6 +72,16 @@
   "bugs": {
     "url": "https://github.com/Astur-mobile/Astur/issues"
   },
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/Astur-mobile"
+    },
+    {
+      "type": "ko-fi",
+      "url": "https://ko-fi.com/asturmobile"
+    }
+  ],
   "devDependencies": {
     "@types/pngjs": "^6.0.5"
   }

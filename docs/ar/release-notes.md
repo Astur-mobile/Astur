@@ -2,6 +2,10 @@
 
 تعرف على أحدث الميزات والتحسينات في كل إصدار من Astur.
 
+## 0.7.1-beta
+
+صفحة رئيسية جديدة مرسومة حول الأسطرلاب الذي سُمّي Astur على اسمه، وصفحات حزم مُحدَّثة على npm. لا تغييرات في بيئة التشغيل.
+
 ## 0.7.0-beta
 
 **محددات قابلة للتركيب (Composable locators).** ضيّق شاشة من الصفوف المتشابهة إلى الصف الذي تقصده: حدّد النطاق بأي `getBy*` على محدد، ورشّح بـ `filter({ hasText, has, … })`، واجمع بـ `and()` / `or()`، واختر بـ `first()` و`last()` و`nth()`. وأُضيف أيضاً: `getByPlaceholder()` و`toBeChecked()` و`toBeEmpty()` و`device.app.list()` و`device.orientation.get()` و`astur screenshot`.

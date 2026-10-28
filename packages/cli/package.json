@@ -1,23 +1,40 @@
 {
   "name": "@astur-mobile/cli",
-  "version": "0.7.0-beta",
-  "description": "Astur command line interface.",
+  "version": "0.7.1-beta",
+  "description": "Command-line implementation of Astur: doctor, devices, live inspector, codegen and test for Playwright-style Android and iOS automation.",
   "keywords": [
     "astur",
-    "mobile",
-    "mobile-automation",
     "mobile-testing",
-    "android",
-    "ios",
-    "playwright",
-    "appium",
-    "automation",
-    "testing",
+    "mobile-automation",
+    "mobile-test-automation",
     "test-automation",
     "e2e",
-    "end-to-end",
+    "e2e-testing",
+    "end-to-end-testing",
+    "testing",
     "qa",
-    "quality-assurance",
+    "playwright",
+    "playwright-test",
+    "android",
+    "ios",
+    "android-testing",
+    "ios-testing",
+    "react-native",
+    "react-native-testing",
+    "expo",
+    "flutter",
+    "flutter-testing",
+    "uiautomator",
+    "xcuitest",
+    "emulator",
+    "simulator",
+    "real-device",
+    "webview",
+    "appium",
+    "appium-alternative",
+    "detox-alternative",
+    "maestro-alternative",
+    "typescript",
     "cli",
     "codegen",
     "inspector"
@@ -47,10 +64,10 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@astur-mobile/android": "0.7.0-beta",
-    "@astur-mobile/core": "0.7.0-beta",
-    "@astur-mobile/ios": "0.7.0-beta",
-    "@astur-mobile/protocol": "0.7.0-beta",
+    "@astur-mobile/android": "0.7.1-beta",
+    "@astur-mobile/core": "0.7.1-beta",
+    "@astur-mobile/ios": "0.7.1-beta",
+    "@astur-mobile/protocol": "0.7.1-beta",
     "@types/ws": "^8.18.1",
     "ws": "^8.21.0"
   },
@@ -62,5 +79,15 @@
   "homepage": "https://astur-mobile.github.io/Astur/",
   "bugs": {
     "url": "https://github.com/Astur-mobile/Astur/issues"
-  }
+  },
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/Astur-mobile"
+    },
+    {
+      "type": "ko-fi",
+      "url": "https://ko-fi.com/asturmobile"
+    }
+  ]
 }

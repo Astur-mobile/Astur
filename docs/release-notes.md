@@ -2,6 +2,10 @@
 
 What's new in each Astur release.
 
+## 0.7.1-beta
+
+A new home page, drawn around the astrolabe Astur is named after, and refreshed package pages on npm. No runtime changes.
+
 ## 0.7.0-beta
 
 **Composable locators.** Narrow a screen of look-alike rows to the one you mean: scope with any `getBy*` on a locator, `filter({ hasText, has, … })`, combine with `and()` / `or()`, and pick with `first()`, `last()`, `nth()`. Also new: `getByPlaceholder()`, `toBeChecked()`, `toBeEmpty()`, `device.app.list()`, `device.orientation.get()`, and `astur screenshot`.
